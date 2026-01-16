@@ -1,0 +1,6 @@
+@Kpett.ChatApp_HostAddress = http://localhost:5243
+
+GET {{Kpett.ChatApp_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
