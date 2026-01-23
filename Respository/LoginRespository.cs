@@ -1,134 +1,142 @@
-﻿using Kpett.ChatApp.Entities;
+﻿using Kpett.ChatApp.DTOs.Request;
+using Kpett.ChatApp.DTOs.Response;
+using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Helper;
-using Kpett.ChatApp.Request;
-using Kpett.ChatApp.Response;
+using Kpett.ChatApp.Models;
+using Kpett.ChatApp.Services;
 using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
-using Kpett.ChatApp.Services; 
+using UUIDNext;
 
 namespace Kpett.ChatApp.Reposoitory
 {
-    public class LoginRespository
+    public class LoginRespository : ILogin
     {
-        private readonly KpettChatAppContext _dbcontext;
-        private readonly IToken _token; 
 
-        public LoginRespository(KpettChatAppContext context, IToken token) 
+        private readonly AppDbContext _dbcontext;
+        private readonly IToken _token;
+        private readonly Services.IRedis _redis;
+        private readonly ICloudinary _cloudinary;
+
+        public LoginRespository(AppDbContext context, IToken token, Services.IRedis redis, ICloudinary cloudinary)
         {
             _dbcontext = context;
             _token = token;
+            _redis = redis;
+            _cloudinary = cloudinary;
         }
 
         public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancel = default)
         {
-            if (string.IsNullOrEmpty(request.UsernameOrEmail) || string.IsNullOrEmpty(request.Password))
+
+            if (string.IsNullOrEmpty(request.UsernameOrEmail))
             {
-             
+
                 throw new AppException(StatusCodes.Status400BadRequest, "Username not empty");
             }
             var user = await _dbcontext.Users
-                .Include(u => u.UserRoles)
-                    .ThenInclude(ur => ur.Role)
-                .FirstOrDefaultAsync(u => u.Username == request.UsernameOrEmail || u.Email == request.UsernameOrEmail, cancel);
+              .FirstOrDefaultAsync(x =>
+                  x.Email == request.UsernameOrEmail || x.Name == request.UsernameOrEmail);
 
-            if (user == null)
+            if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.Password))
             {
                 throw new AppException(StatusCodes.Status404NotFound, "The account not found");
             }
+            if (!user.IsActive)
+                throw new AppException(StatusCodes.Status401Unauthorized, "User inactive");
 
-            bool isPasswordValid = PasswordHasher.VerifyPasswordHash(request.Password, user.PasswordHash, user.PasswordSalt);
+            var status = EnumHelper.GetDescription(UserEnums.Online);
+            user.Status = status;
+            await _dbcontext.SaveChangesAsync(cancel);
 
-            if (!isPasswordValid)
-            {
-                throw new AppException(StatusCodes.Status401Unauthorized, "Incorrect password.");
-            }
-            if (user.IsActive == false) throw new AppException(StatusCodes.Status406NotAcceptable, "The account has been locked");
+            await _redis.RemoveRefreshTokenAsync(user.Id);
 
+            // Tạo JWT Token
+            var accessToken = _token.GenerateAccessToken(user.Id,user.Name);
+            var refreshToken = _token.GenerateRefreshToken(user.Id, user.Name);
+            await _redis.SaveRefreshTokenAsync(user.Id, refreshToken, TimeSpan.FromDays(30));
 
-            var userRefreshTokens = await _dbcontext.Users.Include(u => u.RefreshTokens)
-                    .FirstOrDefaultAsync(u => u.Username == request.UsernameOrEmail);
-            var accessToken = _token.CreateToken(userRefreshTokens);
-
-            var refreshToken = new RefreshToken
-            {
-                Token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
-                ExpiresAt = DateTime.UtcNow.AddDays(7),
-                CreatedAt = DateTime.UtcNow
-            };
-            userRefreshTokens.RefreshTokens.Add(refreshToken);
-
-            var expiredTokens = userRefreshTokens.RefreshTokens.Where(t => t.ExpiresAt <= DateTime.UtcNow).ToList();
-            foreach (var expiredToken in expiredTokens)
-            {
-                userRefreshTokens.RefreshTokens.Remove(expiredToken);
-            }
-            if (user.IsActive == false) throw new Exception("Tài khoản đã bị khóa.");
-
-            //6.Tạo JWT Token
-            //var token = _token.CreateToken(user);
             return new LoginResponse
             {
-                //AccessToken = token,
-                Username = user.Username,
+                
+                AccessToken = accessToken,
+                RefreshToken = refreshToken,
+                ExpiresIn = 30 * 60,
                 DisplayName = user.DisplayName,
                 AvatarUrl = user.AvatarUrl
             };
-
         }
 
-        public async Task RegisterAsync(RegisterRequest request, CancellationToken cancel = default)
+
+        public async Task<int> RegisterAsync(RegisterRequest request, CancellationToken cancel = default)
         {
             cancel.ThrowIfCancellationRequested();
-            // Kiểm tra username và email đã tồn tại chưa   
-            var existingUser = await _dbcontext.Users
-                .FirstOrDefaultAsync(u => u.Username == request.Username || u.Email == request.Email, cancel);
 
-            if (existingUser != null)
+            var existingUser = await _dbcontext.Users.FirstOrDefaultAsync(x => x.Email == request.Email || x.Name == request.Username);
+
+            if (existingUser != null) throw new AppException(StatusCodes.Status400BadRequest, "Username or Email really existing");
+            if (string.IsNullOrEmpty(request.Password) || string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Username))
             {
-                if (existingUser.Username == request.Username)
-                    throw new AppException(StatusCodes.Status400BadRequest, "Username really existing.");
-                else
-                    throw new AppException(StatusCodes.Status400BadRequest, "Email really existing.");
+                throw new AppException(StatusCodes.Status400BadRequest, "Email and Password or Username is null");
             }
-            // Tạo password hash
-            PasswordHasher.CreatePasswordHash(request.Password, out byte[] hash, out byte[] salt);
-            // Tạo user mới
-            var user = new User
+            var hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
+
+            if (!request.Gender.HasValue)
             {
-                Id = Guid.NewGuid(),
-                Username = request.Username,
+                throw new AppException(StatusCodes.Status400BadRequest, "Gender is required");
+            }
+
+            string avatarUrl = string.Empty;
+            if (request.AvatarUrl != null)
+            {
+                avatarUrl = await _cloudinary.UploadToCloudinaryAsync(
+                    request.AvatarUrl,
+                    "user_avatars",
+                    DateTime.Now.Year.ToString(),
+                    DateTime.Now.Month.ToString("D2")
+                );
+            }
+
+            var genderEnum = EnumHelper.FromInt<UserGenderEnums>(request.Gender.Value);
+            var genderDescription = EnumHelper.GetEnumDescription(genderEnum);
+            string _id = Uuid.NewDatabaseFriendly(Database.SqlServer).ToString("N");
+
+            var newUser = new User
+            {
+                Id = _id,
+                Gender = genderDescription,
                 Email = request.Email,
-                PasswordHash = hash,
-                PasswordSalt = salt,
-                DisplayName = request.DisplayName,
-                CreatedAt = DateTime.UtcNow, // Nên dùng DateTime.UtcNow
+                Name = request.Username ?? string.Empty,
+                Password = hashedPassword,
                 IsActive = true,
-                IsMuted = false
+                CreatedAt = DateTime.UtcNow,
+                DisplayName = request.DisplayName ?? request.Username,
+                Phone = request.Phone,
+                AvatarUrl = avatarUrl,
+                Status = EnumHelper.GetDescription(UserEnums.Offline)
             };
-            var userRole = await _dbcontext.Roles.FirstOrDefaultAsync(r => r.Name == "User", cancel);
-            if (userRole != null)
-            {
-                user.UserRoles.Add(new UserRole { RoleId = userRole.Id });
-            }
-
-            _dbcontext.Users.Add(user);
-            await _dbcontext.SaveChangesAsync(cancel);
+            _dbcontext.Users.Add(newUser);
+            var result = await _dbcontext.SaveChangesAsync(cancel);
+            return result;
         }
-        public async Task<bool> LogoutAsync(Guid userId)
+
+        public async Task<bool> LogoutAsync(string userId, CancellationToken cancel = default)
         {
-            var user = await _dbcontext.Users
-            .Include(u => u.RefreshTokens) 
-            .FirstOrDefaultAsync(u => u.Id == userId);
+            // Xoá refresh token trong Redis
+            await _redis.RemoveRefreshTokenAsync(userId.ToString());
+
+            // Cập nhật trạng thái user trong DB
+            var user = await _dbcontext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancel);
             if (user != null)
             {
-                user.RefreshTokens.Clear();
-                await _dbcontext.SaveChangesAsync();
-                return true;
+                user.Status = EnumHelper.GetDescription(UserEnums.Offline);
+                await _dbcontext.SaveChangesAsync(cancel);
             }
-            return false;
+
+            return true;
         }
-
-
     }
 }

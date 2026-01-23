@@ -1,102 +1,179 @@
-using Kpett.ChatApp.Entities;
+﻿using CloudinaryDotNet;
+using CloudinaryDotNet.Actions;
+using dotenv.net;
+using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Hubs;
+using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Reposoitory;
+using Kpett.ChatApp.Respository;
 using Kpett.ChatApp.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using StackExchange.Redis;
+using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 
 
 var builder = WebApplication.CreateBuilder(args);
 
+/* =====================================================
+ * 1. REGISTER SERVICES (TRƯỚC Build)
+ * ===================================================== */
 
-// SignalR Service
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// Controllers
+builder.Services.AddControllers();
+
+// OpenAPI
+builder.Services.AddOpenApi();
+
+// HttpContext
+builder.Services.AddHttpContextAccessor();
+
+// SignalR
 builder.Services.AddSignalR();
 
-
-// Add services to the container.
-
-
-
-// ConnectDatabaseService
-builder.Services.AddDbContext<KpettChatAppContext>(options =>
+// Database
+builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("MyDb")));
+// Redis
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
+if (string.IsNullOrEmpty(redisConnectionString))
+{
+    throw new InvalidOperationException("Redis connection string is not configured.");
+}
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+{
+    var configuration = ConfigurationOptions.Parse(redisConnectionString);
+    // Cho phép kết nối lại khi Redis sẵn sàng
+    configuration.AbortOnConnectFail = false;
+    return ConnectionMultiplexer.Connect(configuration);
+});
 
-// JwtAuthenticationService
+// Set my Cloudinary credentials
+var account = new Account(
+    builder.Configuration["CloudinarySettings:CloudName"],
+    builder.Configuration["CloudinarySettings:ApiKey"],
+    builder.Configuration["CloudinarySettings:ApiSecret"]);
+var cloudinary = new Cloudinary(account);
+
+// JWT Authentication
 var jwtSection = builder.Configuration.GetSection("JwtSection");
 var issuer = jwtSection["Issuer"];
 var audience = jwtSection["Audience"];
-var key = jwtSection["Key"];
+var KeyAccess = jwtSection["KeyAccess"];
+
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-.AddJwtBearer(options =>
-{
-    options.TokenValidationParameters = new TokenValidationParameters
+    .AddJwtBearer(options =>
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-
-        ValidIssuer = issuer,
-        ValidAudience = audience,
-
-        IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(key)
-        ),
-
-        ClockSkew = TimeSpan.Zero
-    };
-
-    // SignalR JWT support
-    options.Events = new JwtBearerEvents
-    {
-        OnMessageReceived = context =>
+        options.TokenValidationParameters = new TokenValidationParameters
         {
-            var accessToken = context.Request.Query["access_token"];
-            var path = context.HttpContext.Request.Path;
-            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("chat-Hub"))
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+
+            ValidIssuer = issuer,
+            ValidAudience = audience,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(KeyAccess!)
+            ),
+
+
+            ClockSkew = TimeSpan.Zero
+        };
+
+       
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
             {
-                context.Token = accessToken;
+                var redis = context.HttpContext.RequestServices.GetRequiredService<Kpett.ChatApp.Services.IRedis>();
+
+                var jti = context.Principal!
+                    .Claims.First(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
+
+                if (await redis.IsAccessTokenBlacklistedAsync(jti))
+                {
+                    context.Fail("Token revoked");
+                }
+            },
+
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    path.StartsWithSegments("/chat-Hub"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
             }
-            return Task.CompletedTask;
-        }
-    };
-});
+        };
+    });
 
-// Other Services
-builder.Services.AddScoped<IToken, TokenRespository>();
-
-
-// Access HttpContext Service
-builder.Services.AddHttpContextAccessor();
-
-builder.Services.AddControllers();
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+// Authorization
 builder.Services.AddAuthorization();
-builder.Services.AddControllers();
+
+// Application Services
+builder.Services.AddScoped<IToken, TokenRespository>();
+builder.Services.AddScoped<ILogin, LoginRespository>();
+builder.Services.AddScoped<Kpett.ChatApp.Services.IRedis, RedisRespository>();
+builder.Services.AddSingleton(cloudinary);
+builder.Services.AddScoped<Kpett.ChatApp.Services.ICloudinary, UploadFileRepository>();
+builder.Services.AddScoped<IMessage,MessageRespository>();
+
+// Global Exception Handler (ĐĂNG KÝ Ở ĐÂY)
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
+/* =====================================================
+ * 2. BUILD APP (SAU KHI Add xong)
+ * ===================================================== */
 
 var app = builder.Build();
 
-app.UseRouting();
-app.UseAuthentication(); 
-app.UseAuthorization();
+JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
+/* =====================================================
+ * 3. MIDDLEWARE PIPELINE
+ * ===================================================== */
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
+// Global Exception
+app.UseExceptionHandler();
 
+// HTTPS
 app.UseHttpsRedirection();
 
+// Routing
+app.UseRouting();
+
+// Auth
+app.UseAuthentication();
 app.UseAuthorization();
 
-// SignalR
-app.MapHub<ChatHub>("chat-Hub");
+// OpenAPI (DEV only)
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
+// Endpoints
 app.MapControllers();
+app.MapHub<ChatHub>("/chat-Hub");
+
+// Test exception
+app.MapGet("/", () =>
+{
+    throw new Exception("Test error");
+});
 
 app.Run();

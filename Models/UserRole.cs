@@ -1,11 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace Kpett.ChatApp.Entities;
+namespace Kpett.ChatApp.Models;
 
 public partial class UserRole
 {
-    public Guid UserId { get; set; }
+    public string UserId { get; set; } = null!;
 
     public int RoleId { get; set; }
 

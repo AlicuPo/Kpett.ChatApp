@@ -1,12 +1,20 @@
-﻿using Microsoft.AspNetCore.SignalR;
-using Kpett.ChatApp.DTOs;
+﻿using Kpett.ChatApp.DTOs;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
 namespace Kpett.ChatApp.Hubs
 {
+    [Authorize]
     public class ChatHub : Hub
     {
-        public async Task SendMessage(ChatMessageDto data)
+        public async Task JoinConversation(string conversationId)
         {
-            await Clients.All.SendAsync("ReceiveMessage", data);
+            await Groups.AddToGroupAsync(Context.ConnectionId, conversationId);
+        }
+
+        // Khi User thoát khỏi cửa sổ chat đó
+        public async Task LeaveConversation(string conversationId)
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, conversationId);
         }
     }
 }

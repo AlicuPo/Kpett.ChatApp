@@ -1,18 +1,28 @@
-﻿namespace Kpett.ChatApp.Request
+﻿namespace Kpett.ChatApp.DTOs.Request
 {
     public class LoginRequest
     {
         public string UsernameOrEmail { get; set; } = null!;
         public string Password { get; set; } = null!;
+        public string? DeviceToken { get; set; } = null!;
+        public string? DeviceType { get; set; } = null!;
     }
 
+    public record LogoutRequest(bool LogoutAllDevices = false);
 
     public class RegisterRequest
     {
-        public string Username { get; set; } = null!;
-        public string Email { get; set; } = null!;
-        public string Password { get; set; } = null!;
+        public string? Username { get; set; }
+        public int? Gender { get; set; } 
+        public string? Email { get; set; } 
+        public string? Password { get; set; }
         public string? DisplayName { get; set; }
+        public IFormFile? AvatarUrl { get; set; }
+        public string? Phone { get; set; }
+        public DateTime CreateAt { get; set; }
+        public DateTime? UpdateAt { get; set; }
+        
+
     }
     public class UpdateProfileRequest
     {

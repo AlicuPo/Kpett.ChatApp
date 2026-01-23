@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace Kpett.ChatApp.Entities;
+namespace Kpett.ChatApp.Models;
 
 public partial class Role
 {
@@ -12,8 +12,6 @@ public partial class Role
     public string? Description { get; set; }
 
     public DateTime? CreatedAt { get; set; }
-
-    public DateTime? UpdatedAt { get; set; }
 
     public virtual ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 }

@@ -1,11 +1,13 @@
-﻿using Kpett.ChatApp.Response;
+﻿using Kpett.ChatApp.DTOs.Request;
+using Kpett.ChatApp.DTOs.Response;
 using Microsoft.AspNetCore.Identity.Data;
 
 namespace Kpett.ChatApp.Services
 {
     public interface ILogin
     {
-        Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancel = default);
-        Task RegisterAsync(RegisterRequest request, CancellationToken cancel = default);
+        Task<LoginResponse> LoginAsync(DTOs.Request.LoginRequest request, CancellationToken cancel = default);
+        Task<int> RegisterAsync(DTOs.Request.RegisterRequest request, CancellationToken cancel = default);
+        Task<bool> LogoutAsync(string userId, CancellationToken cancel = default);
     }
 }
