@@ -24,7 +24,8 @@ namespace Kpett.ChatApp.Reposoitory
         {
             if (string.IsNullOrEmpty(request.UsernameOrEmail) || string.IsNullOrEmpty(request.Password))
             {
-                throw new Exception("Username/Email và mật khẩu không được để trống.");
+             
+                throw new AppException(StatusCodes.Status400BadRequest, "Username not empty");
             }
             var user = await _dbcontext.Users
                 .Include(u => u.UserRoles)
@@ -33,14 +34,34 @@ namespace Kpett.ChatApp.Reposoitory
 
             if (user == null)
             {
-                throw new Exception("Tài khoản không tồn tại.");
+                throw new AppException(StatusCodes.Status404NotFound, "The account not found");
             }
 
             bool isPasswordValid = PasswordHasher.VerifyPasswordHash(request.Password, user.PasswordHash, user.PasswordSalt);
 
             if (!isPasswordValid)
             {
-                throw new Exception("Mật khẩu không chính xác.");
+                throw new AppException(StatusCodes.Status401Unauthorized, "Incorrect password.");
+            }
+            if (user.IsActive == false) throw new AppException(StatusCodes.Status406NotAcceptable, "The account has been locked");
+
+
+            var userRefreshTokens = await _dbcontext.Users.Include(u => u.RefreshTokens)
+                    .FirstOrDefaultAsync(u => u.Username == request.UsernameOrEmail);
+            var accessToken = _token.CreateToken(userRefreshTokens);
+
+            var refreshToken = new RefreshToken
+            {
+                Token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
+                ExpiresAt = DateTime.UtcNow.AddDays(7),
+                CreatedAt = DateTime.UtcNow
+            };
+            userRefreshTokens.RefreshTokens.Add(refreshToken);
+
+            var expiredTokens = userRefreshTokens.RefreshTokens.Where(t => t.ExpiresAt <= DateTime.UtcNow).ToList();
+            foreach (var expiredToken in expiredTokens)
+            {
+                userRefreshTokens.RefreshTokens.Remove(expiredToken);
             }
             if (user.IsActive == false) throw new Exception("Tài khoản đã bị khóa.");
 
@@ -59,11 +80,20 @@ namespace Kpett.ChatApp.Reposoitory
         public async Task RegisterAsync(RegisterRequest request, CancellationToken cancel = default)
         {
             cancel.ThrowIfCancellationRequested();
-            if (request == null)
+            // Kiểm tra username và email đã tồn tại chưa   
+            var existingUser = await _dbcontext.Users
+                .FirstOrDefaultAsync(u => u.Username == request.Username || u.Email == request.Email, cancel);
+
+            if (existingUser != null)
             {
-                throw new ArgumentNullException(nameof(request), "Request cannot be null");
+                if (existingUser.Username == request.Username)
+                    throw new AppException(StatusCodes.Status400BadRequest, "Username really existing.");
+                else
+                    throw new AppException(StatusCodes.Status400BadRequest, "Email really existing.");
             }
+            // Tạo password hash
             PasswordHasher.CreatePasswordHash(request.Password, out byte[] hash, out byte[] salt);
+            // Tạo user mới
             var user = new User
             {
                 Id = Guid.NewGuid(),
@@ -72,12 +102,31 @@ namespace Kpett.ChatApp.Reposoitory
                 PasswordHash = hash,
                 PasswordSalt = salt,
                 DisplayName = request.DisplayName,
-                CreatedAt = DateTime.Now,
+                CreatedAt = DateTime.UtcNow, // Nên dùng DateTime.UtcNow
                 IsActive = true,
-                IsMuted = false,              
+                IsMuted = false
             };
+            var userRole = await _dbcontext.Roles.FirstOrDefaultAsync(r => r.Name == "User", cancel);
+            if (userRole != null)
+            {
+                user.UserRoles.Add(new UserRole { RoleId = userRole.Id });
+            }
+
             _dbcontext.Users.Add(user);
             await _dbcontext.SaveChangesAsync(cancel);
+        }
+        public async Task<bool> LogoutAsync(Guid userId)
+        {
+            var user = await _dbcontext.Users
+            .Include(u => u.RefreshTokens) 
+            .FirstOrDefaultAsync(u => u.Id == userId);
+            if (user != null)
+            {
+                user.RefreshTokens.Clear();
+                await _dbcontext.SaveChangesAsync();
+                return true;
+            }
+            return false;
         }
 
 
