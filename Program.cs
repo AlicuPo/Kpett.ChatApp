@@ -4,6 +4,7 @@ using dotenv.net;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
+using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Reposoitory;
 using Kpett.ChatApp.Respository;
 using Kpett.ChatApp.Services;
@@ -130,6 +131,10 @@ builder.Services.AddScoped<Kpett.ChatApp.Services.IRedis, RedisRespository>();
 builder.Services.AddSingleton(cloudinary);
 builder.Services.AddScoped<Kpett.ChatApp.Services.ICloudinary, UploadFileRepository>();
 builder.Services.AddScoped<IMessage,MessageRespository>();
+builder.Services.AddScoped<IConversation, ConversationRespository>();
+builder.Services.AddScoped<IRealtimeService, RealtimeRespository>();
+builder.Services.AddScoped<INotificationService, NotificationRespository>();
+builder.Services.AddScoped<IUsers,User>
 
 // Global Exception Handler (ĐĂNG KÝ Ở ĐÂY)
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();

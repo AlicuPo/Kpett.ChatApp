@@ -2,7 +2,7 @@
 
 namespace Kpett.ChatApp.Enums
 {
-    public enum UserEnums
+    public enum UserStatusEnums
     {
         [Description("Online")]
         Online = 1,

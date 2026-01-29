@@ -17,8 +17,7 @@ namespace Kpett.ChatApp.Controllers
             _usersRepository = usersRepository;
         }
 
-        [HttpPost("get-all-user")]
-        [Authorize]
+        [HttpPost("getalluser")]
         public async Task<IActionResult> GetAllUser(UserRequest usercurrent,CancellationToken cancel = default)
         {
             var (users, totalCount) = await _usersRepository.GetAllUser(usercurrent, cancel);

@@ -48,7 +48,7 @@ namespace Kpett.ChatApp.Reposoitory
             if (!user.IsActive)
                 throw new AppException(StatusCodes.Status401Unauthorized, "User inactive");
 
-            var status = EnumHelper.GetDescription(UserEnums.Online);
+            var status = EnumHelper.GetDescription(UserStatusEnums.Online);
             user.Status = status;
             await _dbcontext.SaveChangesAsync(cancel);
 
@@ -116,7 +116,7 @@ namespace Kpett.ChatApp.Reposoitory
                 DisplayName = request.DisplayName ?? request.Username,
                 Phone = request.Phone,
                 AvatarUrl = avatarUrl,
-                Status = EnumHelper.GetDescription(UserEnums.Offline)
+                Status = EnumHelper.GetDescription(UserStatusEnums.Offline)
             };
             _dbcontext.Users.Add(newUser);
             var result = await _dbcontext.SaveChangesAsync(cancel);
@@ -132,7 +132,7 @@ namespace Kpett.ChatApp.Reposoitory
             var user = await _dbcontext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancel);
             if (user != null)
             {
-                user.Status = EnumHelper.GetDescription(UserEnums.Offline);
+                user.Status = EnumHelper.GetDescription(UserStatusEnums.Offline);
                 await _dbcontext.SaveChangesAsync(cancel);
             }
 

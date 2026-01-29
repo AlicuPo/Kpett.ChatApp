@@ -2,12 +2,14 @@
 {
     public class ConversationResponse
     {
-        public string Id { get; set; }
-        public string? Name { get; set; } // Tên nhóm hoặc tên người chat cùng
+        public string? Id { get; set; } 
+        public string? Name { get; set; }
         public string? AvatarUrl { get; set; }
-        public bool? IsGroup { get; set; }
-        public string? LastMessageContent { get; set; }
+        public string? Type { get; set; }
         public DateTime? LastMessageAt { get; set; }
-        public string? OtherUserId { get; set; } // Dùng cho chat 1-1
+        // Thông tin tin nhắn cuối cùng
+        public LastMessageDto? LastMessage { get; set; }
+        // Số tin nhắn chưa đọc
+        public int UnreadCount { get; set; }
     }
 }
