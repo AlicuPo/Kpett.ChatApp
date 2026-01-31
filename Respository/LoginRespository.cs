@@ -78,44 +78,24 @@ namespace Kpett.ChatApp.Reposoitory
             var existingUser = await _dbcontext.Users.FirstOrDefaultAsync(x => x.Email == request.Email || x.Name == request.Username);
 
             if (existingUser != null) throw new AppException(StatusCodes.Status400BadRequest, "Username or Email really existing");
-            if (string.IsNullOrEmpty(request.Password) || string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Username))
+            if (string.IsNullOrEmpty(request.Password) || string.IsNullOrEmpty(request.Username))
             {
                 throw new AppException(StatusCodes.Status400BadRequest, "Email and Password or Username is null");
             }
             var hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
-            if (!request.Gender.HasValue)
-            {
-                throw new AppException(StatusCodes.Status400BadRequest, "Gender is required");
-            }
+            string avatarUrl = string.Empty;           
 
-            string avatarUrl = string.Empty;
-            if (request.AvatarUrl != null)
-            {
-                avatarUrl = await _cloudinary.UploadToCloudinaryAsync(
-                    request.AvatarUrl,
-                    "user_avatars",
-                    DateTime.Now.Year.ToString(),
-                    DateTime.Now.Month.ToString("D2")
-                );
-            }
-
-            var genderEnum = EnumHelper.FromInt<UserGenderEnums>(request.Gender.Value);
-            var genderDescription = EnumHelper.GetEnumDescription(genderEnum);
             string _id = Uuid.NewDatabaseFriendly(Database.SqlServer).ToString("N");
 
             var newUser = new User
             {
                 Id = _id,
-                Gender = genderDescription,
-                Email = request.Email,
                 Name = request.Username ?? string.Empty,
                 Password = hashedPassword,
+                Email = request.Email,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
-                DisplayName = request.DisplayName ?? request.Username,
-                Phone = request.Phone,
-                AvatarUrl = avatarUrl,
                 Status = EnumHelper.GetDescription(UserStatusEnums.Offline)
             };
             _dbcontext.Users.Add(newUser);
