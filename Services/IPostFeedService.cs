@@ -24,10 +24,8 @@ namespace Kpett.ChatApp.Services
             if (postRequest == null)
                 throw new AppException(StatusCodes.Status400BadRequest, "Post request cannot be null");
 
-            long _id = 123; 
             var newPost = new Post
             {
-                Id = _id,
                 CreatedByUserId = postRequest.CreatedByUserId,
                 Content = postRequest.Content,
                 Privacy = postRequest.Privacy,
@@ -37,16 +35,16 @@ namespace Kpett.ChatApp.Services
 
             };
             await _dbContext.Posts.AddAsync(newPost, cancel);
+            await _dbContext.SaveChangesAsync(cancel);
 
-            if(postRequest.MediaType == null)
+            if (postRequest.MediaType == null)
             {
-                await _dbContext.SaveChangesAsync(cancel);
                 return;
             }
             var postMedia = new PostMedia
             {
                 Id = Guid.NewGuid().ToString(),
-                PostId =_id,
+                PostId = newPost.Id,
                 MediaType = postRequest.MediaType,
                 MediaUrl = postRequest.MediaUrl,
                 ThumbnailUrl = postRequest.ThumbnailUrl,
