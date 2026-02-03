@@ -7,6 +7,6 @@ namespace Kpett.ChatApp.Services
     public interface IConversation
     {
         Task<List<ConversationResponse>> GetConversationList(SearchRequest search, CancellationToken cancel);
-       
+        //Task<List<ConversationResponse>> CreateConversaTion(CancellationToken cancel);
     }
 }

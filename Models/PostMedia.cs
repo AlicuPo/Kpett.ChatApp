@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Kpett.ChatApp.Models;
 
-public partial class PostMedium
+public partial class PostMedia
 {
     public string Id { get; set; } = null!;
 

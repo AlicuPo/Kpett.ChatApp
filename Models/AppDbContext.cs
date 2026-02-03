@@ -43,7 +43,7 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<Post> Posts { get; set; }
 
-    public virtual DbSet<PostMedium> PostMedia { get; set; }
+    public virtual DbSet<PostMedia> PostMedia { get; set; }
 
     public virtual DbSet<PostReaction> PostReactions { get; set; }
 
@@ -77,7 +77,7 @@ public partial class AppDbContext : DbContext
         modelBuilder.Entity<Message>().HasKey(e => e.Id);
         modelBuilder.Entity<Notification>().HasKey(e => e.Id);
         modelBuilder.Entity<Post>().HasKey(e => e.Id);
-        modelBuilder.Entity<PostMedium>().HasKey(e => e.Id);
+        modelBuilder.Entity<PostMedia>().HasKey(e => e.Id);
         modelBuilder.Entity<PostReaction>().HasKey(e => e.Id);
         modelBuilder.Entity<PostReactionType>().HasKey(e => e.Id);
         modelBuilder.Entity<UserDevice>().HasKey(e => e.Id);

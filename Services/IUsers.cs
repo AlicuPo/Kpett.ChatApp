@@ -5,6 +5,7 @@ namespace Kpett.ChatApp.Services
 {
     public interface IUsers
     {
-        Task<(List<UserResponse>, int)> GetAllUser(UserRequest search, CancellationToken cancel = default);
+        //Task<(List<UserResponse>, int)> GetAllUser(UserRequest search, CancellationToken cancel = default);
+        Task<UserResponse> inforUser(UserRequest Request, CancellationToken cancel);
     }
 }

@@ -135,7 +135,9 @@ builder.Services.AddScoped<IMessage,MessageRespository>();
 builder.Services.AddScoped<IConversation, ConversationRespository>();
 builder.Services.AddScoped<IRealtimeService, RealtimeRespository>();
 builder.Services.AddScoped<INotificationService, NotificationRespository>();
-//builder.Services.AddScoped<IUsers, User>()
+builder.Services.AddScoped<IUsers, UserRespository>();
+builder.Services.AddScoped<IFriendshipsService, FriendshipsServicesImpl>();
+builder.Services.AddScoped<IPostFeedService, PostFeedServiceImpl>();
 
 // Global Exception Handler (ĐĂNG KÝ Ở ĐÂY)
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();

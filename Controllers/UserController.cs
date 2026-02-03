@@ -1,7 +1,9 @@
 ﻿using Kpett.ChatApp.DTOs.Request;
+using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Kpett.ChatApp.Controllers
@@ -17,11 +19,33 @@ namespace Kpett.ChatApp.Controllers
             _usersRepository = usersRepository;
         }
 
-        [HttpPost("getalluser")]
+        [HttpPost("inforUser")]
         public async Task<IActionResult> GetAllUser(UserRequest usercurrent,CancellationToken cancel = default)
         {
-            var (users, totalCount) = await _usersRepository.GetAllUser(usercurrent, cancel);
-            return Ok(new { data = users, totalCount = totalCount });
+            try
+            {
+                var inforUser = await _usersRepository.inforUser(usercurrent, cancel);
+                return Ok(new GeneralResponse<UserResponse>
+                {
+                    StatusCode = StatusCodes.Status200OK,
+                    Message = "Notifications created successfully",
+                    Return = true,
+                    Data = inforUser
+
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new GeneralResponse
+                {
+                    Message = ex.Message,
+                    ErorrCode = StatusCodes.Status400BadRequest,
+                    Return = false
+                });
+            }
+
         }
+
     }
 }
