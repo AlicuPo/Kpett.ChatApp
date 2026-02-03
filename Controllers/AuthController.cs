@@ -16,13 +16,13 @@ namespace Kpett.ChatApp.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class LoginController : ControllerBase
+    public class AuthController : ControllerBase
     {
         private readonly IToken _token;
         private readonly IRedis _redis;
         private readonly ILogin _loginRepository;
         private readonly AppDbContext _dbContext;
-        public LoginController(ILogin loginRepository, IRedis redis, IToken token, AppDbContext dbContext)
+        public AuthController(ILogin loginRepository, IRedis redis, IToken token, AppDbContext dbContext)
         {
             _loginRepository = loginRepository;
             _redis = redis;
