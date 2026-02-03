@@ -15,7 +15,7 @@ namespace Kpett.ChatApp.DTOs.Request
 
 
     }
-    public class PostMediaRequest : Post
+    public class PostMediaRequest : PostFeedRequest
     {
         public string? MediaType { get; set; } // e.g., "image", "video"
         public string? MediaUrl { get; set; }

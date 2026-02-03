@@ -13,9 +13,12 @@ namespace Kpett.ChatApp.DTOs.Request
         public DateTime? LastReadAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
 
-
-
-
-
     }
+    public class ConversationKeysRequest
+    {
+        public string? ConversationId { get; set; }
+        public string? UserLow { get; set; } 
+        public string? UserHigh { get; set; }
+    }
+
 }

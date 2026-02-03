@@ -7,13 +7,9 @@ namespace Kpett.ChatApp.Services
 {
     public interface IFriendshipsService
     {
-
         Task RequestFriendRequestAsync(string senderId, string receiverId, CancellationToken cancel);
 
         Task AcceptFriendRequestAsync(string senderId, string receiverId, CancellationToken cancel);
-
-
-
 
     }
 
