@@ -132,7 +132,7 @@ builder.Services.AddScoped<Kpett.ChatApp.Services.IRedis, RedisRespository>();
 builder.Services.AddSingleton(cloudinary);
 builder.Services.AddScoped<Kpett.ChatApp.Services.ICloudinary, UploadFileRepository>();
 builder.Services.AddScoped<IMessage,MessageRespository>();
-builder.Services.AddScoped<IConversation, ConversationRespository>();
+builder.Services.AddScoped<IConversation, ConversationImpl>();
 builder.Services.AddScoped<IRealtimeService, RealtimeRespository>();
 builder.Services.AddScoped<INotificationService, NotificationRespository>();
 builder.Services.AddScoped<IUsers, UserRespository>();

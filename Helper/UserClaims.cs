@@ -3,7 +3,7 @@
     public record UserClaims(
     string UserId,
     string Username,
-    string Email,
+    //string Email,
     string? DisplayName = null,
     string? AvatarUrl = null,
     DateTime? ExpiresAt = null,

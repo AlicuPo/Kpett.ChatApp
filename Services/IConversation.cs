@@ -9,7 +9,7 @@ namespace Kpett.ChatApp.Services
     public interface IConversation
     {
         //Task<List<ConversationResponse>> GetConversationList(SearchRequest search, CancellationToken cancel);
-        Task<List<ConversationResponse>> CreateConversaTion(CancellationToken cancel);
+        Task<ConversationResponse> CreateConversaTion(ConversationKeysRequest request, CancellationToken cancel);
     }
     public class ConversationImpl : IConversation
     {
@@ -18,33 +18,48 @@ namespace Kpett.ChatApp.Services
         {
             _dbContext = dbContext;
         }
-        public async Task<List<ConversationResponse>> CreateConversaTion(ConversationsRequest request, CancellationToken cancel)
+        public async Task<ConversationResponse> CreateConversaTion(ConversationKeysRequest request, CancellationToken cancel)
         {
-           if(request == null)        
+            if (request == null)
                 throw new AppException(StatusCodes.Status400BadRequest, "Request cannot be null");
 
-           var newconversation = new ConversationResponse
-           {
-                Id = Guid.NewGuid().ToString(),
+            string _id = Guid.NewGuid().ToString();
+            var newconversation = new Conversation
+            {
+                Id = _id,
                 Name = request.Name,
                 AvatarUrl = request.AvatarUrl,
                 Type = request.Type,
                 LastMessageAt = DateTime.UtcNow,
-                LastMessage = request.LastMessage != null ? new DTOs.LastMessageDto
-                {
-                    CreatedAt = DateTime.UtcNow,
-                    SenderId = request.LastMessage.SenderId,
-                    Content = request.LastMessage.Content,
-                    
-                } : null,
-                UnreadCount = request.UnreadCount ?? 0
-           };
+
+            };
+            await _dbContext.Conversations.AddAsync(newconversation, cancel);
+            var newconversationKeys = new ConversationKey
+            {
+                Id = _id,
+                ConversationId = newconversation.Id,
+                UserLowId = request.UserLow,
+                UserHighId = request.UserHigh
+            };
+            await _dbContext.ConversationKeys.AddAsync(newconversationKeys, cancel);
+
           
-              await _dbContext.Conversations.AddAsync(newconversation, cancel);
-                await  _dbContext.SaveChangesAsync(cancel);
+            await _dbContext.SaveChangesAsync(cancel);
+
+            return new ConversationResponse
+            {
+                Id = newconversation.Id,
+                Name = request.Name,
+                AvatarUrl = request.AvatarUrl,
+                Type = request.Type,
+                LastMessageAt = DateTime.UtcNow,
+
+            };
+
+
 
 
         }
-      
+
     }
 }

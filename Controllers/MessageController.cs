@@ -76,7 +76,7 @@ namespace Kpett.ChatApp.Controllers
 
         [HttpPost("SendMessage")]
         [Authorize]
-        public async Task<IActionResult> SendMessageAsync(string conversationId, [FromBody] DTOs.Request.SendMessageRequest request, CancellationToken cancel)
+        public async Task<IActionResult> SendMessageAsync( string conversationId, [FromBody] DTOs.Request.SendMessageRequest request, CancellationToken cancel)
         {
             try
             {
