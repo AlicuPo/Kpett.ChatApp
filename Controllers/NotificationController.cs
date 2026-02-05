@@ -20,7 +20,7 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpPost("Notification")]
-        public async Task<IActionResult> CreateMessageNotifications([FromQuery] string conversationId, [FromQuery] string senderId, [FromBody] MesSageDTO dto)
+        public async Task<IActionResult> CreateMessageNotifications([FromQuery] string conversationId, [FromQuery] string senderId, [FromBody] MessageDTO dto)
         {
             try
             {

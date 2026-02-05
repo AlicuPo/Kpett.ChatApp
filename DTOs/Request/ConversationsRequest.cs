@@ -8,10 +8,11 @@ namespace Kpett.ChatApp.DTOs.Request
         public string? Type { get; set; }
         public string? Name { get; set; }
         public string? AvatarUrl { get; set; }
-        public MesSageDTO? LastMessage { get; set; }
+        public MessageDTO? LastMessage { get; set; }
         public int? UnreadCount { get; set; }
         public DateTime? LastReadAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
+    }
 
     }
     public class ConversationKeysRequest

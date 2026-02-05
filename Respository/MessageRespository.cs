@@ -44,7 +44,7 @@ namespace Kpett.ChatApp.Respository
                 join d in _dbcontext.MessageDetails
                     on m.Id equals d.MessageId
                 orderby m.Id descending
-                select new MesSageDTO
+                select new MessageDTO
                 {
                     Id = m.Id,
                     SenderId = m.SenderId,
@@ -99,7 +99,7 @@ namespace Kpett.ChatApp.Respository
         }
 
 
-        public async Task<MesSageDTO> SendMessageAsync(string conversationId, string senderId, SendMessageRequest request, CancellationToken cancel)
+        public async Task<MessageDTO> SendMessageAsync(string conversationId, string senderId, SendMessageRequest request, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
             var participant = await _dbcontext.ConversationParticipants
@@ -138,7 +138,7 @@ namespace Kpett.ChatApp.Respository
                         .Select(d => d.Content)
                         .FirstAsync(cancel);
 
-                    return new MesSageDTO
+                    return new MessageDTO
                     {
                         Id = existing.Id,
                         SenderId = existing.SenderId,
@@ -189,7 +189,7 @@ namespace Kpett.ChatApp.Respository
                 await tx.CommitAsync(cancel);
 
                 // 5. Assemble DTO
-                var dto = new MesSageDTO
+                var dto = new MessageDTO
                 {
                     Id = message.Id,
                     SenderId = senderId,
@@ -242,7 +242,7 @@ namespace Kpett.ChatApp.Respository
                         .Select(d => d.Content)
                         .FirstAsync(cancel);
 
-                    return new MesSageDTO
+                    return new MessageDTO
                     {
                         Id = existing.Id,
                         SenderId = existing.SenderId,
@@ -258,7 +258,7 @@ namespace Kpett.ChatApp.Respository
         }
 
 
-        public async Task<PagedResult<MesSageDTO>> GetMessagesAsync(string conversationId, long? cursorMessageId, int limit, CancellationToken cancel)
+        public async Task<PagedResult<MessageDTO>> GetMessagesAsync(string conversationId, long? cursorMessageId, int limit, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
             var query = _dbcontext.Messages
@@ -272,7 +272,7 @@ namespace Kpett.ChatApp.Respository
             var messages = await query
                 .OrderByDescending(x => x.Id)
                 .Take(limit)
-                .Select(x => new MesSageDTO
+                .Select(x => new MessageDTO
                 {
                     Id = x.Id,
                     Content = x.Metadata,
@@ -285,7 +285,7 @@ namespace Kpett.ChatApp.Respository
                 ? messages.Min(x => x.Id)
                 : (long?)null;
 
-            return new PagedResult<MesSageDTO>
+            return new PagedResult<MessageDTO>
             {
                 Items = messages,
                 NextCursor = nextCursor,

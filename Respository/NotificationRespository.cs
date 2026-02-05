@@ -14,7 +14,7 @@ namespace Kpett.ChatApp.Respository
             _dbContext = dbContext;
         }
 
-        public Task CreateMessageNotificationsAsync(string conversationId, string senderId, MesSageDTO dto)
+        public Task CreateMessageNotificationsAsync(string conversationId, string senderId, MessageDTO dto)
         {
             if (string.IsNullOrEmpty(conversationId))
             {
