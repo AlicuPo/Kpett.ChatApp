@@ -42,8 +42,7 @@ namespace Kpett.ChatApp.Services
                 UserHighId = request.UserHigh
             };
             await _dbContext.ConversationKeys.AddAsync(newconversationKeys, cancel);
-
-          
+        
             await _dbContext.SaveChangesAsync(cancel);
 
             return new ConversationResponse

@@ -79,33 +79,210 @@ namespace Kpett.ChatApp.Controllers
                     ErorrCode = 400
                 });
             }
-         
+
         }
 
+        [Authorize]
         [HttpPost("logout")]
         public async Task<IActionResult> Logout(CancellationToken cancel = default)
         {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || string.IsNullOrWhiteSpace(userIdClaim.Value))
+            try
             {
-                return Unauthorized(new { message = "Invalid user." });
-            }
-            var userId = userIdClaim.Value;
-            var result = await _loginRepository.LogoutAsync(userId, cancel);
-            if (result)
-            {
-                return Ok(new
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+                if (userIdClaim == null || string.IsNullOrWhiteSpace(userIdClaim.Value))
                 {
-                    Return = true,
-                    Message = "Logout successful.",
-                    StatusCode = 200
-                });
+                    return Unauthorized(new { message = "Invalid user." });
+                }
+                var userId = userIdClaim.Value;
+
+                // Extract JTI from current access token to blacklist it
+                var jtiClaim = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
+                if (!string.IsNullOrEmpty(jtiClaim))
+                {
+                    // Blacklist the current access token (30 min expiry)
+                    await _redis.BlacklistAccessTokenAsync(jtiClaim, TimeSpan.FromMinutes(30));
+                }
+
+                // Blacklist refresh token
+                var refreshToken = await _redis.GetRefreshTokenAsync(userId);
+                if (!string.IsNullOrEmpty(refreshToken))
+                {
+                    await _redis.BlacklistRefreshTokenAsync(refreshToken, TimeSpan.FromDays(30));
+                    await _redis.RemoveRefreshTokenAsync(userId);
+                }
+
+                var result = await _loginRepository.LogoutAsync(userId, cancel);
+                if (result)
+                {
+                    return Ok(new GeneralResponse
+                    {
+                        Return = true,
+                        Message = "Logout successful.",
+                        StatusCode = 200
+                    });
+                }
+                else
+                {
+                    return StatusCode(StatusCodes.Status400BadRequest, new GeneralResponse
+                    {
+                        Return = false,
+                        Message = "Logout failed.",
+                        ErorrCode = 400
+                    });
+                }
             }
-            else
+            catch (Exception ex)
             {
-                return StatusCode(StatusCodes.Status400BadRequest, new { message = "Logout failed." });
+                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
+                {
+                    Return = false,
+                    Message = ex.Message,
+                    ErorrCode = 500
+                });
             }
         }
 
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
+        {
+            try
+            {
+                if (request == null || string.IsNullOrEmpty(request.RefreshToken))
+                {
+                    return BadRequest(new GeneralResponse
+                    {
+                        Return = false,
+                        Message = "Refresh token is required.",
+                        ErorrCode = 400
+                    });
+                }
+
+                // Validate refresh token signature and extract claims
+                var principal = _token.GetPrincipalFromExpiredToken(request.RefreshToken, true);
+                if (principal == null)
+                {
+                    return Unauthorized(new GeneralResponse
+                    {
+                        Return = false,
+                        Message = "Invalid refresh token.",
+                        ErorrCode = 401
+                    });
+                }
+
+                var userId = principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                             ?? principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.NameId)?.Value;
+
+                var username = principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Name)?.Value
+                               ?? principal.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? string.Empty;
+
+                var email = principal.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new GeneralResponse
+                    {
+                        Return = false,
+                        Message = "Invalid token claims.",
+                        ErorrCode = 401
+                    });
+                }
+
+                // Check blacklist
+                if (await _redis.IsRefreshTokenBlacklistedAsync(request.RefreshToken))
+                {
+                    return Unauthorized(new GeneralResponse
+                    {
+                        Return = false,
+                        Message = "Refresh token revoked.",
+                        ErorrCode = 401
+                    });
+                }
+
+                // Ensure refresh token matches stored value
+                var saved = await _redis.GetRefreshTokenAsync(userId);
+                if (string.IsNullOrEmpty(saved) || saved != request.RefreshToken)
+                {
+                    return Unauthorized(new GeneralResponse
+                    {
+                        Return = false,
+                        Message = "Refresh token does not match.",
+                        ErorrCode = 401
+                    });
+                }
+
+                // Generate new tokens
+                var newAccessToken = _token.GenerateAccessToken(userId, username, email);
+                var newRefreshToken = _token.GenerateRefreshToken(userId, username, email);
+
+                // Blacklist old refresh token and save new one
+                await _redis.BlacklistRefreshTokenAsync(request.RefreshToken, TimeSpan.FromDays(30));
+                await _redis.SaveRefreshTokenAsync(userId, newRefreshToken, TimeSpan.FromDays(30));
+
+                var response = new TokenResponse
+                {
+                    AccessToken = newAccessToken,
+                    RefreshToken = newRefreshToken,
+                    ExpiresIn = 30 * 60,
+                    IssuedAt = DateTime.UtcNow,
+                    ExpiresAt = DateTime.UtcNow.AddMinutes(30)
+                };
+
+                return Ok(new GeneralResponse<TokenResponse>
+                {
+                    StatusCode = 200,
+                    Return = true,
+                    Data = response,
+                    Message = "Token refreshed successfully."
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new GeneralResponse
+                {
+                    Return = false,
+                    Message = ex.Message,
+                    ErorrCode = 400
+                });
+            }
+        }
+
+        [Authorize]
+        [HttpPost("revoke")]
+        public async Task<IActionResult> Revoke()
+        {
+            try
+            {
+                // Extract JTI from current token to revoke
+                var jtiClaim = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
+                if (string.IsNullOrEmpty(jtiClaim))
+                {
+                    return BadRequest(new GeneralResponse
+                    {
+                        Return = false,
+                        Message = "Invalid token.",
+                        ErorrCode = 400
+                    });
+                }
+
+                // Blacklist the access token
+                await _redis.BlacklistAccessTokenAsync(jtiClaim, TimeSpan.FromMinutes(30));
+
+                return Ok(new GeneralResponse
+                {
+                    Return = true,
+                    Message = "Token revoked successfully.",
+                    StatusCode = 200
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
+                {
+                    Return = false,
+                    Message = ex.Message,
+                    ErorrCode = 500
+                });
+            }
+        }
     }
 }

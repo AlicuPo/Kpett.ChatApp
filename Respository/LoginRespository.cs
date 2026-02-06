@@ -55,16 +55,17 @@ namespace Kpett.ChatApp.Reposoitory
             await _redis.RemoveRefreshTokenAsync(user.Id);
 
             // Tạo JWT Token
-            var accessToken = _token.GenerateAccessToken(user.Id,user.Name);
-            var refreshToken = _token.GenerateRefreshToken(user.Id, user.Name);
+            var accessToken = _token.GenerateAccessToken(user.Id, user.Name, user.Email, user.DisplayName);
+            var refreshToken = _token.GenerateRefreshToken(user.Id, user.Name, user.Email);
             await _redis.SaveRefreshTokenAsync(user.Id, refreshToken, TimeSpan.FromDays(30));
 
             return new LoginResponse
             {
-                
                 AccessToken = accessToken,
                 RefreshToken = refreshToken,
                 ExpiresIn = 30 * 60,
+                IssuedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddMinutes(30),
                 DisplayName = user.DisplayName,
                 AvatarUrl = user.AvatarUrl
             };
@@ -84,7 +85,7 @@ namespace Kpett.ChatApp.Reposoitory
             }
             var hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
-            string avatarUrl = string.Empty;           
+            string avatarUrl = string.Empty;
 
             string _id = Uuid.NewDatabaseFriendly(Database.SqlServer).ToString("N");
 

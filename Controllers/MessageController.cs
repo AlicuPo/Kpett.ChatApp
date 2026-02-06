@@ -82,11 +82,11 @@ namespace Kpett.ChatApp.Controllers
             {
                 var userClaims = _Itoken.GetUserClaims();
                 var senderId = userClaims?.UserId ?? string.Empty;
-                var message = await _message.SendMessageAsync(conversationId, senderId, request, cancel);
+                await _message.SendMessageAsync(conversationId, senderId, request, cancel);
                 return Ok(new
                 {
                     StatusCode = StatusCodes.Status200OK,
-                    Message = message
+                    Message = "gửi tin nhắn thành công"
                 });
             }
             catch (Exception ex)

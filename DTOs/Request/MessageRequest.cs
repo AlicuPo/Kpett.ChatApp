@@ -27,6 +27,6 @@
         public string? ClientMessageId { get; set; } // Để Client tránh gửi trùng (Idempotency) 
         public string? Type { get; set; } // Text, Image, v.v. 
         public string? Metadata { get; set; } // Thông tin bổ sung dưới dạng JSON
-        public string? Coler { get; set; } // Màu sắc của tin nhắn  
+        public string? Color { get; set; } // Màu sắc của tin nhắn  
     }
 }

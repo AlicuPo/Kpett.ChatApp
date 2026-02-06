@@ -167,6 +167,9 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Token blacklist validation (after auth, before endpoints)
+app.UseTokenBlacklistMiddleware();
+
 // OpenAPI (DEV only)
 if (app.Environment.IsDevelopment())
 {

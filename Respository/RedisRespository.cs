@@ -7,8 +7,10 @@ namespace Kpett.ChatApp.Respository
     public class RedisRespository : Services.IRedis
     {
         private readonly StackExchange.Redis.IDatabase _redis;
+        private readonly IConnectionMultiplexer _multiplexer;
         public RedisRespository(IConnectionMultiplexer multiplexer)
         {
+            _multiplexer = multiplexer;
             _redis = multiplexer.GetDatabase();
         }
         private static string RefreshKey(string userId) => $"refresh_token:{userId}";
@@ -41,7 +43,7 @@ namespace Kpett.ChatApp.Respository
                 "1",
                 ttl
             );
-        } 
+        }
         public async Task<bool> IsAccessTokenBlacklistedAsync(string jti)
         {
             var value = await _redis.StringGetAsync(AccessBlacklistKey(jti));
@@ -59,6 +61,51 @@ namespace Kpett.ChatApp.Respository
         {
             var value = await _redis.StringGetAsync(RefreshBlacklistKey(refreshToken));
             return value.HasValue;
+        }
+
+        // Connection / presence helpers
+        public async Task AddConnectionAsync(string userId, string connectionId)
+        {
+            var key = $"user:{userId}:connections";
+            await _redis.ListRightPushAsync(key, connectionId);
+            await _redis.KeyExpireAsync(key, TimeSpan.FromHours(24));
+        }
+
+        public async Task RemoveConnectionAsync(string userId, string connectionId)
+        {
+            var key = $"user:{userId}:connections";
+            await _redis.ListRemoveAsync(key, connectionId);
+        }
+
+        public async Task<string[]> GetConnectionsAsync(string userId)
+        {
+            var key = $"user:{userId}:connections";
+            var values = await _redis.ListRangeAsync(key);
+            return values.Where(v => v.HasValue).Select(v => v.ToString()!).ToArray();
+        }
+
+        // Conversation membership helpers
+        public async Task AddUserToConversationAsync(string conversationId, string userId)
+        {
+            await _redis.SetAddAsync($"conversation:{conversationId}:users", userId);
+        }
+
+        public async Task RemoveUserFromConversationAsync(string conversationId, string userId)
+        {
+            await _redis.SetRemoveAsync($"conversation:{conversationId}:users", userId);
+        }
+
+        public async Task<string[]> GetConversationUsersAsync(string conversationId)
+        {
+            var members = await _redis.SetMembersAsync($"conversation:{conversationId}:users");
+            return members.Where(m => m.HasValue).Select(m => m.ToString()!).ToArray();
+        }
+
+        // Publish wrapper using multiplexer subscriber
+        public async Task<long> PublishAsync(string channel, string message)
+        {
+            var sub = _multiplexer.GetSubscriber();
+            return await sub.PublishAsync(channel, message);
         }
     }
 }

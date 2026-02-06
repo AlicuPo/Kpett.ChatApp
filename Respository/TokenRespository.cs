@@ -23,7 +23,7 @@ namespace Kpett.ChatApp.Reposoitory
             _config = config;
         }
 
-        public string GenerateAccessToken(string userId, string UserName)
+        public string GenerateAccessToken(string userId, string UserName, string? email = null, string? displayName = null)
         {
             var jwtKey = _config["JwtSection:KeyAccess"];
             if (string.IsNullOrEmpty(jwtKey))
@@ -43,11 +43,16 @@ namespace Kpett.ChatApp.Reposoitory
             {
                 new Claim(JwtRegisteredClaimNames.NameId, userId),
                 new Claim(JwtRegisteredClaimNames.Jti, jti),
-                new Claim(JwtRegisteredClaimNames.Name,UserName),
+                new Claim(JwtRegisteredClaimNames.Name, UserName),
                 new Claim(ClaimTypes.NameIdentifier, userId),
-
-
             };
+
+            // Add optional claims
+            if (!string.IsNullOrEmpty(email))
+                claims.Add(new Claim(ClaimTypes.Email, email));
+
+            if (!string.IsNullOrEmpty(displayName))
+                claims.Add(new Claim("DisplayName", displayName));
 
             var token = new JwtSecurityToken(
                 issuer: _config["JwtSection:Issuer"],
@@ -59,12 +64,12 @@ namespace Kpett.ChatApp.Reposoitory
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
-        public string GenerateRefreshToken(string userId, string UserName)
+        public string GenerateRefreshToken(string userId, string UserName, string? email = null)
         {
             var jwtKey = _config["JwtSection:KeyRefres"];
             if (string.IsNullOrEmpty(jwtKey))
             {
-                throw new InvalidOperationException("JwtSection KeyAccess is not configured.");
+                throw new InvalidOperationException("JwtSection KeyRefres is not configured.");
             }
 
             var key = new SymmetricSecurityKey(
@@ -79,9 +84,13 @@ namespace Kpett.ChatApp.Reposoitory
             {
                 new Claim(JwtRegisteredClaimNames.NameId, userId),
                 new Claim(JwtRegisteredClaimNames.Jti, jti),
-                new Claim(JwtRegisteredClaimNames.Name,UserName),
+                new Claim(JwtRegisteredClaimNames.Name, UserName),
                 new Claim(ClaimTypes.NameIdentifier, userId)
             };
+
+            // Add optional email claim
+            if (!string.IsNullOrEmpty(email))
+                claims.Add(new Claim(ClaimTypes.Email, email));
 
             var token = new JwtSecurityToken(
                 issuer: _config["JwtSection:Issuer"],
@@ -94,9 +103,10 @@ namespace Kpett.ChatApp.Reposoitory
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
+        public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token, bool isRefresh = false)
         {
-            var jwtKey = _config["JwtSection:Key"];
+            var keyName = isRefresh ? "JwtSection:KeyRefres" : "JwtSection:KeyAccess";
+            var jwtKey = _config[keyName];
             if (string.IsNullOrEmpty(jwtKey))
             {
                 throw new InvalidOperationException("JWT key is not configured.");
@@ -122,38 +132,63 @@ namespace Kpett.ChatApp.Reposoitory
 
         public UserClaims? GetUserClaims()
         {
-            if (_contextAccessor.HttpContext?.User == null)
+            try
+            {
+                if (_contextAccessor.HttpContext?.User == null)
+                    return null;
+
+                var claims = _contextAccessor.HttpContext.User.Claims;
+
+                // Extract required claims
+                var userId = claims.FirstOrDefault(_ => _.Type == ClaimTypes.NameIdentifier)?.Value;
+                var username = claims.FirstOrDefault(_ => _.Type == ClaimTypes.Name || _.Type == "name")?.Value;
+
+                // Validate required claims
+                if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(username))
+                    return null;
+
+                // Extract optional claims
+                var displayName = claims.FirstOrDefault(c => c.Type == "DisplayName")?.Value;
+                var avatarUrl = claims.FirstOrDefault(c => c.Type == "AvatarUrl")?.Value;
+                var email = claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+                var jti = claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Jti)?.Value;
+
+                // Extract expiration time
+                DateTime? expiresAt = null;
+                var expClaim = claims.FirstOrDefault(_ => _.Type == JwtRegisteredClaimNames.Exp)?.Value;
+                if (long.TryParse(expClaim, out var expUnix))
+                    expiresAt = DateTimeOffset.FromUnixTimeSeconds(expUnix).UtcDateTime;
+
+                // Extract issued at time
+                DateTime? issuedAt = null;
+                var iatClaim = claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Iat)?.Value;
+                if (long.TryParse(iatClaim, out var iatUnix))
+                    issuedAt = DateTimeOffset.FromUnixTimeSeconds(iatUnix).UtcDateTime;
+
+                // Extract roles
+                var roles = claims
+                    .Where(c => c.Type == ClaimTypes.Role)
+                    .Select(c => c.Value)
+                    .ToList();
+
+                return new UserClaims(
+                    UserId: userId,
+                    Username: username,
+                    DisplayName: displayName,
+                    AvatarUrl: avatarUrl,
+                    ExpiresAt: expiresAt,
+                    IssuedAt: issuedAt,
+                    Roles: roles.Count > 0 ? roles : null,
+                    Email: email,
+                    Jti: jti
+                );
+            }
+            catch (Exception ex)
+            {
+                // Log error but don't throw - return null if extraction fails
+                Console.WriteLine($"Error extracting user claims: {ex.Message}");
                 return null;
-
-            var claims = _contextAccessor.HttpContext.User.Claims;
-
-            var userId = claims.FirstOrDefault(_ => _.Type == ClaimTypes.NameIdentifier)?.Value;
-
-            //var username = claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
-            var username = claims.FirstOrDefault(_ => _.Type == ClaimTypes.Name || _.Type == "name")?.Value;
-
-
-            //var email = claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
-
-            DateTime? exp = null;
-            var expClaim = claims.FirstOrDefault(_ => _.Type == JwtRegisteredClaimNames.Exp)?.Value;
-            if (long.TryParse(expClaim, out var expUnix)) exp = DateTimeOffset.FromUnixTimeSeconds(expUnix).UtcDateTime;
-
-            DateTime? iat = null;
-            var iatClaim = claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Iat)?.Value;
-            if (long.TryParse(iatClaim, out var iatUnix)) iat = DateTimeOffset.FromUnixTimeSeconds(iatUnix).UtcDateTime;
-
-            if (userId == null || username == null)
-                return null;
-
-            return new UserClaims(
-               userId,
-               username,
-               claims.FirstOrDefault(c => c.Type == "DisplayName")?.Value,
-               claims.FirstOrDefault(c => c.Type == "AvatarUrl")?.Value,
-               exp,
-               iat,
-               claims.Where(c => c.Type == ClaimTypes.Role).Select(c => c.Value).ToList());
+            }
         }
     }
 

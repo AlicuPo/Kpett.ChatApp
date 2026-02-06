@@ -102,27 +102,44 @@ namespace Kpett.ChatApp.Respository
 
         public async Task SendMessageAsync(string conversationId, string senderId, SendMessageRequest request, CancellationToken cancel)
         {
+            // Validation
+            if (string.IsNullOrWhiteSpace(conversationId))
+                throw new AppException(StatusCodes.Status400BadRequest, "Conversation ID cannot be null or empty.");
 
-            if (conversationId == null)
-                throw new AppException(StatusCodes.Status400BadRequest, "Conversation ID cannot be null.");
+            if (string.IsNullOrWhiteSpace(senderId))
+                throw new AppException(StatusCodes.Status400BadRequest, "Sender ID cannot be null or empty.");
 
-            if (senderId == null)
-                throw new AppException(StatusCodes.Status400BadRequest, "Sender ID cannot be null.");
+            if (string.IsNullOrWhiteSpace(request?.Content))
+                throw new AppException(StatusCodes.Status400BadRequest, "Message content cannot be empty.");
 
-                var findConversation = await _dbcontext.Conversations.Where(_ => _.Id == conversationId).FirstOrDefaultAsync();
-           
-            if(findConversation == null)
-               throw new AppException(StatusCodes.Status400BadRequest,"Conversation not found");
-            var _id = Guid.NewGuid().ToString();
+            // Check if conversation exists
+            var conversation = await _dbcontext.Conversations
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == conversationId, cancel);
+
+            if (conversation == null)
+                throw new AppException(StatusCodes.Status404NotFound, "Conversation not found.");
+
+            // Check if sender is a participant
+            var isParticipant = await _dbcontext.ConversationParticipants
+                .AsNoTracking()
+                .AnyAsync(p => p.ConversationId == conversationId && p.UserId == senderId, cancel);
+
+            if (!isParticipant)
+                throw new AppException(StatusCodes.Status403Forbidden, "User is not a participant of this conversation.");
+
+            // Create message and message detail
             var message = new Message
             {
                 ConversationId = conversationId,
                 SenderId = senderId,
                 ClientMessageId = request.ClientMessageId,
                 Metadata = request.Metadata,
-                Type = request.Type,
-                CreatedAt = DateTime.UtcNow
+                Type = request.Type ?? "text",
+                CreatedAt = DateTime.UtcNow,
+                IsDeleted = false
             };
+
             _dbcontext.Messages.Add(message);
             await _dbcontext.SaveChangesAsync(cancel);
 
@@ -130,15 +147,52 @@ namespace Kpett.ChatApp.Respository
             {
                 MessageId = message.Id,
                 Content = request.Content,
-                Color = request.Coler
+                Color = request.Color
             };
+
             _dbcontext.MessageDetails.Add(messageDetail);
-
-            
-
             await _dbcontext.SaveChangesAsync(cancel);
 
+            // Create message DTO for notifications
+            var messageDTO = new MessageDTO
+            {
+                Id = message.Id,
+                SenderId = senderId,
+                Content = request.Content,
+                Type = message.Type,
+                Metadata = request.Metadata,
+                CreatedAt = message.CreatedAt ?? DateTime.UtcNow
+            };
 
+            // Send real-time notification to all participants
+            try
+            {
+                await _realtime.PublishAsync(
+                    $"conversation:{conversationId}",
+                    new
+                    {
+                        type = "NEW_MESSAGE",
+                        conversationId = conversationId,
+                        message = messageDTO,
+                        timestamp = DateTime.UtcNow
+                    });
+            }
+            catch (Exception ex)
+            {
+                // Log but don't fail the operation
+                Console.WriteLine($"Real-time notification failed: {ex.Message}");
+            }
+
+            // Create notifications for other participants
+            try
+            {
+                await _notificationService.CreateMessageNotificationsAsync(conversationId, senderId, messageDTO);
+            }
+            catch (Exception ex)
+            {
+                // Log but don't fail the operation
+                Console.WriteLine($"Notification creation failed: {ex.Message}");
+            }
         }
 
 

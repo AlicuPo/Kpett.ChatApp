@@ -7,8 +7,8 @@ namespace Kpett.ChatApp.Services
     public interface IToken
     {
         UserClaims? GetUserClaims();
-        string GenerateAccessToken(string userId, string UserName);
-        string GenerateRefreshToken(string userId, string UserName);
-        ClaimsPrincipal? GetPrincipalFromExpiredToken(string token);
+        string GenerateAccessToken(string userId, string UserName, string? email = null, string? displayName = null);
+        string GenerateRefreshToken(string userId, string UserName, string? email = null);
+        ClaimsPrincipal? GetPrincipalFromExpiredToken(string token, bool isRefresh = false);
     }
 }

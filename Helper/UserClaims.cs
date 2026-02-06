@@ -3,12 +3,13 @@
     public record UserClaims(
     string UserId,
     string Username,
-    //string Email,
     string? DisplayName = null,
     string? AvatarUrl = null,
     DateTime? ExpiresAt = null,
     DateTime? IssuedAt = null,
-    List<string>? Roles = null
+    List<string>? Roles = null,
+    string? Email = null,
+    string? Jti = null
 )
     {
         public bool IsExpired => ExpiresAt.HasValue && ExpiresAt.Value < DateTime.UtcNow;

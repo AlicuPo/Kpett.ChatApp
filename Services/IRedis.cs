@@ -11,5 +11,18 @@
 
         Task BlacklistRefreshTokenAsync(string refreshToken, TimeSpan ttl);
         Task<bool> IsRefreshTokenBlacklistedAsync(string refreshToken);
+
+        // Connection / presence helpers
+        Task AddConnectionAsync(string userId, string connectionId);
+        Task RemoveConnectionAsync(string userId, string connectionId);
+        Task<string[]> GetConnectionsAsync(string userId);
+
+        // Conversation membership helpers
+        Task AddUserToConversationAsync(string conversationId, string userId);
+        Task RemoveUserFromConversationAsync(string conversationId, string userId);
+        Task<string[]> GetConversationUsersAsync(string conversationId);
+
+        // Publish wrapper
+        Task<long> PublishAsync(string channel, string message);
     }
 }
