@@ -26,6 +26,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// azdot env load
+//builder.WebHost.UseUrls("http://+:8080");
+
+
 // Controllers
 builder.Services.AddControllers();
 
@@ -90,7 +94,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.Zero
         };
 
-       
+
         options.Events = new JwtBearerEvents
         {
             OnTokenValidated = async context =>
@@ -131,7 +135,7 @@ builder.Services.AddScoped<ILogin, LoginRespository>();
 builder.Services.AddScoped<Kpett.ChatApp.Services.IRedis, RedisRespository>();
 builder.Services.AddSingleton(cloudinary);
 builder.Services.AddScoped<Kpett.ChatApp.Services.ICloudinary, UploadFileRepository>();
-builder.Services.AddScoped<IMessage,MessageRespository>();
+builder.Services.AddScoped<IMessage, MessageRespository>();
 builder.Services.AddScoped<IConversation, ConversationImpl>();
 builder.Services.AddScoped<IRealtimeService, RealtimeRespository>();
 builder.Services.AddScoped<INotificationService, NotificationRespository>();
@@ -186,5 +190,7 @@ app.MapGet("/", () =>
 {
     throw new Exception("Test error");
 });
+//app.MapGet("/health", () => "OK");
+
 
 app.Run();
