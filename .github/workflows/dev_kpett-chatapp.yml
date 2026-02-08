@@ -1,7 +1,7 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 
-name: Build and deploy ASP.Net Core app to Azure Web App - Kpett-chatapp
+name: Build and deploy ASP.Net Core app to Azure Web App - Kpett-ChatApp
 
 on:
   push:
@@ -51,15 +51,15 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_622A3CF3847D4A249D72AC304B396D2A }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_4C067DCFBAEB455AB27CAA9BD7C02125 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_DAAB014D1CF14961BC7C9F5D2000E936 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_76AE8738087548C0B2A95F24552DA0E5 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_34EC4935E9ED45F79DCB95D2BC8E4DD9 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_29CF94999CD048808D68E124C767E9FC }}
 
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'Kpett-chatapp'
+          app-name: 'Kpett-ChatApp'
           slot-name: 'Production'
           package: .
           
