@@ -3,9 +3,9 @@ using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.DTOs.Response;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Kpett.ChatApp.Services
+namespace Kpett.ChatApp.Services.Interfaces
 {
-    public interface IMessage
+    public interface IMessageService
     {
         Task<MessagePageResult> GetMessagesAsync(string conversationId, string currentUserId, long? cursorMessageId, int pageSize, CancellationToken cancel);
         Task MarkAsRead(string id, [FromBody] ReadMessageRequest request, CancellationToken cancel);      

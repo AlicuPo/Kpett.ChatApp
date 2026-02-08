@@ -1,6 +1,6 @@
 ﻿using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.DTOs.Response;
-using Kpett.ChatApp.Services;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -11,10 +11,10 @@ namespace Kpett.ChatApp.Controllers
     [Route("api/[controller]")]
     [ApiController]
      
-    public class UserController : ControllerBase
+    public class UsersController : ControllerBase
     {
-        private readonly IUsers _usersRepository;
-        public UserController(IUsers usersRepository)
+        private readonly IUserService _usersRepository;
+        public UsersController(IUserService usersRepository)
         {
             _usersRepository = usersRepository;
         }

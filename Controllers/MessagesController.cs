@@ -1,7 +1,7 @@
 ﻿using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Services;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -11,11 +11,11 @@ namespace Kpett.ChatApp.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class MessageController : ControllerBase
+    public class MessagesController : ControllerBase
     {
-        private readonly IMessage _message;
-        private readonly IToken _Itoken;
-        public MessageController(IMessage message, IToken token)
+        private readonly IMessageService _message;
+        private readonly IJwtService _Itoken;
+        public MessagesController(IMessageService message, IJwtService token)
         {
             _message = message;
             _Itoken = token;

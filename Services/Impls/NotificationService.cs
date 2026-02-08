@@ -4,12 +4,12 @@ using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Services;
 using Microsoft.EntityFrameworkCore;
-namespace Kpett.ChatApp.Respository
+namespace Kpett.ChatApp.Services.Impls
 {
-    public class NotificationRespository : INotificationService
+    public class NotificationService : INotificationService
     {
         private readonly AppDbContext _dbContext;
-        public NotificationRespository(AppDbContext dbContext)
+        public NotificationService(AppDbContext dbContext)
         { 
             _dbContext = dbContext;
         }

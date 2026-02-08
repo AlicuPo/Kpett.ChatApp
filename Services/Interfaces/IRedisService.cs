@@ -1,6 +1,6 @@
-﻿namespace Kpett.ChatApp.Services
+﻿namespace Kpett.ChatApp.Services.Interfaces
 {
-    public interface IRedis
+    public interface IRedisService
     {
         Task SaveRefreshTokenAsync(string userId, string refreshToken, TimeSpan ttl);
         Task<string?> GetRefreshTokenAsync(string userId);

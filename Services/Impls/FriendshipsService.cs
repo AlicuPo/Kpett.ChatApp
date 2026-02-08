@@ -3,26 +3,18 @@ using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
-namespace Kpett.ChatApp.Services
+namespace Kpett.ChatApp.Services.Impls
 {
-    public interface IFriendshipsService
-    {
-        Task RequestFriendRequestAsync(string senderId, string receiverId, CancellationToken cancel);
-        Task AcceptFriendRequestAsync(string senderId, string receiverId, CancellationToken cancel);
-        Task RejectFriendRequestAsync(string senderId, string receiverId, CancellationToken cancel);
-        Task<List<FriendRequestDTO>> GetPendingFriendRequestsAsync(string userId, CancellationToken cancel);
-        Task CancelFriendRequestAsync(string senderId, string receiverId, CancellationToken cancel);
-    }
-
-    public class FriendshipsServicesImpl : IFriendshipsService
+    public class FriendshipServices : IFriendshipService
     {
         private readonly AppDbContext _dbcontext;
         private readonly IRealtimeService _realtimeService;
         private readonly INotificationService _notificationService;
 
-        public FriendshipsServicesImpl(AppDbContext dbcontext, IRealtimeService realtimeService, INotificationService notificationService)
+        public FriendshipServices(AppDbContext dbcontext, IRealtimeService realtimeService, INotificationService notificationService)
         {
             _dbcontext = dbcontext;
             _realtimeService = realtimeService;
@@ -360,4 +352,5 @@ namespace Kpett.ChatApp.Services
             return requests;
         }
     }
+
 }

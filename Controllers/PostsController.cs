@@ -3,7 +3,7 @@ using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Services;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -13,12 +13,12 @@ namespace Kpett.ChatApp.Controllers
     [Route("api/[controller]")]
     [ApiController]
     [Authorize]
-    public class PostController : ControllerBase
+    public class PostsController : ControllerBase
     {
         private readonly AppDbContext _dbcontext;
         private readonly IPostFeedService _postFeedService;
 
-        public PostController(AppDbContext dbcontext, IPostFeedService postFeedService)
+        public PostsController(AppDbContext dbcontext, IPostFeedService postFeedService)
         {
             _dbcontext = dbcontext;
             _postFeedService = postFeedService;

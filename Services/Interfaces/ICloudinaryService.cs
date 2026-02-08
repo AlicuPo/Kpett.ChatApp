@@ -1,6 +1,6 @@
-﻿namespace Kpett.ChatApp.Services
+﻿namespace Kpett.ChatApp.Services.Interfaces
 {
-    public interface ICloudinary
+    public interface ICloudinaryService
     {
         Task<string> UploadToCloudinaryAsync(IFormFile file, string basePath, string yearFolder, string monthFolder);
     }

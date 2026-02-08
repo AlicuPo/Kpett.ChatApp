@@ -9,11 +9,11 @@ namespace Kpett.ChatApp.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class NotificationController : ControllerBase
+    public class NotificationsController : ControllerBase
     {
         private readonly AppDbContext _dbContext;
         private readonly INotificationService _notification;
-        public NotificationController(INotificationService notification , AppDbContext dbContext)
+        public NotificationsController(INotificationService notification , AppDbContext dbContext)
         {
             _dbContext = dbContext;
             _notification = notification;

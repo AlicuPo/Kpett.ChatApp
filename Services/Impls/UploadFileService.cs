@@ -2,13 +2,13 @@
 using CloudinaryDotNet.Actions;
 
 
-namespace Kpett.ChatApp.Respository
+namespace Kpett.ChatApp.Services.Impls
 {
-    public class UploadFileRepository : Kpett.ChatApp.Services.ICloudinary
+    public class UploadFileService : Interfaces.ICloudinaryService
     {
         private readonly Cloudinary _cloudinary;
    
-        public UploadFileRepository(Cloudinary cloudinary)
+        public UploadFileService(Cloudinary cloudinary)
         {
             _cloudinary = cloudinary ?? throw new ArgumentNullException(nameof(cloudinary));
         }

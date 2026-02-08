@@ -2,12 +2,12 @@
 using Kpett.ChatApp.Receive;
 using Microsoft.AspNetCore.SignalR;
 
-namespace Kpett.ChatApp.Respository
+namespace Kpett.ChatApp.Services.Impls
 {
-    public class RealtimeRespository : IRealtimeService
+    public class RealtimeService : IRealtimeService
     {
         private readonly IHubContext<ChatHub> _hubContext;
-        public RealtimeRespository(IHubContext<ChatHub> hubContext)
+        public RealtimeService(IHubContext<ChatHub> hubContext)
         {
             _hubContext = hubContext;
         }

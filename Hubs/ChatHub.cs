@@ -1,7 +1,7 @@
 ﻿using Kpett.ChatApp.DTOs;
 using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.Helper;
-using Kpett.ChatApp.Services;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using StackExchange.Redis;
@@ -11,10 +11,10 @@ namespace Kpett.ChatApp.Hubs
     [Authorize]
     public class ChatHub : Hub
     {
-        private readonly Kpett.ChatApp.Services.IRedis _redis;
-        private readonly IMessage _messageService;
+        private readonly Services.Interfaces.IRedisService _redis;
+        private readonly IMessageService _messageService;
 
-        public ChatHub(Services.IRedis redis, IMessage messageService)
+        public ChatHub(Services.Interfaces.IRedisService redis, IMessageService messageService)
         {
             _redis = redis;
             _messageService = messageService;

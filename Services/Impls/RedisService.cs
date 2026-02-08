@@ -1,14 +1,13 @@
 ﻿using StackExchange.Redis;
-using Kpett.ChatApp.Services;
 using Microsoft.EntityFrameworkCore.Storage;
 
-namespace Kpett.ChatApp.Respository
+namespace Kpett.ChatApp.Services.Impls
 {
-    public class RedisRespository : Services.IRedis
+    public class RedisService : Interfaces.IRedisService
     {
         private readonly StackExchange.Redis.IDatabase _redis;
         private readonly IConnectionMultiplexer _multiplexer;
-        public RedisRespository(IConnectionMultiplexer multiplexer)
+        public RedisService(IConnectionMultiplexer multiplexer)
         {
             _multiplexer = multiplexer;
             _redis = multiplexer.GetDatabase();

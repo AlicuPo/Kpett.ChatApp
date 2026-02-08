@@ -2,15 +2,15 @@
 using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Services;
+using Kpett.ChatApp.Services.Interfaces;
 
-namespace Kpett.ChatApp.Respository
+namespace Kpett.ChatApp.Services.Impls
 {
-    public class UserRespository : IUsers
+    public class UserService : IUserService
     {
         private readonly AppDbContext _dbcontext;
         
-        public UserRespository(AppDbContext dbContext)
+        public UserService(AppDbContext dbContext)
         {
             _dbcontext = dbContext;
         }

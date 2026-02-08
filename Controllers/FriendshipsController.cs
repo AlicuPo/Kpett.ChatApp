@@ -1,7 +1,7 @@
 ﻿using Kpett.ChatApp.DTOs;
 using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.Helper;
-using Kpett.ChatApp.Services;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -13,9 +13,9 @@ namespace Kpett.ChatApp.Controllers
     [Authorize]
     public class FriendshipsController : ControllerBase
     {
-        private readonly IFriendshipsService _friendshipsServices;
+        private readonly IFriendshipService _friendshipsServices;
 
-        public FriendshipsController(IFriendshipsService friendshipsServices)
+        public FriendshipsController(IFriendshipService friendshipsServices)
         {
             _friendshipsServices = friendshipsServices;
         }

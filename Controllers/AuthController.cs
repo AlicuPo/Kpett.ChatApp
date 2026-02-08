@@ -1,7 +1,7 @@
 ﻿using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Services;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +10,7 @@ using StackExchange.Redis;
 using System.Net;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using IRedis = Kpett.ChatApp.Services.IRedis;
+using IRedisService = Kpett.ChatApp.Services.Interfaces.IRedisService;
 
 namespace Kpett.ChatApp.Controllers
 {
@@ -18,11 +18,11 @@ namespace Kpett.ChatApp.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly IToken _token;
-        private readonly IRedis _redis;
-        private readonly ILogin _loginRepository;
+        private readonly IJwtService _token;
+        private readonly IRedisService _redis;
+        private readonly IAuthService _loginRepository;
         private readonly AppDbContext _dbContext;
-        public AuthController(ILogin loginRepository, IRedis redis, IToken token, AppDbContext dbContext)
+        public AuthController(IAuthService loginRepository, IRedisService redis, IJwtService token, AppDbContext dbContext)
         {
             _loginRepository = loginRepository;
             _redis = redis;

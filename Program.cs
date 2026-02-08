@@ -3,11 +3,11 @@ using CloudinaryDotNet.Actions;
 using dotenv.net;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Hubs;
+using Kpett.ChatApp.Middlewares;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
-using Kpett.ChatApp.Reposoitory;
-using Kpett.ChatApp.Respository;
-using Kpett.ChatApp.Services;
+using Kpett.ChatApp.Services.Impls;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -99,7 +99,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnTokenValidated = async context =>
             {
-                var redis = context.HttpContext.RequestServices.GetRequiredService<Kpett.ChatApp.Services.IRedis>();
+                var redis = context.HttpContext.RequestServices.GetRequiredService<Kpett.ChatApp.Services.Interfaces.IRedisService>();
 
                 var jti = context.Principal!
                     .Claims.First(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
@@ -130,17 +130,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 // Application Services
-builder.Services.AddScoped<IToken, TokenRespository>();
-builder.Services.AddScoped<ILogin, LoginRespository>();
-builder.Services.AddScoped<Kpett.ChatApp.Services.IRedis, RedisRespository>();
+builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IRedisService, RedisService>();
 builder.Services.AddSingleton(cloudinary);
-builder.Services.AddScoped<Kpett.ChatApp.Services.ICloudinary, UploadFileRepository>();
-builder.Services.AddScoped<IMessage, MessageRespository>();
-builder.Services.AddScoped<IConversation, ConversationImpl>();
-builder.Services.AddScoped<IRealtimeService, RealtimeRespository>();
-builder.Services.AddScoped<INotificationService, NotificationRespository>();
-builder.Services.AddScoped<IUsers, UserRespository>();
-builder.Services.AddScoped<IFriendshipsService, FriendshipsServicesImpl>();
+builder.Services.AddScoped<ICloudinaryService, UploadFileService>();
+builder.Services.AddScoped<IMessageService, MessageService>();
+builder.Services.AddScoped<IConversationService, ConversationImpl>();
+builder.Services.AddScoped<IRealtimeService, RealtimeService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IFriendshipService, FriendshipServices>();
 builder.Services.AddScoped<IPostFeedService, PostFeedServiceImpl>();
 
 // Global Exception Handler (ĐĂNG KÝ Ở ĐÂY)

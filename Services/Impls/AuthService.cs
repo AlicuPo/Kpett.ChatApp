@@ -3,7 +3,7 @@ using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Services;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
 using System.Net;
@@ -11,17 +11,17 @@ using System.Security.Cryptography;
 using System.Text;
 using UUIDNext;
 
-namespace Kpett.ChatApp.Reposoitory
+namespace Kpett.ChatApp.Services.Impls
 {
-    public class LoginRespository : ILogin
+    public class AuthService : IAuthService
     {
 
         private readonly AppDbContext _dbcontext;
-        private readonly IToken _token;
-        private readonly Services.IRedis _redis;
-        private readonly ICloudinary _cloudinary;
+        private readonly IJwtService _token;
+        private readonly IRedisService _redis;
+        private readonly ICloudinaryService _cloudinary;
 
-        public LoginRespository(AppDbContext context, IToken token, Services.IRedis redis, ICloudinary cloudinary)
+        public AuthService(AppDbContext context, IJwtService token, Interfaces.IRedisService redis, ICloudinaryService cloudinary)
         {
             _dbcontext = context;
             _token = token;

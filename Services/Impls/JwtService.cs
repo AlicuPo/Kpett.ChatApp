@@ -1,22 +1,22 @@
 ﻿using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Services;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Services.Interfaces;
 
 
-namespace Kpett.ChatApp.Reposoitory
+namespace Kpett.ChatApp.Services.Impls
 {
-    public class TokenRespository : IToken
+    public class JwtService : IJwtService
     {
 
         private readonly AppDbContext _configuration;
         private readonly IHttpContextAccessor _contextAccessor;
         private readonly IConfiguration _config;
-        public TokenRespository(IHttpContextAccessor contextAccessor, AppDbContext configuration, IConfiguration config)
+        public JwtService(IHttpContextAccessor contextAccessor, AppDbContext configuration, IConfiguration config)
         {
             _contextAccessor = contextAccessor;
             _configuration = configuration;

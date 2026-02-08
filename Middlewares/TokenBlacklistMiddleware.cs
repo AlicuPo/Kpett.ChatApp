@@ -1,8 +1,8 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using Kpett.ChatApp.Services;
+using Kpett.ChatApp.Services.Interfaces;
 
-namespace Kpett.ChatApp.Helper
+namespace Kpett.ChatApp.Middlewares
 {
     /// <summary>
     /// Middleware to validate that access tokens have not been blacklisted.
@@ -19,7 +19,7 @@ namespace Kpett.ChatApp.Helper
             _logger = logger;
         }
 
-        public async Task InvokeAsync(HttpContext context, IRedis redis)
+        public async Task InvokeAsync(HttpContext context, IRedisService redis)
         {
             try
             {

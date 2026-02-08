@@ -8,7 +8,7 @@ using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
 using Microsoft.EntityFrameworkCore;
 
-namespace Kpett.ChatApp.Services
+namespace Kpett.ChatApp.Services.Interfaces
 {
     public interface IPostFeedService
     {

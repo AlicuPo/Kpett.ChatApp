@@ -4,14 +4,14 @@ using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Kpett.ChatApp.Services
+namespace Kpett.ChatApp.Services.Interfaces
 {
-    public interface IConversation
+    public interface IConversationService
     {
         //Task<List<ConversationResponse>> GetConversationList(SearchRequest search, CancellationToken cancel);
         Task<ConversationResponse> CreateConversaTion(ConversationKeysRequest request, CancellationToken cancel);
     }
-    public class ConversationImpl : IConversation
+    public class ConversationImpl : IConversationService
     {
         private readonly AppDbContext _dbContext;
         public ConversationImpl(AppDbContext dbContext)

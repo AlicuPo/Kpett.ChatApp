@@ -1,6 +1,6 @@
 ﻿using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.DTOs.Response;
-using Kpett.ChatApp.Services;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,10 +8,10 @@ namespace Kpett.ChatApp.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class ConversationController : ControllerBase
+    public class ConversationsController : ControllerBase
     {
-        private readonly IConversation _conversation;
-        public ConversationController(IConversation conversation)
+        private readonly IConversationService _conversation;
+        public ConversationsController(IConversationService conversation)
         {
             _conversation = conversation;
         }

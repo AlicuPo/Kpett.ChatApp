@@ -6,9 +6,9 @@ using Kpett.ChatApp.Services;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
 
-namespace Kpett.ChatApp.Respository
+namespace Kpett.ChatApp.Services.Impls
 {
-    public class ConversationRespository 
+    public class ConversationService 
     {
         //private readonly AppDbContext _dbcontext;
         //private readonly IToken _token;

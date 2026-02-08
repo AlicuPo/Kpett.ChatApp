@@ -2,9 +2,9 @@
 using Kpett.ChatApp.Models;
 using System.Security.Claims;
 
-namespace Kpett.ChatApp.Services
+namespace Kpett.ChatApp.Services.Interfaces
 {
-    public interface IToken
+    public interface IJwtService
     {
         UserClaims? GetUserClaims();
         string GenerateAccessToken(string userId, string UserName, string? email = null, string? displayName = null);

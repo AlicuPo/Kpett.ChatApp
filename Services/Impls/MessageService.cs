@@ -3,23 +3,23 @@ using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
-using Kpett.ChatApp.Services;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualBasic;
 using Newtonsoft.Json.Linq;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
-namespace Kpett.ChatApp.Respository
+namespace Kpett.ChatApp.Services.Impls
 {
-    public class MessageRespository : IMessage
+    public class MessageService : IMessageService
     {
         private readonly AppDbContext _dbcontext;
-        private readonly IToken _token;
-        private readonly Kpett.ChatApp.Receive.IRealtimeService _realtime;
+        private readonly IJwtService _token;
+        private readonly IRealtimeService _realtime;
         private readonly INotificationService _notificationService;
 
-        public MessageRespository(AppDbContext dbContext, IToken token, IRealtimeService realtime, INotificationService notification)
+        public MessageService(AppDbContext dbContext, IJwtService token, IRealtimeService realtime, INotificationService notification)
         {
             _dbcontext = dbContext;
             _token = token;
