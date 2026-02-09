@@ -148,24 +148,8 @@ namespace Kpett.ChatApp.Hubs
                 // Send message to database
                 await _messageService.SendMessageAsync(conversationId, userId, request, cancel);
 
-                // Create message DTO for broadcast
-                var messageDTO = new MessageDTO
-                {
-                    SenderId = userId,
-                    Content = request.Content,
-                    Type = request.Type ?? "text",
-                    Metadata = request.Metadata,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                // Broadcast to all users in the conversation
-                await Clients.Group(conversationId).SendAsync("ReceiveMessage", new
-                {
-                    conversationId,
-                    message = messageDTO,
-                    clientMessageId = request.ClientMessageId,
-                    timestamp = DateTime.UtcNow
-                });
+                // Create message DTO for broadcast but DO NOT broadcast here manually
+                // _messageService.SendMessageAsync already handles broadcasting via RealtimeService
 
                 // Send confirmation to sender
                 await Clients.Caller.SendAsync("MessageSent", new

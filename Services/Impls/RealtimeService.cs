@@ -11,8 +11,19 @@ namespace Kpett.ChatApp.Services.Impls
         {
             _hubContext = hubContext;
         }
-        public async Task PublishAsync(string channel, object data)
-        { // Gửi dữ liệu đến tất cả client đang join channel (conversation)
-          await _hubContext.Clients.Group(channel).SendAsync("ReceiveEvent", data); }
+        public async Task PublishToGroupAsync(string groupName, string method, object data)
+        {
+            await _hubContext.Clients.Group(groupName).SendAsync(method, data);
         }
+        public async Task PublishAsync(string topic, object data)
+        {
+            var parts = topic.Split(':');
+            if (parts.Length >= 2 && parts[0] == "user")
+            {
+                var userId = parts[1];
+                await _hubContext.Clients.User(userId).SendAsync("Notification", data);
+            }
+        }
+
+    }
 }

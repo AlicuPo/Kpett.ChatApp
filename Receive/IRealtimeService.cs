@@ -2,7 +2,8 @@
 {
     public interface IRealtimeService
     {
-        Task PublishAsync(string channel, object data);
+        Task PublishToGroupAsync(string groupName, string method, object data);
+        Task PublishAsync(string topic, object data);
     }
 
 }

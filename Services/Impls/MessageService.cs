@@ -28,18 +28,12 @@ namespace Kpett.ChatApp.Services.Impls
         }
         public async Task<MessagePageResult> GetMessagesAsync(string conversationId, string currentUserId, long? cursorMessageId, int pageSize, CancellationToken cancel)
         {
-            // Base query
-            var query = _dbcontext.Messages
-                .AsNoTracking()
-                .Where(x => x.ConversationId == conversationId);
+            var query = _dbcontext.Messages.AsNoTracking().Where(x => x.ConversationId == conversationId);
 
-            // Cursor pagination
             if (cursorMessageId.HasValue)
             {
                 query = query.Where(x => x.Id < cursorMessageId.Value);
             }
-
-            // Load messages + details
             var messages = await (
                 from m in query
                 join d in _dbcontext.MessageDetails
@@ -69,7 +63,6 @@ namespace Kpett.ChatApp.Services.Impls
                 HasMore = messages.Count == pageSize
             };
         }
-
 
         public async Task MarkAsRead(string id, [FromBody] ReadMessageRequest request, CancellationToken cancel)
         {
@@ -102,7 +95,7 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task SendMessageAsync(string conversationId, string senderId, SendMessageRequest request, CancellationToken cancel)
         {
-            // Validation
+            
             if (string.IsNullOrWhiteSpace(conversationId))
                 throw new AppException(StatusCodes.Status400BadRequest, "Conversation ID cannot be null or empty.");
 
@@ -112,7 +105,7 @@ namespace Kpett.ChatApp.Services.Impls
             if (string.IsNullOrWhiteSpace(request?.Content))
                 throw new AppException(StatusCodes.Status400BadRequest, "Message content cannot be empty.");
 
-            // Check if conversation exists
+
             var conversation = await _dbcontext.Conversations
                 .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.Id == conversationId, cancel);
@@ -120,7 +113,6 @@ namespace Kpett.ChatApp.Services.Impls
             if (conversation == null)
                 throw new AppException(StatusCodes.Status404NotFound, "Conversation not found.");
 
-            // Check if sender is a participant
             var isParticipant = await _dbcontext.ConversationParticipants
                 .AsNoTracking()
                 .AnyAsync(p => p.ConversationId == conversationId && p.UserId == senderId, cancel);
@@ -128,7 +120,6 @@ namespace Kpett.ChatApp.Services.Impls
             if (!isParticipant)
                 throw new AppException(StatusCodes.Status403Forbidden, "User is not a participant of this conversation.");
 
-            // Create message and message detail
             var message = new Message
             {
                 ConversationId = conversationId,
@@ -167,11 +158,11 @@ namespace Kpett.ChatApp.Services.Impls
             // Send real-time notification to all participants
             try
             {
-                await _realtime.PublishAsync(
-                    $"conversation:{conversationId}",
+                await _realtime.PublishToGroupAsync(
+                    conversationId,
+                    "ReceiveMessage",
                     new
                     {
-                        type = "NEW_MESSAGE",
                         conversationId = conversationId,
                         message = messageDTO,
                         timestamp = DateTime.UtcNow
@@ -179,18 +170,15 @@ namespace Kpett.ChatApp.Services.Impls
             }
             catch (Exception ex)
             {
-                // Log but don't fail the operation
                 Console.WriteLine($"Real-time notification failed: {ex.Message}");
             }
 
-            // Create notifications for other participants
             try
             {
                 await _notificationService.CreateMessageNotificationsAsync(conversationId, senderId, messageDTO);
             }
             catch (Exception ex)
             {
-                // Log but don't fail the operation
                 Console.WriteLine($"Notification creation failed: {ex.Message}");
             }
         }
