@@ -29,6 +29,23 @@ builder.Services.AddSwaggerGen();
 // azdot env load
 //builder.WebHost.UseUrls("http://+:8080");
 
+// Đăng ký CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("ClientCors", policy =>
+    {
+        policy
+            .WithOrigins(
+                "http://localhost:3000",
+                "http://localhost:5173"
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+            ;
+    });
+});
+
 
 // Controllers
 builder.Services.AddControllers();
@@ -99,7 +116,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnTokenValidated = async context =>
             {
-                var redis = context.HttpContext.RequestServices.GetRequiredService<Kpett.ChatApp.Services.Interfaces.IRedisService>();
+                var redis = context.HttpContext.RequestServices
+                    .GetRequiredService<Kpett.ChatApp.Services.Interfaces.IRedisService>();
 
                 var jti = context.Principal!
                     .Claims.First(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
@@ -167,6 +185,8 @@ app.UseHttpsRedirection();
 // Routing
 app.UseRouting();
 
+app.UseCors("ClientCors");
+
 // Auth
 app.UseAuthentication();
 app.UseAuthorization();
@@ -183,13 +203,10 @@ if (app.Environment.IsDevelopment())
 
 // Endpoints
 app.MapControllers();
-app.MapHub<ChatHub>("/chat-Hub");
+app.MapHub<ChatHub>("/chat-Hub").RequireCors("ClientCors");
 
 // Test exception
-app.MapGet("/", () =>
-{
-    throw new Exception("Test error");
-});
+app.MapGet("/", () => { throw new Exception("Test error"); });
 //app.MapGet("/health", () => "OK");
 
 
