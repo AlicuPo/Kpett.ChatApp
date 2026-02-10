@@ -5,7 +5,9 @@ namespace Kpett.ChatApp.Services.Interfaces
 {
     public interface IUserService
     {
-        //Task<(List<UserResponse>, int)> GetAllUser(UserRequest search, CancellationToken cancel = default);
+        Task<(List<UserResponse>, int)> GetAllUser(UserRequest search, CancellationToken cancel = default);
         Task<UserResponse> inforUser(UserRequest Request, CancellationToken cancel);
+        Task<UserResponse> UpdateUser(string id, UpdateUserRequest request, CancellationToken cancel);
+        Task<bool> DeleteUser(string id, CancellationToken cancel);
     }
 }

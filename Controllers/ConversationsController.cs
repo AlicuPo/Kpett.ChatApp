@@ -16,7 +16,7 @@ namespace Kpett.ChatApp.Controllers
             _conversation = conversation;
         }
         [HttpPost("CreateConversations")]
-        public async Task<IActionResult> GetConversations([FromQuery] ConversationKeysRequest request, CancellationToken cancel)
+        public async Task<IActionResult> CreateConversation([FromBody] ConversationKeysRequest request, CancellationToken cancel)
         {
             try
             {
@@ -37,5 +37,29 @@ namespace Kpett.ChatApp.Controllers
                 });
             }
         }
+
+        [HttpGet("GetConversationList")]
+        public async Task<IActionResult> GetConversationList([FromQuery] SearchRequest search, CancellationToken cancel)
+        {
+             try
+            {
+                var conversations = await _conversation.GetConversationList(search, cancel);
+                return Ok(new GeneralResponse<List<ConversationResponse>>
+                {
+                    Data = conversations,
+                    StatusCode = StatusCodes.Status200OK,
+                    Message = "Lấy danh sách cuộc trò chuyện thành công",
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new
+                {
+                    Message = ex.Message,
+                    ErorrCode = StatusCodes.Status400BadRequest
+                });
+            }
+        }
+
     }
 }
