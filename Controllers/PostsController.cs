@@ -1,4 +1,5 @@
-﻿using Kpett.ChatApp.DTOs;
+﻿using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.DTOs;
 using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.Helper;
@@ -30,46 +31,25 @@ namespace Kpett.ChatApp.Controllers
         [HttpPost("CreatePost")]
         public async Task<IActionResult> CreatePost([FromBody] PostMediaRequest postMedia, [FromQuery] string userId, CancellationToken cancel)
         {
-            try
+            if (string.IsNullOrEmpty(userId))
             {
-                if (string.IsNullOrEmpty(userId))
+                return BadRequest(new ErrorResponse
                 {
-                    return BadRequest(new GeneralResponse
-                    {
-                        Message = "User ID is required",
-                        ErorrCode = StatusCodes.Status400BadRequest,
-                        Return = false
-                    });
-                }
+                    Message = "User ID is required",
+                    ErrorCode  = ErrorCodes.VALIDATION.REQUIRED,
+                    IsSuccess = false
+                });
+            }
 
-                var result = await _postFeedService.CreatePostAsync(userId, postMedia, cancel);
+            var result = await _postFeedService.CreatePostAsync(userId, postMedia, cancel);
 
-                return Ok(new GeneralResponse<PostResponseDTO>
-                {
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "Post created successfully",
-                    Return = true,
-                    Data = result
-                });
-            }
-            catch (AppException appEx)
+            return Ok(new GeneralResponse<PostResponseDTO>
             {
-                return StatusCode(appEx.StatusCode, new GeneralResponse
-                {
-                    Message = appEx.Message,
-                    ErorrCode = appEx.StatusCode,
-                    Return = false
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    Message = $"An error occurred: {ex.Message}",
-                    ErorrCode = StatusCodes.Status500InternalServerError,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Post created successfully",
+                IsSuccess = true,
+                Data = result
+            });
         }
 
         /// <summary>
@@ -78,36 +58,15 @@ namespace Kpett.ChatApp.Controllers
         [HttpGet("GetPost/{postId}")]
         public async Task<IActionResult> GetPost(long postId, [FromQuery] string? userId, CancellationToken cancel)
         {
-            try
-            {
-                var result = await _postFeedService.GetPostAsync(postId, userId, cancel);
+            var result = await _postFeedService.GetPostAsync(postId, userId, cancel);
 
-                return Ok(new GeneralResponse<PostResponseDTO>
-                {
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "Post retrieved successfully",
-                    Return = true,
-                    Data = result
-                });
-            }
-            catch (AppException appEx)
+            return Ok(new GeneralResponse<PostResponseDTO>
             {
-                return StatusCode(appEx.StatusCode, new GeneralResponse
-                {
-                    Message = appEx.Message,
-                    ErorrCode = appEx.StatusCode,
-                    Return = false
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    Message = $"An error occurred: {ex.Message}",
-                    ErorrCode = StatusCodes.Status500InternalServerError,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Post retrieved successfully",
+                IsSuccess = true,
+                Data = result
+            });
         }
 
         /// <summary>
@@ -116,37 +75,16 @@ namespace Kpett.ChatApp.Controllers
         [HttpGet("GetUserFeed")]
         public async Task<IActionResult> GetUserFeed([FromQuery] string userId, [FromQuery] SearchRequest request, CancellationToken cancel = default)
         {
-            try
-            {
-                var result = await _postFeedService.GetUserFeedAsync(userId, request, cancel);
+            var result = await _postFeedService.GetUserFeedAsync(userId, request, cancel);
 
-                return Ok(new DataListResponse<UserFeedDTO>
-                {
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "User feed retrieved successfully",
-                    Return = true,
-                    Data = result,
-                    TotalCount = result.Count
-                });
-            }
-            catch (AppException appEx)
+            return Ok(new DataListResponse<UserFeedDTO>
             {
-                return StatusCode(appEx.StatusCode, new GeneralResponse
-                {
-                    Message = appEx.Message,
-                    ErorrCode = appEx.StatusCode,
-                    Return = false
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    Message = $"An error occurred: {ex.Message}",
-                    ErorrCode = StatusCodes.Status500InternalServerError,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status200OK,
+                Message = "User feed retrieved successfully",
+                IsSuccess = true,
+                Data = result,
+                TotalCount = result.Count
+            });
         }
 
         /// <summary>
@@ -155,37 +93,16 @@ namespace Kpett.ChatApp.Controllers
         [HttpGet("GetUserPosts")]
         public async Task<IActionResult> GetUserPosts([FromQuery] string userId, [FromQuery] SearchRequest request, CancellationToken cancel = default)
         {
-            try
-            {
-                var result = await _postFeedService.GetUserPostsAsync(userId, request, cancel);
+            var result = await _postFeedService.GetUserPostsAsync(userId, request, cancel);
 
-                return Ok(new DataListResponse<PostResponseDTO>
-                {
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "User posts retrieved successfully",
-                    Return = true,
-                    Data = result,
-                    TotalCount = result.Count
-                });
-            }
-            catch (AppException appEx)
+            return Ok(new DataListResponse<PostResponseDTO>
             {
-                return StatusCode(appEx.StatusCode, new GeneralResponse
-                {
-                    Message = appEx.Message,
-                    ErorrCode = appEx.StatusCode,
-                    Return = false
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    Message = $"An error occurred: {ex.Message}",
-                    ErorrCode = StatusCodes.Status500InternalServerError,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status200OK,
+                Message = "User posts retrieved successfully",
+                IsSuccess = true,
+                Data = result,
+                TotalCount = result.Count
+            });
         }
 
         /// <summary>
@@ -194,35 +111,14 @@ namespace Kpett.ChatApp.Controllers
         [HttpPut("UpdatePost/{postId}")]
         public async Task<IActionResult> UpdatePost(long postId, [FromBody] PostMediaRequest request, [FromQuery] string userId, CancellationToken cancel)
         {
-            try
-            {
-                await _postFeedService.UpdatePostAsync(postId, userId, request.Content, request.Privacy, cancel);
+            await _postFeedService.UpdatePostAsync(postId, userId, request.Content, request.Privacy, cancel);
 
-                return Ok(new GeneralResponse
-                {
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "Post updated successfully",
-                    Return = true
-                });
-            }
-            catch (AppException appEx)
+            return Ok(new GeneralResponse
             {
-                return StatusCode(appEx.StatusCode, new GeneralResponse
-                {
-                    Message = appEx.Message,
-                    ErorrCode = appEx.StatusCode,
-                    Return = false
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    Message = $"An error occurred: {ex.Message}",
-                    ErorrCode = StatusCodes.Status500InternalServerError,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Post updated successfully",
+                IsSuccess = true
+            });
         }
 
         /// <summary>
@@ -231,35 +127,14 @@ namespace Kpett.ChatApp.Controllers
         [HttpDelete("DeletePost/{postId}")]
         public async Task<IActionResult> DeletePost(long postId, [FromQuery] string userId, CancellationToken cancel)
         {
-            try
-            {
-                await _postFeedService.DeletePostAsync(postId, userId, cancel);
+            await _postFeedService.DeletePostAsync(postId, userId, cancel);
 
-                return Ok(new GeneralResponse
-                {
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "Post deleted successfully",
-                    Return = true
-                });
-            }
-            catch (AppException appEx)
+            return Ok(new GeneralResponse
             {
-                return StatusCode(appEx.StatusCode, new GeneralResponse
-                {
-                    Message = appEx.Message,
-                    ErorrCode = appEx.StatusCode,
-                    Return = false
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    Message = $"An error occurred: {ex.Message}",
-                    ErorrCode = StatusCodes.Status500InternalServerError,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Post deleted successfully",
+                IsSuccess = true
+            });
         }
 
         /// <summary>
@@ -268,36 +143,15 @@ namespace Kpett.ChatApp.Controllers
         [HttpPost("AddReaction")]
         public async Task<IActionResult> AddReaction([FromQuery] long postId, [FromQuery] string userId, [FromQuery] byte reactionType, CancellationToken cancel)
         {
-            try
-            {
-                var result = await _postFeedService.AddReactionAsync(postId, userId, reactionType, cancel);
+            var result = await _postFeedService.AddReactionAsync(postId, userId, reactionType, cancel);
 
-                return Ok(new GeneralResponse<PostReactionDTO>
-                {
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "Reaction added successfully",
-                    Return = true,
-                    Data = result
-                });
-            }
-            catch (AppException appEx)
+            return Ok(new GeneralResponse<PostReactionDTO>
             {
-                return StatusCode(appEx.StatusCode, new GeneralResponse
-                {
-                    Message = appEx.Message,
-                    ErorrCode = appEx.StatusCode,
-                    Return = false
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    Message = $"An error occurred: {ex.Message}",
-                    ErorrCode = StatusCodes.Status500InternalServerError,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Reaction added successfully",
+                IsSuccess = true,
+                Data = result
+            });
         }
 
         /// <summary>
@@ -306,35 +160,14 @@ namespace Kpett.ChatApp.Controllers
         [HttpDelete("RemoveReaction")]
         public async Task<IActionResult> RemoveReaction([FromQuery] long postId, [FromQuery] string userId, CancellationToken cancel)
         {
-            try
-            {
-                await _postFeedService.RemoveReactionAsync(postId, userId, cancel);
+            await _postFeedService.RemoveReactionAsync(postId, userId, cancel);
 
-                return Ok(new GeneralResponse
-                {
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "Reaction removed successfully",
-                    Return = true
-                });
-            }
-            catch (AppException appEx)
+            return Ok(new GeneralResponse
             {
-                return StatusCode(appEx.StatusCode, new GeneralResponse
-                {
-                    Message = appEx.Message,
-                    ErorrCode = appEx.StatusCode,
-                    Return = false
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    Message = $"An error occurred: {ex.Message}",
-                    ErorrCode = StatusCodes.Status500InternalServerError,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Reaction removed successfully",
+                IsSuccess = true
+            });
         }
 
         /// <summary>
@@ -343,37 +176,16 @@ namespace Kpett.ChatApp.Controllers
         [HttpGet("GetReactions/{postId}")]
         public async Task<IActionResult> GetReactions(long postId, CancellationToken cancel)
         {
-            try
-            {
-                var result = await _postFeedService.GetPostReactionsAsync(postId, cancel);
+            var result = await _postFeedService.GetPostReactionsAsync(postId, cancel);
 
-                return Ok(new DataListResponse<PostReactionDTO>
-                {
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "Post reactions retrieved successfully",
-                    Return = true,
-                    Data = result,
-                    TotalCount = result.Count
-                });
-            }
-            catch (AppException appEx)
+            return Ok(new DataListResponse<PostReactionDTO>
             {
-                return StatusCode(appEx.StatusCode, new GeneralResponse
-                {
-                    Message = appEx.Message,
-                    ErorrCode = appEx.StatusCode,
-                    Return = false
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    Message = $"An error occurred: {ex.Message}",
-                    ErorrCode = StatusCodes.Status500InternalServerError,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Post reactions retrieved successfully",
+                IsSuccess = true,
+                Data = result,
+                TotalCount = result.Count
+            });
         }
 
         /// <summary>
@@ -382,39 +194,18 @@ namespace Kpett.ChatApp.Controllers
         [HttpPost("AddComment")]
         public async Task<IActionResult> AddComment([FromQuery] long postId, [FromQuery] string userId, [FromBody] dynamic request, CancellationToken cancel)
         {
-            try
-            {
-                string content = request.content;
-                string? parentCommentId = request.parentCommentId;
+            string content = request.content;
+            string? parentCommentId = request.parentCommentId;
 
-                var result = await _postFeedService.AddCommentAsync(postId, userId, content, parentCommentId, cancel);
+            var result = await _postFeedService.AddCommentAsync(postId, userId, content, parentCommentId, cancel);
 
-                return Ok(new GeneralResponse<CommentDTO>
-                {
-                    StatusCode = StatusCodes.Status201Created,
-                    Message = "Comment added successfully",
-                    Return = true,
-                    Data = result
-                });
-            }
-            catch (AppException appEx)
+            return Ok(new GeneralResponse<CommentDTO>
             {
-                return StatusCode(appEx.StatusCode, new GeneralResponse
-                {
-                    Message = appEx.Message,
-                    ErorrCode = appEx.StatusCode,
-                    Return = false
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    Message = $"An error occurred: {ex.Message}",
-                    ErorrCode = StatusCodes.Status500InternalServerError,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status201Created,
+                Message = "Comment added successfully",
+                IsSuccess = true,
+                Data = result
+            });
         }
 
         /// <summary>
@@ -423,37 +214,16 @@ namespace Kpett.ChatApp.Controllers
         [HttpGet("GetComments/{postId}")]
         public async Task<IActionResult> GetComments(long postId, CancellationToken cancel)
         {
-            try
-            {
-                var result = await _postFeedService.GetCommentsAsync(postId, cancel);
+            var result = await _postFeedService.GetCommentsAsync(postId, cancel);
 
-                return Ok(new DataListResponse<CommentDTO>
-                {
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "Post comments retrieved successfully",
-                    Return = true,
-                    Data = result,
-                    TotalCount = result.Count
-                });
-            }
-            catch (AppException appEx)
+            return Ok(new DataListResponse<CommentDTO>
             {
-                return StatusCode(appEx.StatusCode, new GeneralResponse
-                {
-                    Message = appEx.Message,
-                    ErorrCode = appEx.StatusCode,
-                    Return = false
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    Message = $"An error occurred: {ex.Message}",
-                    ErorrCode = StatusCodes.Status500InternalServerError,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Post comments retrieved successfully",
+                IsSuccess = true,
+                Data = result,
+                TotalCount = result.Count
+            });
         }
 
         /// <summary>
@@ -462,36 +232,15 @@ namespace Kpett.ChatApp.Controllers
         [HttpPut("UpdateComment/{commentId}")]
         public async Task<IActionResult> UpdateComment(string commentId, [FromQuery] string userId, [FromBody] dynamic request, CancellationToken cancel)
         {
-            try
-            {
-                string content = request.content;
-                await _postFeedService.UpdateCommentAsync(commentId, userId, content, cancel);
+            string content = request.content;
+            await _postFeedService.UpdateCommentAsync(commentId, userId, content, cancel);
 
-                return Ok(new GeneralResponse
-                {
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "Comment updated successfully",
-                    Return = true
-                });
-            }
-            catch (AppException appEx)
+            return Ok(new GeneralResponse
             {
-                return StatusCode(appEx.StatusCode, new GeneralResponse
-                {
-                    Message = appEx.Message,
-                    ErorrCode = appEx.StatusCode,
-                    Return = false
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    Message = $"An error occurred: {ex.Message}",
-                    ErorrCode = StatusCodes.Status500InternalServerError,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Comment updated successfully",
+                IsSuccess = true
+            });
         }
 
         /// <summary>
@@ -500,35 +249,14 @@ namespace Kpett.ChatApp.Controllers
         [HttpDelete("DeleteComment/{commentId}")]
         public async Task<IActionResult> DeleteComment(string commentId, [FromQuery] string userId, CancellationToken cancel)
         {
-            try
-            {
-                await _postFeedService.DeleteCommentAsync(commentId, userId, cancel);
+            await _postFeedService.DeleteCommentAsync(commentId, userId, cancel);
 
-                return Ok(new GeneralResponse
-                {
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "Comment deleted successfully",
-                    Return = true
-                });
-            }
-            catch (AppException appEx)
+            return Ok(new GeneralResponse
             {
-                return StatusCode(appEx.StatusCode, new GeneralResponse
-                {
-                    Message = appEx.Message,
-                    ErorrCode = appEx.StatusCode,
-                    Return = false
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    Message = $"An error occurred: {ex.Message}",
-                    ErorrCode = StatusCodes.Status500InternalServerError,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Comment deleted successfully",
+                IsSuccess = true
+            });
         }
 
         /// <summary>
@@ -537,35 +265,23 @@ namespace Kpett.ChatApp.Controllers
         [HttpPost("PostFeed")]
         public async Task<IActionResult> PostFeed([FromBody] PostMediaRequest postMedia, CancellationToken cancel)
         {
-            try
+            if (string.IsNullOrEmpty(postMedia.CreatedByUserId))
             {
-                if (string.IsNullOrEmpty(postMedia.CreatedByUserId))
+                return BadRequest(new ErrorResponse
                 {
-                    return BadRequest(new GeneralResponse
-                    {
-                        Message = "User ID is required",
-                        ErorrCode = StatusCodes.Status400BadRequest,
-                        Return = false
-                    });
-                }
+                    Message = "User ID is required",
+                    ErrorCode = ErrorCodes.VALIDATION.REQUIRED,
+                    IsSuccess = false
+                });
+            }
 
-                await _postFeedService.PostFeed(postMedia, cancel);
-                return Ok(new GeneralResponse
-                {
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "Post created successfully",
-                    Return = true
-                });
-            }
-            catch (Exception ex)
+            await _postFeedService.PostFeed(postMedia, cancel);
+            return Ok(new GeneralResponse
             {
-                return BadRequest(new GeneralResponse
-                {
-                    Message = ex.Message,
-                    ErorrCode = StatusCodes.Status400BadRequest,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Post created successfully",
+                IsSuccess = true
+            });
         }
     }
 }

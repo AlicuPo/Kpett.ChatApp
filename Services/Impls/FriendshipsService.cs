@@ -1,5 +1,7 @@
-﻿using Kpett.ChatApp.DTOs;
+﻿using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.DTOs;
 using Kpett.ChatApp.Enums;
+using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
@@ -27,25 +29,25 @@ namespace Kpett.ChatApp.Services.Impls
         public async Task RequestFriendRequestAsync(string senderId, string receiverId, CancellationToken cancel)
         {
             // Validation
-            if (string.IsNullOrWhiteSpace(senderId))
-                throw new AppException(StatusCodes.Status400BadRequest, "Sender ID cannot be empty");
+            if (string.IsNullOrWhiteSpace(senderId)) 
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Sender ID cannot be empty");
 
             if (string.IsNullOrWhiteSpace(receiverId))
-                throw new AppException(StatusCodes.Status400BadRequest, "Receiver ID cannot be empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Receiver ID cannot be empty");
 
             if (senderId == receiverId)
-                throw new AppException(StatusCodes.Status400BadRequest, "Cannot send friend request to yourself");
+                throw new BadRequestException(ErrorCodes.FRIEND.SELF_REFERENCE,"You cannot send a friend request to yourself.");
 
             cancel.ThrowIfCancellationRequested();
 
             // Check if users exist
             var senderExists = await _dbcontext.Users.AnyAsync(_ => _.Id == senderId, cancel);
             if (!senderExists)
-                throw new AppException(StatusCodes.Status404NotFound, "Sender user not found");
+                throw new NotFoundException(ErrorCodes.FRIEND.SENDER_NOT_FOUND, "Sender user not found");
 
             var receiverExists = await _dbcontext.Users.AnyAsync(_ => _.Id == receiverId, cancel);
             if (!receiverExists)
-                throw new AppException(StatusCodes.Status404NotFound, "Receiver user not found");
+                throw new NotFoundException(ErrorCodes.FRIEND.RECEIVER_NOT_FOUND, "Receiver user not found");
 
             // Check if either user is blocked
             var isBlocked = await _dbcontext.Blocks.AnyAsync(_ =>
@@ -54,7 +56,7 @@ namespace Kpett.ChatApp.Services.Impls
                 cancel);
 
             if (isBlocked)
-                throw new AppException(StatusCodes.Status403Forbidden, "Cannot send friend request due to block");
+                throw new ForbiddenException(ErrorCodes.FRIEND.BLOCKED_RELATIONSHIP, "Cannot send friend request due to block");
 
             // Check if already friends
             var lowId = string.CompareOrdinal(senderId, receiverId) < 0 ? senderId : receiverId;
@@ -67,7 +69,7 @@ namespace Kpett.ChatApp.Services.Impls
                 cancel);
 
             if (existingFriendship != null)
-                throw new AppException(StatusCodes.Status409Conflict, "Already friends with this user");
+                throw new BadRequestException(ErrorCodes.FRIEND.ALREADY_FRIENDS, "Already friends with this user");
 
             // Check for existing pending request (in both directions)
             var existingRequest = await _dbcontext.FriendRequests.FirstOrDefaultAsync(_ =>
@@ -77,7 +79,7 @@ namespace Kpett.ChatApp.Services.Impls
                 cancel);
 
             if (existingRequest != null)
-                throw new AppException(StatusCodes.Status409Conflict, "A friend request already exists between these users");
+                throw new ConflictException(ErrorCodes.FRIEND.FRIEND_REQUEST_PENDING, "A friend request already exists between these users");
 
             // Create new friend request
             var friendRequest = new FriendRequest
@@ -138,7 +140,7 @@ namespace Kpett.ChatApp.Services.Impls
         {
             // Validation
             if (string.IsNullOrWhiteSpace(senderId) || string.IsNullOrWhiteSpace(receiverId))
-                throw new AppException(StatusCodes.Status400BadRequest, "Sender ID and Receiver ID cannot be empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Sender ID and Receiver ID cannot be empty");
 
             cancel.ThrowIfCancellationRequested();
 
@@ -154,7 +156,7 @@ namespace Kpett.ChatApp.Services.Impls
                     cancel);
 
                 if (friendRequest == null)
-                    throw new AppException(StatusCodes.Status404NotFound, "Friend request not found or already processed");
+                    throw new NotFoundException(ErrorCodes.FRIEND.REQUEST_NOT_FOUND_OR_PROCESSED, "Friend request not found or already processed");
 
                 // Create friendship
                 var lowId = string.CompareOrdinal(senderId, receiverId) < 0 ? senderId : receiverId;
@@ -238,7 +240,7 @@ namespace Kpett.ChatApp.Services.Impls
         public async Task RejectFriendRequestAsync(string senderId, string receiverId, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(senderId) || string.IsNullOrWhiteSpace(receiverId))
-                throw new AppException(StatusCodes.Status400BadRequest, "Sender ID and Receiver ID cannot be empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Sender ID and Receiver ID cannot be empty");
 
             cancel.ThrowIfCancellationRequested();
 
@@ -249,7 +251,7 @@ namespace Kpett.ChatApp.Services.Impls
                 cancel);
 
             if (friendRequest == null)
-                throw new AppException(StatusCodes.Status404NotFound, "Friend request not found");
+                throw new NotFoundException(ErrorCodes.FRIEND.FRIEND_REQUEST_NOT_FOUND, "Friend request not found");
 
             // Update status to rejected
             friendRequest.Status = EnumHelper.GetDescription(FriendshipsEnums.Rejected);
@@ -280,7 +282,7 @@ namespace Kpett.ChatApp.Services.Impls
         public async Task CancelFriendRequestAsync(string senderId, string receiverId, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(senderId) || string.IsNullOrWhiteSpace(receiverId))
-                throw new AppException(StatusCodes.Status400BadRequest, "Sender ID and Receiver ID cannot be empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Sender ID and Receiver ID cannot be empty");
 
             cancel.ThrowIfCancellationRequested();
 
@@ -291,7 +293,7 @@ namespace Kpett.ChatApp.Services.Impls
                 cancel);
 
             if (friendRequest == null)
-                throw new AppException(StatusCodes.Status404NotFound, "Friend request not found");
+                throw new NotFoundException(ErrorCodes.FRIEND.FRIEND_REQUEST_NOT_FOUND, "Friend request not found");
 
             // Update status to cancelled
             friendRequest.Status = EnumHelper.GetDescription(FriendshipsEnums.Cancelled);
@@ -322,7 +324,7 @@ namespace Kpett.ChatApp.Services.Impls
         public async Task<List<FriendRequestDTO>> GetPendingFriendRequestsAsync(string userId, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(userId))
-                throw new AppException(StatusCodes.Status400BadRequest, "User ID cannot be empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
 
             cancel.ThrowIfCancellationRequested();
 

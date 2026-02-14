@@ -22,28 +22,14 @@ namespace Kpett.ChatApp.Controllers
         [HttpPost("Notification")]
         public async Task<IActionResult> CreateMessageNotifications([FromQuery] string conversationId, [FromQuery] string senderId, [FromBody] MessageDTO dto)
         {
-            try
+            await _notification.CreateMessageNotificationsAsync(conversationId, senderId, dto);
+            return Ok(new GeneralResponse
             {
-                await _notification.CreateMessageNotificationsAsync(conversationId, senderId, dto);
-                return Ok(new GeneralResponse
-                {
-                    
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "Notifications created successfully",
-                    Return = true
 
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new GeneralResponse
-                {
-                    Message = ex.Message,
-                    ErorrCode = StatusCodes.Status400BadRequest,
-                    Return = false
-                });
-            }
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Notifications created successfully",
+                IsSuccess = true
+            });
         }
     }
 }

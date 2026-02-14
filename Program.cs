@@ -159,7 +159,7 @@ builder.Services.AddScoped<IRealtimeService, RealtimeService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IFriendshipService, FriendshipServices>();
-builder.Services.AddScoped<IPostFeedService, PostFeedServiceImpl>();
+builder.Services.AddScoped<IPostFeedService, PostFeedService>();
 
 // Global Exception Handler (ĐĂNG KÝ Ở ĐÂY)
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();

@@ -1,12 +1,15 @@
 ﻿using Azure.Core;
 using CloudinaryDotNet;
+using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs;
 using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.Enums;
+using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 
 namespace Kpett.ChatApp.Services.Interfaces
 {
@@ -33,13 +36,13 @@ namespace Kpett.ChatApp.Services.Interfaces
         Task DeleteCommentAsync(string commentId, string userId, CancellationToken cancel);
     }
 
-    public class PostFeedServiceImpl : IPostFeedService
+    public class PostFeedService : IPostFeedService
     {
         private readonly AppDbContext _dbContext;
         private readonly IRealtimeService _realtimeService;
         private readonly INotificationService _notificationService;
 
-        public PostFeedServiceImpl(AppDbContext dbContext, IRealtimeService realtimeService, INotificationService notificationService)
+        public PostFeedService(AppDbContext dbContext, IRealtimeService realtimeService, INotificationService notificationService)
         {
             _dbContext = dbContext;
             _realtimeService = realtimeService;
@@ -52,20 +55,20 @@ namespace Kpett.ChatApp.Services.Interfaces
         public async Task<PostResponseDTO> CreatePostAsync(string userId, PostMediaRequest postRequest, CancellationToken cancel)
         {
             if (postRequest == null)
-                throw new AppException(StatusCodes.Status400BadRequest, "Post request cannot be null");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Post request cannot be null");
 
             if (string.IsNullOrWhiteSpace(userId))
-                throw new AppException(StatusCodes.Status400BadRequest, "User ID cannot be empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
 
             if (string.IsNullOrWhiteSpace(postRequest.Content))
-                throw new AppException(StatusCodes.Status400BadRequest, "Post content cannot be empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Post content cannot be empty");
 
             cancel.ThrowIfCancellationRequested();
 
             // Check if user exists
             var userExists = await _dbContext.Users.AnyAsync(u => u.Id == userId, cancel);
             if (!userExists)
-                throw new AppException(StatusCodes.Status404NotFound, "User not found");
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
 
             // Create post
             var newPost = new Post
@@ -153,7 +156,7 @@ namespace Kpett.ChatApp.Services.Interfaces
                 .FirstOrDefaultAsync(cancel);
 
             if (post == null)
-                throw new AppException(StatusCodes.Status404NotFound, "Post not found");
+                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
             // Get media
             var media = await _dbContext.PostMedia
@@ -215,7 +218,7 @@ namespace Kpett.ChatApp.Services.Interfaces
         public async Task<List<UserFeedDTO>> GetUserFeedAsync(string userId, SearchRequest request, CancellationToken cancel = default)
         {
             if (string.IsNullOrWhiteSpace(userId))
-                throw new AppException(StatusCodes.Status400BadRequest, "User ID cannot be empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
 
           
 
@@ -265,7 +268,7 @@ namespace Kpett.ChatApp.Services.Interfaces
         public async Task<List<PostResponseDTO>> GetUserPostsAsync(string userId, SearchRequest request, CancellationToken cancel = default)
         {
             if (string.IsNullOrWhiteSpace(userId))
-                throw new AppException(StatusCodes.Status400BadRequest, "User ID cannot be empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
 
             cancel.ThrowIfCancellationRequested();
 
@@ -297,17 +300,17 @@ namespace Kpett.ChatApp.Services.Interfaces
         public async Task UpdatePostAsync(long postId, string userId, string content, string privacy, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(content))
-                throw new AppException(StatusCodes.Status400BadRequest, "Content cannot be empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Content cannot be empty");
 
             cancel.ThrowIfCancellationRequested();
 
             var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
 
             if (post == null)
-                throw new AppException(StatusCodes.Status404NotFound, "Post not found");
+                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
             if (post.CreatedByUserId != userId)
-                throw new AppException(StatusCodes.Status403Forbidden, "Not authorized to update this post");
+                throw new ForbiddenException(ErrorCodes.POST.USER_NOT_AUTHORIZED, "Not authorized to update this post");
 
             post.Content = content;
             post.Privacy = privacy ?? "Public";
@@ -327,10 +330,10 @@ namespace Kpett.ChatApp.Services.Interfaces
             var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
 
             if (post == null)
-                throw new AppException(StatusCodes.Status404NotFound, "Post not found");
+                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
             if (post.CreatedByUserId != userId)
-                throw new AppException(StatusCodes.Status403Forbidden, "Not authorized to delete this post");
+                throw new ForbiddenException(ErrorCodes.POST.USER_NOT_AUTHORIZED , "Not authorized to delete this post");
 
             post.IsDeleted = true;
             post.UpdatedAt = DateTime.UtcNow;
@@ -348,7 +351,7 @@ namespace Kpett.ChatApp.Services.Interfaces
 
             var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
             if (post == null)
-                throw new AppException(StatusCodes.Status404NotFound, "Post not found");
+                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
             // Check if already reacted
             var existingReaction = await _dbContext.PostReactions
@@ -458,13 +461,13 @@ namespace Kpett.ChatApp.Services.Interfaces
         public async Task<CommentDTO> AddCommentAsync(long postId, string userId, string content, string? parentCommentId, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(content))
-                throw new AppException(StatusCodes.Status400BadRequest, "Comment content cannot be empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Comment content cannot be empty");
 
             cancel.ThrowIfCancellationRequested();
 
             var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
             if (post == null)
-                throw new AppException(StatusCodes.Status404NotFound, "Post not found");
+                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
             // Validate parent comment if provided
             if (!string.IsNullOrEmpty(parentCommentId))
@@ -473,7 +476,7 @@ namespace Kpett.ChatApp.Services.Interfaces
                     .FirstOrDefaultAsync(c => c.Id == parentCommentId && c.PostId == postId, cancel);
 
                 if (parentComment == null)
-                    throw new AppException(StatusCodes.Status404NotFound, "Parent comment not found");
+                    throw new NotFoundException(ErrorCodes.POST.PARENT_POST_NOT_FOUND, "Parent comment not found");
             }
 
             var comment = new Comment
@@ -597,17 +600,17 @@ namespace Kpett.ChatApp.Services.Interfaces
         public async Task UpdateCommentAsync(string commentId, string userId, string content, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(content))
-                throw new AppException(StatusCodes.Status400BadRequest, "Comment content cannot be empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Comment content cannot be empty");
 
             cancel.ThrowIfCancellationRequested();
 
             var comment = await _dbContext.Comments.FirstOrDefaultAsync(c => c.Id == commentId, cancel);
 
             if (comment == null)
-                throw new AppException(StatusCodes.Status404NotFound, "Comment not found");
+                throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");
 
             if (comment.UserId != userId)
-                throw new AppException(StatusCodes.Status403Forbidden, "Not authorized to update this comment");
+                throw new ForbiddenException(ErrorCodes.COMMENT.USER_NOT_AUTHORIZED, "Not authorized to update this comment");
 
             comment.Content = content;
             comment.UpdatedAt = DateTime.UtcNow;
@@ -626,10 +629,10 @@ namespace Kpett.ChatApp.Services.Interfaces
             var comment = await _dbContext.Comments.FirstOrDefaultAsync(c => c.Id == commentId, cancel);
 
             if (comment == null)
-                throw new AppException(StatusCodes.Status404NotFound, "Comment not found");
+                throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");
 
             if (comment.UserId != userId)
-                throw new AppException(StatusCodes.Status403Forbidden, "Not authorized to delete this comment");
+                throw new ForbiddenException(ErrorCodes.COMMENT.USER_NOT_AUTHORIZED, "Not authorized to delete this comment");
 
             comment.DeletedAt = DateTime.UtcNow;
 
@@ -641,10 +644,10 @@ namespace Kpett.ChatApp.Services.Interfaces
         public async Task PostFeed(PostMediaRequest postRequest, CancellationToken cancel)
         {
             if (postRequest == null)
-                throw new AppException(StatusCodes.Status400BadRequest, "Post request cannot be null");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Post request cannot be null");
 
             if (string.IsNullOrWhiteSpace(postRequest.CreatedByUserId))
-                throw new AppException(StatusCodes.Status400BadRequest, "User ID cannot be empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
 
             await CreatePostAsync(postRequest.CreatedByUserId, postRequest, cancel);
         }

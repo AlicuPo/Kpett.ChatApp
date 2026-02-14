@@ -23,9 +23,6 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<ConversationResponse> CreateConversaTion(ConversationKeysRequest request, CancellationToken cancel)
         {
-            if (request == null)
-                throw new AppException(StatusCodes.Status400BadRequest, "Request cannot be null");
-
             string _id = Guid.NewGuid().ToString();
             var newconversation = new Conversation
             {

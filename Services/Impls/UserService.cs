@@ -1,5 +1,7 @@
-﻿using Kpett.ChatApp.DTOs.Request;
+﻿using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.DTOs.Response;
+using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
@@ -20,13 +22,13 @@ namespace Kpett.ChatApp.Services.Impls
         {
             if (Request.Id == null)
             {
-                throw new AppException(StatusCodes.Status400BadRequest, "Id cannot be null");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Id cannot be null");
             }
 
             var user = await _dbcontext.Users.FindAsync(Request.Id, cancel);
             if (user == null)
             {
-                throw new AppException(StatusCodes.Status400BadRequest, "User not found");
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
             return new UserResponse
@@ -82,7 +84,7 @@ namespace Kpett.ChatApp.Services.Impls
             var user = await _dbcontext.Users.FindAsync(new object[] { id }, cancel);
             if (user == null)
             {
-                throw new AppException(StatusCodes.Status404NotFound, "User not found");
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
             if (!string.IsNullOrEmpty(request.DisplayName)) user.DisplayName = request.DisplayName;
@@ -110,7 +112,7 @@ namespace Kpett.ChatApp.Services.Impls
             var user = await _dbcontext.Users.FindAsync(new object[] { id }, cancel);
             if (user == null)
             {
-                throw new AppException(StatusCodes.Status404NotFound, "User not found");
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
             user.IsActive = false;

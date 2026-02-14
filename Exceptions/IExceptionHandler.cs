@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Diagnostics;
+﻿using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.DTOs.Response;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
 
@@ -20,32 +22,31 @@ namespace Kpett.ChatApp.Helper
             Exception exception,
             CancellationToken cancellationToken)
         {
-            _logger.LogError(exception, "An unhandled exception occurred: {Message}", exception.Message);
+            _logger.LogError(exception, "Exception occurred: {Message}", exception.Message);
 
-            // 1. Phân loại mã lỗi
-            var (statusCode, title) = exception switch
-            {
-                AppException appEx => (appEx.StatusCode, "Application Error"), 
-                UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "Unauthorized"),
-                KeyNotFoundException => (StatusCodes.Status404NotFound, "Not Found"),
-                _ => (StatusCodes.Status500InternalServerError, "Server Error")
-            };
+            var statusCode = (int)HttpStatusCode.InternalServerError;
+            var errorCode = ErrorCodes.SERVER.SYSTEM_ERROR;
+            var message = "An unexpected error occurred. Please try again later.";
 
-            // 2. Tạo cấu trúc trả về chuẩn RFC 7807 (Problem Details)
-            var problemDetails = new ProblemDetails 
+            if (exception is AppException appEx)
             {
-                Status = statusCode,
-                Title = title,
-                Detail = _env.IsDevelopment() ? exception.Message : "An unexpected error occurred.",
-                Instance = httpContext.Request.Path
+                statusCode = appEx.StatusCode;
+                errorCode = appEx.ErrorCode;
+                message = appEx.Message;
+            }
+
+            var response = new ErrorResponse() {
+                ErrorCode = errorCode,
+                StatusCode = statusCode,
+                Message = message,
+                StackTrace = _env.IsDevelopment() ? exception.StackTrace : null
             };
 
             httpContext.Response.StatusCode = statusCode;
+            httpContext.Response.ContentType = "application/json";
 
-            // 3. Trả về kết quả JSON
-            await httpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken);
+            await httpContext.Response.WriteAsJsonAsync(response, cancellationToken);
 
-            // Trả về true để báo hiệu lỗi đã được xử lý xong
             return true;
         }
     }

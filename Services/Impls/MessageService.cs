@@ -1,5 +1,7 @@
-﻿using Kpett.ChatApp.DTOs;
+﻿using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.DTOs;
 using Kpett.ChatApp.DTOs.Request;
+using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
@@ -74,7 +76,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             if (participant == null)
             {
-                throw new AppException(StatusCodes.Status404NotFound, "User is not a participant of this conversation.");
+                throw new ConflictException(ErrorCodes.CONVERSATION.USER_NOT_IN_CONVERSATION, "User is not a participant of this conversation.");
             }
 
             if (request.LastReadMessageId > (participant.LastReadMessageId ?? 0))
@@ -84,7 +86,7 @@ namespace Kpett.ChatApp.Services.Impls
 
                 if (!messageExists)
                 {
-                    throw new AppException(StatusCodes.Status400BadRequest, "Invalid Message ID for this conversation.");
+                    throw new ConflictException(ErrorCodes.CONVERSATION.INVALID_MESSAGE, "Invalid Message ID for this conversation.");
                 }
                 participant.LastReadMessageId = request.LastReadMessageId;
 
@@ -97,13 +99,13 @@ namespace Kpett.ChatApp.Services.Impls
         {
             
             if (string.IsNullOrWhiteSpace(conversationId))
-                throw new AppException(StatusCodes.Status400BadRequest, "Conversation ID cannot be null or empty.");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Conversation ID cannot be null or empty.");
 
             if (string.IsNullOrWhiteSpace(senderId))
-                throw new AppException(StatusCodes.Status400BadRequest, "Sender ID cannot be null or empty.");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Sender ID cannot be null or empty.");
 
             if (string.IsNullOrWhiteSpace(request?.Content))
-                throw new AppException(StatusCodes.Status400BadRequest, "Message content cannot be empty.");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Message content cannot be empty.");
 
 
             var conversation = await _dbcontext.Conversations
@@ -111,14 +113,14 @@ namespace Kpett.ChatApp.Services.Impls
                 .FirstOrDefaultAsync(c => c.Id == conversationId, cancel);
 
             if (conversation == null)
-                throw new AppException(StatusCodes.Status404NotFound, "Conversation not found.");
+                throw new NotFoundException(ErrorCodes.CONVERSATION.NOT_FOUND, "Conversation not found.");
 
             var isParticipant = await _dbcontext.ConversationParticipants
                 .AsNoTracking()
                 .AnyAsync(p => p.ConversationId == conversationId && p.UserId == senderId, cancel);
 
             if (!isParticipant)
-                throw new AppException(StatusCodes.Status403Forbidden, "User is not a participant of this conversation.");
+                throw new ConflictException(ErrorCodes.CONVERSATION.USER_NOT_IN_CONVERSATION, "User is not a participant of this conversation.");
 
             var message = new Message
             {

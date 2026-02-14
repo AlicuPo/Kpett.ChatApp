@@ -1,4 +1,6 @@
-﻿using Kpett.ChatApp.DTOs;
+﻿using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.DTOs;
+using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
@@ -18,11 +20,11 @@ namespace Kpett.ChatApp.Services.Impls
         {
             if (string.IsNullOrEmpty(conversationId))
             {
-                throw new AppException(StatusCodes.Status400BadRequest,"conversationId not null or empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED,"conversationId not null or empty");
             }
             if (string.IsNullOrEmpty(senderId))
             {
-                throw new AppException(StatusCodes.Status400BadRequest,"senderId not null or empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "senderId not null or empty");
             }
             return Task.Run(async () =>
             {
