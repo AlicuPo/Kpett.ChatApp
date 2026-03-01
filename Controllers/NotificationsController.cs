@@ -1,0 +1,35 @@
+﻿using Kpett.ChatApp.DTOs;
+using Kpett.ChatApp.DTOs.Response;
+using Kpett.ChatApp.Models;
+using Kpett.ChatApp.Receive;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Kpett.ChatApp.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class NotificationsController : ControllerBase
+    {
+        private readonly AppDbContext _dbContext;
+        private readonly INotificationService _notification;
+        public NotificationsController(INotificationService notification , AppDbContext dbContext)
+        {
+            _dbContext = dbContext;
+            _notification = notification;
+        }
+
+        [HttpPost("Notification")]
+        public async Task<IActionResult> CreateMessageNotifications([FromQuery] string conversationId, [FromQuery] string senderId, [FromBody] MessageDTO dto)
+        {
+            await _notification.CreateMessageNotificationsAsync(conversationId, senderId, dto);
+            return Ok(new GeneralResponse
+            {
+
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Notifications created successfully",
+                IsSuccess = true
+            });
+        }
+    }
+}

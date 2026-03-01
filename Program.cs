@@ -3,11 +3,11 @@ using CloudinaryDotNet.Actions;
 using dotenv.net;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Hubs;
+using Kpett.ChatApp.Middlewares;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
-using Kpett.ChatApp.Reposoitory;
-using Kpett.ChatApp.Respository;
-using Kpett.ChatApp.Services;
+using Kpett.ChatApp.Services.Impls;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -26,6 +26,27 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// azdot env load
+//builder.WebHost.UseUrls("http://+:8080");
+
+// Đăng ký CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("ClientCors", policy =>
+    {
+        policy
+            .WithOrigins(
+                "http://localhost:3000",
+                "http://localhost:5173"
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+            ;
+    });
+});
+
+
 // Controllers
 builder.Services.AddControllers();
 
@@ -40,13 +61,14 @@ builder.Services.AddSignalR();
 
 // Database
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("MyDb")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("KpettChatAppDb")));
 // Redis
 var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
 if (string.IsNullOrEmpty(redisConnectionString))
 {
     throw new InvalidOperationException("Redis connection string is not configured.");
 }
+
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 {
     var configuration = ConfigurationOptions.Parse(redisConnectionString);
@@ -89,12 +111,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.Zero
         };
 
-       
+
         options.Events = new JwtBearerEvents
         {
             OnTokenValidated = async context =>
             {
-                var redis = context.HttpContext.RequestServices.GetRequiredService<Kpett.ChatApp.Services.IRedis>();
+                var redis = context.HttpContext.RequestServices
+                    .GetRequiredService<Kpett.ChatApp.Services.Interfaces.IRedisService>();
 
                 var jti = context.Principal!
                     .Claims.First(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
@@ -125,16 +148,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 // Application Services
-builder.Services.AddScoped<IToken, TokenRespository>();
-builder.Services.AddScoped<ILogin, LoginRespository>();
-builder.Services.AddScoped<Kpett.ChatApp.Services.IRedis, RedisRespository>();
+builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IRedisService, RedisService>();
 builder.Services.AddSingleton(cloudinary);
-builder.Services.AddScoped<Kpett.ChatApp.Services.ICloudinary, UploadFileRepository>();
-builder.Services.AddScoped<IMessage,MessageRespository>();
-builder.Services.AddScoped<IConversation, ConversationRespository>();
-builder.Services.AddScoped<IRealtimeService, RealtimeRespository>();
-builder.Services.AddScoped<INotificationService, NotificationRespository>();
-builder.Services.AddScoped<IUsers,User>
+builder.Services.AddScoped<ICloudinaryService, UploadFileService>();
+builder.Services.AddScoped<IMessageService, MessageService>();
+builder.Services.AddScoped<IConversationService, ConversationService>();
+builder.Services.AddScoped<IRealtimeService, RealtimeService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IFriendshipService, FriendshipServices>();
+builder.Services.AddScoped<IPostFeedService, PostFeedService>();
 
 // Global Exception Handler (ĐĂNG KÝ Ở ĐÂY)
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -160,9 +185,14 @@ app.UseHttpsRedirection();
 // Routing
 app.UseRouting();
 
+app.UseCors("ClientCors");
+
 // Auth
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Token blacklist validation (after auth, before endpoints)
+app.UseTokenBlacklistMiddleware();
 
 // OpenAPI (DEV only)
 if (app.Environment.IsDevelopment())
@@ -173,12 +203,11 @@ if (app.Environment.IsDevelopment())
 
 // Endpoints
 app.MapControllers();
-app.MapHub<ChatHub>("/chat-Hub");
+app.MapHub<ChatHub>("/chat-Hub").RequireCors("ClientCors");
 
 // Test exception
-app.MapGet("/", () =>
-{
-    throw new Exception("Test error");
-});
+//app.MapGet("/", () => { throw new Exception("Test error"); });
+//app.MapGet("/health", () => "OK");
+
 
 app.Run();

@@ -1,6 +1,6 @@
 ﻿namespace Kpett.ChatApp.DTOs
 {
-    public class MesSageDTO
+    public class MessageDTO
     {
         public long? Id { get; set; }
         public string? Content { get; set; }
@@ -17,7 +17,7 @@
     }
     public class MessagePageResult
     {
-        public List<MesSageDTO>? Messages { get; set; }
+        public List<MessageDTO>? Messages { get; set; }
          public long? OldestMessageId { get; set; }
         public bool? HasMore { get; set; }
     }
