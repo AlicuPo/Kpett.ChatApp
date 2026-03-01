@@ -206,7 +206,7 @@ app.MapControllers();
 app.MapHub<ChatHub>("/chat-Hub").RequireCors("ClientCors");
 
 // Test exception
-app.MapGet("/", () => { throw new Exception("Test error"); });
+//app.MapGet("/", () => { throw new Exception("Test error"); });
 //app.MapGet("/health", () => "OK");
 
 
