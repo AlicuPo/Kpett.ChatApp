@@ -1,8 +1,7 @@
-﻿using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.Exceptions;
-using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -25,7 +24,7 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Id cannot be null");
             }
 
-            var user = await _dbcontext.Users.FindAsync(Request.Id, cancel);
+            var user = await _dbcontext.Users.FindAsync(new object[] { Request.Id }, cancel);
             if (user == null)
             {
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
@@ -40,8 +39,6 @@ namespace Kpett.ChatApp.Services.Impls
                 AvatarUrl = user.AvatarUrl,
                 CreatedAt = user.CreatedAt
             };
-
-
         }
 
         public async Task<(List<UserResponse>, int)> GetAllUser(UserRequest search, CancellationToken cancel = default)
@@ -50,13 +47,10 @@ namespace Kpett.ChatApp.Services.Impls
 
             if (!string.IsNullOrEmpty(search.Search))
             {
-                query = query.Where(u => u.Name.Contains(search.Search) || u.DisplayName.Contains(search.Search) || u.Email.Contains(search.Search));
-            }
-
-            if (search.Status.HasValue)
-            {
-                // Implement status filter if needed, currently User model has string Status but request has int Status. 
-                // Assuming logic for status mapping or ignoring if not applicable directly.
+                query = query.Where(u =>
+                    u.Name.Contains(search.Search) ||
+                    (u.DisplayName != null && u.DisplayName.Contains(search.Search)) ||
+                    (u.Email != null && u.Email.Contains(search.Search)));
             }
 
             var totalCount = await query.CountAsync(cancel);
@@ -72,15 +66,19 @@ namespace Kpett.ChatApp.Services.Impls
                     DisplayName = u.DisplayName,
                     AvatarUrl = u.AvatarUrl,
                     CreatedAt = u.CreatedAt
-                    // Add other fields map if needed
                 })
                 .ToListAsync(cancel);
 
             return (users, totalCount);
         }
 
-        public async Task<UserResponse> UpdateUser(string id, UpdateUserRequest request, CancellationToken cancel)
+        public async Task<UserResponse> UpdateUser(string id, string currentUserId, UpdateUserRequest request, CancellationToken cancel)
         {
+            if (id != currentUserId)
+            {
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You can only update your own profile.");
+            }
+
             var user = await _dbcontext.Users.FindAsync(new object[] { id }, cancel);
             if (user == null)
             {
@@ -107,8 +105,13 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
-        public async Task<bool> DeleteUser(string id, CancellationToken cancel)
+        public async Task<bool> DeleteUser(string id, string currentUserId, CancellationToken cancel)
         {
+            if (id != currentUserId)
+            {
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You can only delete your own profile.");
+            }
+
             var user = await _dbcontext.Users.FindAsync(new object[] { id }, cancel);
             if (user == null)
             {
@@ -116,7 +119,6 @@ namespace Kpett.ChatApp.Services.Impls
             }
 
             user.IsActive = false;
-            // Optionally update Status string to "Deleted" or similar if required
 
             await _dbcontext.SaveChangesAsync(cancel);
             return true;

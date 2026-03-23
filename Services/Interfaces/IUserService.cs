@@ -1,4 +1,4 @@
-﻿using Kpett.ChatApp.DTOs.Request;
+using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.DTOs.Response;
 
 namespace Kpett.ChatApp.Services.Interfaces
@@ -7,7 +7,7 @@ namespace Kpett.ChatApp.Services.Interfaces
     {
         Task<(List<UserResponse>, int)> GetAllUser(UserRequest search, CancellationToken cancel = default);
         Task<UserResponse> inforUser(UserRequest Request, CancellationToken cancel);
-        Task<UserResponse> UpdateUser(string id, UpdateUserRequest request, CancellationToken cancel);
-        Task<bool> DeleteUser(string id, CancellationToken cancel);
+        Task<UserResponse> UpdateUser(string id, string currentUserId, UpdateUserRequest request, CancellationToken cancel);
+        Task<bool> DeleteUser(string id, string currentUserId, CancellationToken cancel);
     }
 }

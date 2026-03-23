@@ -1,9 +1,7 @@
-﻿using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs;
 using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.Helper;
-using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -16,31 +14,17 @@ namespace Kpett.ChatApp.Controllers
     [Authorize]
     public class PostsController : ControllerBase
     {
-        private readonly AppDbContext _dbcontext;
         private readonly IPostFeedService _postFeedService;
 
-        public PostsController(AppDbContext dbcontext, IPostFeedService postFeedService)
+        public PostsController(IPostFeedService postFeedService)
         {
-            _dbcontext = dbcontext;
             _postFeedService = postFeedService;
         }
 
-        /// <summary>
-        /// Create a new post with optional media
-        /// </summary>
         [HttpPost("CreatePost")]
-        public async Task<IActionResult> CreatePost([FromBody] PostMediaRequest postMedia, [FromQuery] string userId, CancellationToken cancel)
+        public async Task<IActionResult> CreatePost([FromBody] PostMediaRequest postMedia, CancellationToken cancel)
         {
-            if (string.IsNullOrEmpty(userId))
-            {
-                return BadRequest(new ErrorResponse
-                {
-                    Message = "User ID is required",
-                    ErrorCode  = ErrorCodes.VALIDATION.REQUIRED,
-                    IsSuccess = false
-                });
-            }
-
+            var userId = User.GetRequiredUserId();
             var result = await _postFeedService.CreatePostAsync(userId, postMedia, cancel);
 
             return Ok(new GeneralResponse<PostResponseDTO>
@@ -52,12 +36,10 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        /// <summary>
-        /// Get a single post
-        /// </summary>
         [HttpGet("GetPost/{postId}")]
-        public async Task<IActionResult> GetPost(long postId, [FromQuery] string? userId, CancellationToken cancel)
+        public async Task<IActionResult> GetPost(long postId, CancellationToken cancel)
         {
+            var userId = User.GetRequiredUserId();
             var result = await _postFeedService.GetPostAsync(postId, userId, cancel);
 
             return Ok(new GeneralResponse<PostResponseDTO>
@@ -69,12 +51,10 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        /// <summary>
-        /// Get user feed
-        /// </summary>
         [HttpGet("GetUserFeed")]
-        public async Task<IActionResult> GetUserFeed([FromQuery] string userId, [FromQuery] SearchRequest request, CancellationToken cancel = default)
+        public async Task<IActionResult> GetUserFeed([FromQuery] SearchRequest request, CancellationToken cancel = default)
         {
+            var userId = User.GetRequiredUserId();
             var result = await _postFeedService.GetUserFeedAsync(userId, request, cancel);
 
             return Ok(new DataListResponse<UserFeedDTO>
@@ -87,13 +67,11 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        /// <summary>
-        /// Get all posts from a user
-        /// </summary>
         [HttpGet("GetUserPosts")]
-        public async Task<IActionResult> GetUserPosts([FromQuery] string userId, [FromQuery] SearchRequest request, CancellationToken cancel = default)
+        public async Task<IActionResult> GetUserPosts([FromQuery] string? userId, [FromQuery] SearchRequest request, CancellationToken cancel = default)
         {
-            var result = await _postFeedService.GetUserPostsAsync(userId, request, cancel);
+            var targetUserId = string.IsNullOrWhiteSpace(userId) ? User.GetRequiredUserId() : userId;
+            var result = await _postFeedService.GetUserPostsAsync(targetUserId, request, cancel);
 
             return Ok(new DataListResponse<PostResponseDTO>
             {
@@ -105,13 +83,11 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        /// <summary>
-        /// Update a post
-        /// </summary>
         [HttpPut("UpdatePost/{postId}")]
-        public async Task<IActionResult> UpdatePost(long postId, [FromBody] PostMediaRequest request, [FromQuery] string userId, CancellationToken cancel)
+        public async Task<IActionResult> UpdatePost(long postId, [FromBody] PostMediaRequest request, CancellationToken cancel)
         {
-            await _postFeedService.UpdatePostAsync(postId, userId, request.Content, request.Privacy, cancel);
+            var userId = User.GetRequiredUserId();
+            await _postFeedService.UpdatePostAsync(postId, userId, request.Content ?? string.Empty, request.Privacy ?? string.Empty, cancel);
 
             return Ok(new GeneralResponse
             {
@@ -121,12 +97,10 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        /// <summary>
-        /// Delete a post
-        /// </summary>
         [HttpDelete("DeletePost/{postId}")]
-        public async Task<IActionResult> DeletePost(long postId, [FromQuery] string userId, CancellationToken cancel)
+        public async Task<IActionResult> DeletePost(long postId, CancellationToken cancel)
         {
+            var userId = User.GetRequiredUserId();
             await _postFeedService.DeletePostAsync(postId, userId, cancel);
 
             return Ok(new GeneralResponse
@@ -137,12 +111,10 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        /// <summary>
-        /// Add a reaction to a post
-        /// </summary>
         [HttpPost("AddReaction")]
-        public async Task<IActionResult> AddReaction([FromQuery] long postId, [FromQuery] string userId, [FromQuery] byte reactionType, CancellationToken cancel)
+        public async Task<IActionResult> AddReaction([FromQuery] long postId, [FromQuery] byte reactionType, CancellationToken cancel)
         {
+            var userId = User.GetRequiredUserId();
             var result = await _postFeedService.AddReactionAsync(postId, userId, reactionType, cancel);
 
             return Ok(new GeneralResponse<PostReactionDTO>
@@ -154,12 +126,10 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        /// <summary>
-        /// Remove a reaction from a post
-        /// </summary>
         [HttpDelete("RemoveReaction")]
-        public async Task<IActionResult> RemoveReaction([FromQuery] long postId, [FromQuery] string userId, CancellationToken cancel)
+        public async Task<IActionResult> RemoveReaction([FromQuery] long postId, CancellationToken cancel)
         {
+            var userId = User.GetRequiredUserId();
             await _postFeedService.RemoveReactionAsync(postId, userId, cancel);
 
             return Ok(new GeneralResponse
@@ -170,9 +140,6 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        /// <summary>
-        /// Get reactions on a post
-        /// </summary>
         [HttpGet("GetReactions/{postId}")]
         public async Task<IActionResult> GetReactions(long postId, CancellationToken cancel)
         {
@@ -188,12 +155,10 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        /// <summary>
-        /// Add a comment to a post
-        /// </summary>
         [HttpPost("AddComment")]
-        public async Task<IActionResult> AddComment([FromQuery] long postId, [FromQuery] string userId, [FromBody] dynamic request, CancellationToken cancel)
+        public async Task<IActionResult> AddComment([FromQuery] long postId, [FromBody] dynamic request, CancellationToken cancel)
         {
+            var userId = User.GetRequiredUserId();
             string content = request.content;
             string? parentCommentId = request.parentCommentId;
 
@@ -208,9 +173,6 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        /// <summary>
-        /// Get comments on a post
-        /// </summary>
         [HttpGet("GetComments/{postId}")]
         public async Task<IActionResult> GetComments(long postId, CancellationToken cancel)
         {
@@ -226,12 +188,10 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        /// <summary>
-        /// Update a comment
-        /// </summary>
         [HttpPut("UpdateComment/{commentId}")]
-        public async Task<IActionResult> UpdateComment(string commentId, [FromQuery] string userId, [FromBody] dynamic request, CancellationToken cancel)
+        public async Task<IActionResult> UpdateComment(string commentId, [FromBody] dynamic request, CancellationToken cancel)
         {
+            var userId = User.GetRequiredUserId();
             string content = request.content;
             await _postFeedService.UpdateCommentAsync(commentId, userId, content, cancel);
 
@@ -243,12 +203,10 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        /// <summary>
-        /// Delete a comment
-        /// </summary>
         [HttpDelete("DeleteComment/{commentId}")]
-        public async Task<IActionResult> DeleteComment(string commentId, [FromQuery] string userId, CancellationToken cancel)
+        public async Task<IActionResult> DeleteComment(string commentId, CancellationToken cancel)
         {
+            var userId = User.GetRequiredUserId();
             await _postFeedService.DeleteCommentAsync(commentId, userId, cancel);
 
             return Ok(new GeneralResponse
@@ -259,23 +217,12 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        /// <summary>
-        /// [Deprecated] Use CreatePost instead
-        /// </summary>
         [HttpPost("PostFeed")]
         public async Task<IActionResult> PostFeed([FromBody] PostMediaRequest postMedia, CancellationToken cancel)
         {
-            if (string.IsNullOrEmpty(postMedia.CreatedByUserId))
-            {
-                return BadRequest(new ErrorResponse
-                {
-                    Message = "User ID is required",
-                    ErrorCode = ErrorCodes.VALIDATION.REQUIRED,
-                    IsSuccess = false
-                });
-            }
-
+            postMedia.CreatedByUserId = User.GetRequiredUserId();
             await _postFeedService.PostFeed(postMedia, cancel);
+
             return Ok(new GeneralResponse
             {
                 StatusCode = StatusCodes.Status200OK,

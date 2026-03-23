@@ -1,65 +1,92 @@
-﻿using Kpett.ChatApp.DTOs;
+using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.DTOs;
 using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.DTOs.Response;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Services;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
-using System.Net;
 
 namespace Kpett.ChatApp.Services.Impls
 {
     public class ConversationService : IConversationService
     {
         private readonly AppDbContext _dbcontext;
-        private readonly IJwtService _token;
 
-        public ConversationService(AppDbContext dbContext, IJwtService token)
+        public ConversationService(AppDbContext dbContext)
         {
             _dbcontext = dbContext;
-            _token = token;
         }
 
-        public async Task<ConversationResponse> CreateConversaTion(ConversationKeysRequest request, CancellationToken cancel)
+        public async Task<ConversationResponse> CreateConversaTion(string currentUserId, ConversationKeysRequest request, CancellationToken cancel)
         {
-            string _id = Guid.NewGuid().ToString();
+            if (string.IsNullOrWhiteSpace(currentUserId))
+                throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
+
+            if (request == null)
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Conversation request is required.");
+
+            if (string.IsNullOrWhiteSpace(request.UserLow) || string.IsNullOrWhiteSpace(request.UserHigh))
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Conversation participants are required.");
+
+            if (request.UserLow == request.UserHigh)
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Conversation participants must be different users.");
+
+            if (request.UserLow != currentUserId && request.UserHigh != currentUserId)
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You can only create conversations that include the current user.");
+
+            var participantIds = new[] { request.UserLow, request.UserHigh };
+            var existingUsers = await _dbcontext.Users
+                .AsNoTracking()
+                .Where(u => participantIds.Contains(u.Id))
+                .Select(u => u.Id)
+                .ToListAsync(cancel);
+
+            if (existingUsers.Count != 2)
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "One or more conversation participants were not found.");
+
+            var userLow = string.CompareOrdinal(request.UserLow, request.UserHigh) < 0 ? request.UserLow : request.UserHigh;
+            var userHigh = string.CompareOrdinal(request.UserLow, request.UserHigh) < 0 ? request.UserHigh : request.UserLow;
+
+            var conversationId = Guid.NewGuid().ToString();
             var newconversation = new Conversation
             {
-                Id = _id,
+                Id = conversationId,
                 Name = request.Name,
                 AvatarUrl = request.AvatarUrl,
                 Type = request.Type,
                 LastMessageAt = DateTime.UtcNow,
-
             };
+
             await _dbcontext.Conversations.AddAsync(newconversation, cancel);
+
             var newconversationKeys = new ConversationKey
             {
                 Id = Guid.NewGuid().ToString(),
                 ConversationId = newconversation.Id,
-                UserLowId = request.UserLow,
-                UserHighId = request.UserHigh
+                UserLowId = userLow,
+                UserHighId = userHigh
             };
             await _dbcontext.ConversationKeys.AddAsync(newconversationKeys, cancel);
 
-            // Add participants
             var participantLow = new ConversationParticipant
             {
+                Id = Guid.NewGuid().ToString(),
                 ConversationId = newconversation.Id,
-                UserId = request.UserLow,
+                UserId = userLow,
+                JoinedAt = DateTime.UtcNow,
                 LastReadAt = DateTime.UtcNow
             };
             var participantHigh = new ConversationParticipant
             {
+                Id = Guid.NewGuid().ToString(),
                 ConversationId = newconversation.Id,
-                UserId = request.UserHigh,
+                UserId = userHigh,
+                JoinedAt = DateTime.UtcNow,
                 LastReadAt = DateTime.UtcNow
-
             };
 
             await _dbcontext.ConversationParticipants.AddRangeAsync(participantLow, participantHigh);
-
             await _dbcontext.SaveChangesAsync(cancel);
 
             return new ConversationResponse
@@ -69,36 +96,28 @@ namespace Kpett.ChatApp.Services.Impls
                 AvatarUrl = request.AvatarUrl,
                 Type = request.Type,
                 LastMessageAt = newconversation.LastMessageAt,
-
             };
         }
 
-        public async Task<List<ConversationResponse>> GetConversationList(SearchRequest search, CancellationToken cancel)
+        public async Task<List<ConversationResponse>> GetConversationList(string currentUserId, SearchRequest search, CancellationToken cancel)
         {
-            var userClaims = _token.GetUserClaims();
-            var userIdToken = userClaims?.UserId ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(currentUserId))
+                throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
 
-            var userName = userClaims?.Username ?? string.Empty;
-            if (string.IsNullOrEmpty(userName))
-            {
-                userName = "Unknown";
-            }
-
-            // Lấy danh sách Conversations mà User tham gia
             var query = from p in _dbcontext.ConversationParticipants.AsNoTracking()
-                        where p.UserId == userIdToken && (p.IsArchived == null || p.IsArchived == false)
+                        where p.UserId == currentUserId && (p.IsArchived == null || p.IsArchived == false)
                         join c in _dbcontext.Conversations.AsNoTracking() on p.ConversationId equals c.Id
 
                         let lastMessage = _dbcontext.Messages
                             .AsNoTracking()
                             .Where(_ => _.ConversationId == c.Id)
                             .OrderByDescending(m => m.Id)
-                           .FirstOrDefault()
-                    
+                            .FirstOrDefault()
+
                         let unreadCount = _dbcontext.Messages
                             .AsNoTracking()
                             .Where(_ => _.ConversationId == c.Id
-                                   && _.SenderId != userIdToken
+                                   && _.SenderId != currentUserId
                                    && _.Id > (p.LastReadMessageId ?? 0))
                             .Count()
 

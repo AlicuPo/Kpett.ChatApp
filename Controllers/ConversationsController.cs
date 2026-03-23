@@ -1,6 +1,8 @@
-﻿using Kpett.ChatApp.DTOs.Request;
+using Kpett.ChatApp.DTOs.Request;
 using Kpett.ChatApp.DTOs.Response;
+using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,58 +10,42 @@ namespace Kpett.ChatApp.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class ConversationsController : ControllerBase
     {
         private readonly IConversationService _conversation;
+
         public ConversationsController(IConversationService conversation)
         {
             _conversation = conversation;
         }
+
         [HttpPost("CreateConversations")]
         public async Task<IActionResult> CreateConversation([FromBody] ConversationKeysRequest request, CancellationToken cancel)
         {
-            try
+            var currentUserId = User.GetRequiredUserId();
+            var conversation = await _conversation.CreateConversaTion(currentUserId, request, cancel);
+
+            return Ok(new GeneralResponse<ConversationResponse>
             {
-                var conversations = await _conversation.CreateConversaTion(request, cancel);
-                return Ok(new GeneralResponse<ConversationResponse>
-                {
-                    Data = conversations,
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "Tạo cuộc trò chuyện thành công",
-                });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new
-                {
-                    Message = ex.Message,
-                    ErorrCode = StatusCodes.Status400BadRequest
-                });
-            }
+                Data = conversation,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Tạo cuộc trò chuyện thành công",
+            });
         }
 
         [HttpGet("GetConversationList")]
         public async Task<IActionResult> GetConversationList([FromQuery] SearchRequest search, CancellationToken cancel)
         {
-             try
-            {
-                var conversations = await _conversation.GetConversationList(search, cancel);
-                return Ok(new GeneralResponse<List<ConversationResponse>>
-                {
-                    Data = conversations,
-                    StatusCode = StatusCodes.Status200OK,
-                    Message = "Lấy danh sách cuộc trò chuyện thành công",
-                });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new
-                {
-                    Message = ex.Message,
-                    ErorrCode = StatusCodes.Status400BadRequest
-                });
-            }
-        }
+            var currentUserId = User.GetRequiredUserId();
+            var conversations = await _conversation.GetConversationList(currentUserId, search, cancel);
 
+            return Ok(new GeneralResponse<List<ConversationResponse>>
+            {
+                Data = conversations,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Lấy danh sách cuộc trò chuyện thành công",
+            });
+        }
     }
 }

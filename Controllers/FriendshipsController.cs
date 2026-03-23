@@ -1,5 +1,3 @@
-﻿using Kpett.ChatApp.DTOs;
-using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -20,241 +18,116 @@ namespace Kpett.ChatApp.Controllers
             _friendshipsServices = friendshipsServices;
         }
 
-        /// <summary>
-        /// Send a friend request from senderId to receiverId
-        /// </summary>
         [HttpPost("SendFriendRequest")]
-        public async Task<IActionResult> SendFriendRequest([FromQuery] string senderId, [FromQuery] string receiverId, CancellationToken cancel)
+        public async Task<IActionResult> SendFriendRequest([FromQuery] string receiverId, CancellationToken cancel)
         {
-            try
+            if (string.IsNullOrEmpty(receiverId))
             {
-                if (string.IsNullOrEmpty(senderId) || string.IsNullOrEmpty(receiverId))
+                return BadRequest(new
                 {
-                    return BadRequest(new
-                    {
-                        errorCode = StatusCodes.Status400BadRequest,
-                        return_value = false,
-                        message = "Sender ID and Receiver ID are required"
-                    });
-                }
-
-                await _friendshipsServices.RequestFriendRequestAsync(senderId, receiverId, cancel);
-
-                return Ok(new
-                {
-                    statusCode = StatusCodes.Status200OK,
-                    return_value = true,
-                    message = "Friend request sent successfully"
-                });
-            }
-            catch (AppException appEx)
-            {
-                return StatusCode(appEx.StatusCode, new
-                {
-                    errorCode = appEx.StatusCode,
+                    errorCode = StatusCodes.Status400BadRequest,
                     return_value = false,
-                    message = appEx.Message
+                    message = "Receiver ID is required"
                 });
             }
-            catch (Exception ex)
+
+            var senderId = User.GetRequiredUserId();
+            await _friendshipsServices.RequestFriendRequestAsync(senderId, receiverId, cancel);
+
+            return Ok(new
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    errorCode = StatusCodes.Status500InternalServerError,
-                    return_value = false,
-                    message = $"An error occurred: {ex.Message}"
-                });
-            }
+                statusCode = StatusCodes.Status200OK,
+                return_value = true,
+                message = "Friend request sent successfully"
+            });
         }
 
-        /// <summary>
-        /// Accept a friend request
-        /// </summary>
         [HttpPost("AcceptFriendRequest")]
-        public async Task<IActionResult> AcceptFriendRequest([FromQuery] string senderId, [FromQuery] string receiverId, CancellationToken cancel)
+        public async Task<IActionResult> AcceptFriendRequest([FromQuery] string senderId, CancellationToken cancel)
         {
-            try
+            if (string.IsNullOrEmpty(senderId))
             {
-                if (string.IsNullOrEmpty(senderId) || string.IsNullOrEmpty(receiverId))
+                return BadRequest(new
                 {
-                    return BadRequest(new
-                    {
-                        errorCode = StatusCodes.Status400BadRequest,
-                        return_value = false,
-                        message = "Sender ID and Receiver ID are required"
-                    });
-                }
-
-                await _friendshipsServices.AcceptFriendRequestAsync(senderId, receiverId, cancel);
-
-                return Ok(new
-                {
-                    statusCode = StatusCodes.Status200OK,
-                    return_value = true,
-                    message = "Friend request accepted successfully"
-                });
-            }
-            catch (AppException appEx)
-            {
-                return StatusCode(appEx.StatusCode, new
-                {
-                    errorCode = appEx.StatusCode,
+                    errorCode = StatusCodes.Status400BadRequest,
                     return_value = false,
-                    message = appEx.Message
+                    message = "Sender ID is required"
                 });
             }
-            catch (Exception ex)
+
+            var receiverId = User.GetRequiredUserId();
+            await _friendshipsServices.AcceptFriendRequestAsync(senderId, receiverId, cancel);
+
+            return Ok(new
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    errorCode = StatusCodes.Status500InternalServerError,
-                    return_value = false,
-                    message = $"An error occurred: {ex.Message}"
-                });
-            }
+                statusCode = StatusCodes.Status200OK,
+                return_value = true,
+                message = "Friend request accepted successfully"
+            });
         }
 
-        /// <summary>
-        /// Reject a friend request
-        /// </summary>
         [HttpPost("RejectFriendRequest")]
-        public async Task<IActionResult> RejectFriendRequest([FromQuery] string senderId, [FromQuery] string receiverId, CancellationToken cancel)
+        public async Task<IActionResult> RejectFriendRequest([FromQuery] string senderId, CancellationToken cancel)
         {
-            try
+            if (string.IsNullOrEmpty(senderId))
             {
-                if (string.IsNullOrEmpty(senderId) || string.IsNullOrEmpty(receiverId))
+                return BadRequest(new
                 {
-                    return BadRequest(new
-                    {
-                        errorCode = StatusCodes.Status400BadRequest,
-                        return_value = false,
-                        message = "Sender ID and Receiver ID are required"
-                    });
-                }
-
-                await _friendshipsServices.RejectFriendRequestAsync(senderId, receiverId, cancel);
-
-                return Ok(new
-                {
-                    statusCode = StatusCodes.Status200OK,
-                    return_value = true,
-                    message = "Friend request rejected successfully"
-                });
-            }
-            catch (AppException appEx)
-            {
-                return StatusCode(appEx.StatusCode, new
-                {
-                    errorCode = appEx.StatusCode,
+                    errorCode = StatusCodes.Status400BadRequest,
                     return_value = false,
-                    message = appEx.Message
+                    message = "Sender ID is required"
                 });
             }
-            catch (Exception ex)
+
+            var receiverId = User.GetRequiredUserId();
+            await _friendshipsServices.RejectFriendRequestAsync(senderId, receiverId, cancel);
+
+            return Ok(new
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    errorCode = StatusCodes.Status500InternalServerError,
-                    return_value = false,
-                    message = $"An error occurred: {ex.Message}"
-                });
-            }
+                statusCode = StatusCodes.Status200OK,
+                return_value = true,
+                message = "Friend request rejected successfully"
+            });
         }
 
-        /// <summary>
-        /// Cancel a sent friend request
-        /// </summary>
         [HttpPost("CancelFriendRequest")]
-        public async Task<IActionResult> CancelFriendRequest([FromQuery] string senderId, [FromQuery] string receiverId, CancellationToken cancel)
+        public async Task<IActionResult> CancelFriendRequest([FromQuery] string receiverId, CancellationToken cancel)
         {
-            try
+            if (string.IsNullOrEmpty(receiverId))
             {
-                if (string.IsNullOrEmpty(senderId) || string.IsNullOrEmpty(receiverId))
+                return BadRequest(new
                 {
-                    return BadRequest(new
-                    {
-                        errorCode = StatusCodes.Status400BadRequest,
-                        return_value = false,
-                        message = "Sender ID and Receiver ID are required"
-                    });
-                }
-
-                await _friendshipsServices.CancelFriendRequestAsync(senderId, receiverId, cancel);
-
-                return Ok(new
-                {
-                    statusCode = StatusCodes.Status200OK,
-                    return_value = true,
-                    message = "Friend request cancelled successfully"
-                });
-            }
-            catch (AppException appEx)
-            {
-                return StatusCode(appEx.StatusCode, new
-                {
-                    errorCode = appEx.StatusCode,
+                    errorCode = StatusCodes.Status400BadRequest,
                     return_value = false,
-                    message = appEx.Message
+                    message = "Receiver ID is required"
                 });
             }
-            catch (Exception ex)
+
+            var senderId = User.GetRequiredUserId();
+            await _friendshipsServices.CancelFriendRequestAsync(senderId, receiverId, cancel);
+
+            return Ok(new
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    errorCode = StatusCodes.Status500InternalServerError,
-                    return_value = false,
-                    message = $"An error occurred: {ex.Message}"
-                });
-            }
+                statusCode = StatusCodes.Status200OK,
+                return_value = true,
+                message = "Friend request cancelled successfully"
+            });
         }
 
-        /// <summary>
-        /// Get all pending friend requests for a user
-        /// </summary>
         [HttpGet("PendingFriendRequests")]
-        public async Task<IActionResult> GetPendingFriendRequests([FromQuery] string userId, CancellationToken cancel)
+        public async Task<IActionResult> GetPendingFriendRequests(CancellationToken cancel)
         {
-            try
-            {
-                if (string.IsNullOrEmpty(userId))
-                {
-                    return BadRequest(new
-                    {
-                        errorCode = StatusCodes.Status400BadRequest,
-                        return_value = false,
-                        message = "User ID is required"
-                    });
-                }
+            var userId = User.GetRequiredUserId();
+            var requests = await _friendshipsServices.GetPendingFriendRequestsAsync(userId, cancel);
 
-                var requests = await _friendshipsServices.GetPendingFriendRequestsAsync(userId, cancel);
-
-                return Ok(new
-                {
-                    statusCode = StatusCodes.Status200OK,
-                    return_value = true,
-                    message = "Pending friend requests retrieved successfully",
-                    data = requests,
-                    totalCount = requests.Count
-                });
-            }
-            catch (AppException appEx)
+            return Ok(new
             {
-                return StatusCode(appEx.StatusCode, new
-                {
-                    errorCode = appEx.StatusCode,
-                    return_value = false,
-                    message = appEx.Message
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    errorCode = StatusCodes.Status500InternalServerError,
-                    return_value = false,
-                    message = $"An error occurred: {ex.Message}"
-                });
-            }
+                statusCode = StatusCodes.Status200OK,
+                return_value = true,
+                message = "Pending friend requests retrieved successfully",
+                data = requests,
+                totalCount = requests.Count
+            });
         }
     }
 }
