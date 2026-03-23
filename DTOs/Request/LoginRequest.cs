@@ -2,7 +2,7 @@
 {
     public class LoginRequest
     {
-        public string UsernameOrEmail { get; set; } = null!;
+        public string Email { get; set; } = null!;
         public string Password { get; set; } = null!;
         public string? DeviceToken { get; set; } = null!;
         public string? DeviceType { get; set; } = null!;
