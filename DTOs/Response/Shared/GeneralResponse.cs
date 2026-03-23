@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Kpett.ChatApp.DTOs.Response
+namespace Kpett.ChatApp.DTOs.Response.Shared
 {
    
     public record GeneralResponse

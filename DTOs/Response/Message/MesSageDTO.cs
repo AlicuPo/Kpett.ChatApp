@@ -1,4 +1,4 @@
-﻿namespace Kpett.ChatApp.DTOs
+﻿namespace Kpett.ChatApp.DTOs.Response.Message
 {
     public class MessageDTO
     {

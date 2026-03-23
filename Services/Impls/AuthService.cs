@@ -1,6 +1,8 @@
 ﻿using Kpett.ChatApp.Contants;
-using Kpett.ChatApp.DTOs.Request;
+using Kpett.ChatApp.DTOs.Request.Auth;
 using Kpett.ChatApp.DTOs.Response;
+using Kpett.ChatApp.DTOs.Response.Auth;
+using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;
@@ -33,7 +35,7 @@ public class AuthService : IAuthService
         {
             throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Email not empty");
         }
-        
+
         var user = await _dbContext.Users
             .Select(u => new
             {
@@ -67,7 +69,9 @@ public class AuthService : IAuthService
             Username = user.Username,
             Email = user.Email,
             DisplayName = user.DisplayName,
-            AvatarUrl = user.AvatarUrl
+            AvatarUrl = user.AvatarUrl,
+            isProfileCompleted = !string.IsNullOrEmpty(user.DisplayName) && !string.IsNullOrEmpty(user.Username),
+            CreatedAt = DateTime.UtcNow
         };
 
         var tokenRes = new TokenResponse()
@@ -87,7 +91,7 @@ public class AuthService : IAuthService
     public async Task<int> RegisterAsync(RegisterRequest request, CancellationToken cancel = default)
     {
         cancel.ThrowIfCancellationRequested();
-        
+
         ValidateAuthRequest(request);
 
         var existingUserByEmail =

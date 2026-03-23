@@ -1,4 +1,4 @@
-﻿namespace Kpett.ChatApp.DTOs.Request
+﻿namespace Kpett.ChatApp.DTOs.Request.Auth
 {
     public class LoginRequest
     {
@@ -8,13 +8,6 @@
         public string? DeviceType { get; set; } = null!;
     }
 
-    public record LogoutRequest(bool LogoutAllDevices = false);
-
-    public class RegisterRequest
-    {
-        public string? Email { get; set; }
-        public string? Password { get; set; }     
-    }
     public class UpdateProfileRequest
     {
         public string? DisplayName { get; set; }

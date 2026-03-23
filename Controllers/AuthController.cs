@@ -1,5 +1,7 @@
-﻿using Kpett.ChatApp.DTOs.Request;
+﻿using Kpett.ChatApp.DTOs.Request.Auth;
 using Kpett.ChatApp.DTOs.Response;
+using Kpett.ChatApp.DTOs.Response.Auth;
+using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;

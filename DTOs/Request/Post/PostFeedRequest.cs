@@ -1,6 +1,6 @@
 ﻿using Kpett.ChatApp.Models;
 
-namespace Kpett.ChatApp.DTOs.Request
+namespace Kpett.ChatApp.DTOs.Request.Post
 {
     public class PostFeedRequest
     {

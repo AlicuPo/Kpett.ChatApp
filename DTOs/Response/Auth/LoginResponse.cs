@@ -1,4 +1,6 @@
-﻿namespace Kpett.ChatApp.DTOs.Response
+﻿using Kpett.ChatApp.DTOs.Response.User;
+
+namespace Kpett.ChatApp.DTOs.Response.Auth
 {
     public class LoginResponse : TokenResponse
     {

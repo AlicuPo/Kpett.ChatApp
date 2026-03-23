@@ -1,4 +1,4 @@
-﻿using Kpett.ChatApp.DTOs;
+﻿using Kpett.ChatApp.DTOs.Response.Friend;
 
 namespace Kpett.ChatApp.Services.Interfaces
 {

@@ -1,4 +1,4 @@
-﻿namespace Kpett.ChatApp.DTOs.Response
+﻿namespace Kpett.ChatApp.DTOs.Response.Auth
 {
     public class TokenResponse
     {
