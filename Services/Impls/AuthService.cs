@@ -15,13 +15,13 @@ public class AuthService : IAuthService
 {
     private readonly ICloudinaryService _cloudinary;
 
-    private readonly AppDbContext _dbcontext;
+    private readonly AppDbContext _dbContext;
     private readonly IRedisService _redis;
     private readonly IJwtService _token;
 
     public AuthService(AppDbContext context, IJwtService token, IRedisService redis, ICloudinaryService cloudinary)
     {
-        _dbcontext = context;
+        _dbContext = context;
         _token = token;
         _redis = redis;
         _cloudinary = cloudinary;
@@ -34,7 +34,18 @@ public class AuthService : IAuthService
             throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Email not empty");
         }
         
-        var user = await _dbcontext.Users.FirstOrDefaultAsync(x => x.Email == request.Email);
+        var user = await _dbContext.Users
+            .Select(u => new
+            {
+                Id = u.Id,
+                Username = u.Name,
+                Email = u.Email,
+                DisplayName = u.DisplayName,
+                AvatarUrl = u.AvatarUrl,
+                Password = u.Password,
+                IsActive = u.IsActive
+            })
+            .FirstOrDefaultAsync(x => x.Email == request.Email);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.Password))
         {
@@ -47,46 +58,45 @@ public class AuthService : IAuthService
         }
 
         // Tạo JWT Token
-        var accessToken = _token.GenerateAccessToken(user.Id, user.Name, user.Email, user.DisplayName);
-        var refreshToken = _token.GenerateRefreshToken(user.Id, user.Name, user.Email);
+        var accessToken = _token.GenerateAccessToken(user.Id, user.Username, user.Email, user.DisplayName);
+        var refreshToken = _token.GenerateRefreshToken(user.Id, user.Username, user.Email);
 
-        return new LoginResponse
+        var userRes = new UserResponse()
         {
-            AccessToken = accessToken,
-            RefreshToken = refreshToken,
+            Id = user.Id,
+            Username = user.Username,
+            Email = user.Email,
             DisplayName = user.DisplayName,
             AvatarUrl = user.AvatarUrl
         };
-    }
 
-    private void ValidateRegisterRequest(RegisterRequest request)
-    {
-        if (string.IsNullOrEmpty(request.Password) || string.IsNullOrEmpty(request.Username) || string.IsNullOrEmpty(request.Email))
+        var tokenRes = new TokenResponse()
         {
-            throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Username or Password or Email is required");
-        }
-    }   
+            AccessToken = accessToken,
+            RefreshToken = refreshToken,
+            TokenType = "Bearer"
+        };
+
+        return new LoginResponse
+        {
+            User = userRes,
+            Token = tokenRes
+        };
+    }
 
     public async Task<int> RegisterAsync(RegisterRequest request, CancellationToken cancel = default)
     {
         cancel.ThrowIfCancellationRequested();
         
-        ValidateRegisterRequest(request);
+        ValidateAuthRequest(request);
 
         var existingUserByEmail =
-            await _dbcontext.Users.AnyAsync(x => x.Email == request.Email);
+            await _dbContext.Users.AnyAsync(x => x.Email == request.Email);
         if (existingUserByEmail)
         {
             throw new ConflictException(ErrorCodes.USER.ALREADY_EXISTS_BY_EMAIL, "Email really existing");
         }
 
-        var existingUserByUsername =
-            await _dbcontext.Users.AnyAsync(x => x.Name == request.Username);
-        if (existingUserByUsername)
-        {
-            throw new ConflictException(ErrorCodes.USER.ALREADY_EXISTS_BY_USERNAME, "Username really existing");
-        }
-      
         var hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
         var avatarUrl = string.Empty;
@@ -96,27 +106,35 @@ public class AuthService : IAuthService
         var newUser = new User
         {
             Id = _id,
-            Name = request.Username ?? string.Empty,
             Password = hashedPassword,
             Email = request.Email,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             Status = UserStatusEnums.Offline.GetDescription()
         };
-        _dbcontext.Users.Add(newUser);
-        var result = await _dbcontext.SaveChangesAsync(cancel);
+        _dbContext.Users.Add(newUser);
+        var result = await _dbContext.SaveChangesAsync(cancel);
         return result;
     }
 
     public async Task<bool> LogoutAsync(string userId, CancellationToken cancel = default)
     {
-        var user = await _dbcontext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancel);
+        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancel);
         if (user != null)
         {
             user.Status = UserStatusEnums.Offline.GetDescription();
-            await _dbcontext.SaveChangesAsync(cancel);
+            await _dbContext.SaveChangesAsync(cancel);
         }
 
         return true;
     }
+
+    private void ValidateAuthRequest(RegisterRequest request)
+    {
+        if (string.IsNullOrEmpty(request.Password) || string.IsNullOrEmpty(request.Email))
+        {
+            throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Password or Email is required");
+        }
+    }
+
 }

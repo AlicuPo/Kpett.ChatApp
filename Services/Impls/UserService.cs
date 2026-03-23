@@ -33,7 +33,7 @@ namespace Kpett.ChatApp.Services.Impls
             return new UserResponse
             {
                 Id = user.Id,
-                Name = user.Name,
+                Username = user.Name,
                 Email = user.Email,
                 DisplayName = user.DisplayName,
                 AvatarUrl = user.AvatarUrl,
@@ -61,7 +61,7 @@ namespace Kpett.ChatApp.Services.Impls
                 .Select(u => new UserResponse
                 {
                     Id = u.Id,
-                    Name = u.Name,
+                    Username = u.Name,
                     Email = u.Email,
                     DisplayName = u.DisplayName,
                     AvatarUrl = u.AvatarUrl,
@@ -97,7 +97,7 @@ namespace Kpett.ChatApp.Services.Impls
             return new UserResponse
             {
                 Id = user.Id,
-                Name = user.Name,
+                Username = user.Name,
                 Email = user.Email,
                 DisplayName = user.DisplayName,
                 AvatarUrl = user.AvatarUrl,

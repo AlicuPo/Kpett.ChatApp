@@ -2,8 +2,8 @@
 {
     public class LoginResponse : TokenResponse
     {
-        public string? DisplayName { get; set; }
-        public string? AvatarUrl { get; set; }
+        public UserResponse User { get; set; } = null!;
+        public TokenResponse Token { get; set; } = null!;
     }
   
 }

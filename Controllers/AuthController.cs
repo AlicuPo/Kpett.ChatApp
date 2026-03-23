@@ -182,9 +182,6 @@ namespace Kpett.ChatApp.Controllers
             {
                 AccessToken = newAccessToken,
                 RefreshToken = newRefreshToken,
-                ExpiresIn = 30 * 60,
-                IssuedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddMinutes(30)
             };
 
             return Ok(new GeneralResponse<TokenResponse>
