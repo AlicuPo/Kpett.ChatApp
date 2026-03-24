@@ -77,7 +77,13 @@ namespace Kpett.ChatApp.Controllers
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
         {
-            return Ok(await _authService.RefreshTokenAsync(request));
+            return Ok(new GeneralResponse<TokenResponse>
+            {
+                IsSuccess = true,
+                StatusCode = 200,
+                Data = await _authService.RefreshTokenAsync(request),
+                Message = "Token refreshed successfully."
+            });
         }
 
         [Authorize]

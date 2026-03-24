@@ -125,7 +125,7 @@ namespace Kpett.ChatApp.Services.Interfaces
                     type = "NEW_POST",
                     postId = newPost.Id,
                     userId = userId,
-                    userName = user?.DisplayName ?? user?.Name,
+                    userName = user?.DisplayName ?? user?.Username,
                     timestamp = DateTime.UtcNow
                 });
             }
@@ -198,7 +198,7 @@ namespace Kpett.ChatApp.Services.Interfaces
             {
                 Id = post.Post.Id,
                 CreatedByUserId = post.Post.CreatedByUserId,
-                CreatedByName = post.User.DisplayName ?? post.User.Name,
+                CreatedByName = post.User.DisplayName ?? post.User.Username,
                 CreatedByAvatar = post.User.AvatarUrl,
                 Content = post.Post.Content,
                 Privacy = post.Post.Privacy,
@@ -254,7 +254,7 @@ namespace Kpett.ChatApp.Services.Interfaces
                     UserId = item.Feed.UserId,
                     PostId = item.Feed.PostId,
                     SourceUserId = item.Feed.SourceUserId,
-                    SourceUserName = item.SourceUser.DisplayName ?? item.SourceUser.Name,
+                    SourceUserName = item.SourceUser.DisplayName ?? item.SourceUser.Username,
                     SourceType = item.Feed.SourceType,
                     CreatedAt = item.Feed.CreatedAt,
                     Post = post
@@ -401,7 +401,7 @@ namespace Kpett.ChatApp.Services.Interfaces
                         type = "POST_REACTION",
                         postId = postId,
                         userId = userId,
-                        userName = user?.DisplayName ?? user?.Name,
+                        userName = user?.DisplayName ?? user?.Username,
                         reactionType = reactionType,
                         timestamp = DateTime.UtcNow
                     });
@@ -525,7 +525,7 @@ namespace Kpett.ChatApp.Services.Interfaces
                         postId = postId,
                         commentId = comment.Id,
                         userId = userId,
-                        userName = user?.DisplayName ?? user?.Name,
+                        userName = user?.DisplayName ?? user?.Username,
                         timestamp = DateTime.UtcNow
                     });
                 }
@@ -542,7 +542,7 @@ namespace Kpett.ChatApp.Services.Interfaces
                 Id = comment.Id,
                 PostId = comment.PostId,
                 UserId = comment.UserId,
-                UserName = user_info?.DisplayName ?? user_info?.Name ?? "Anonymous",
+                UserName = user_info?.DisplayName ?? user_info?.Username ?? "Anonymous",
                 UserAvatar = user_info?.AvatarUrl,
                 Content = comment.Content,
                 ParentCommentId = comment.ParentCommentId,
@@ -593,7 +593,7 @@ namespace Kpett.ChatApp.Services.Interfaces
                         Id = x.Comment.Id,
                         PostId = x.Comment.PostId,
                         UserId = x.Comment.UserId,
-                        UserName = x.User.DisplayName ?? x.User.Name,
+                        UserName = x.User.DisplayName ?? x.User.Username,
                         UserAvatar = x.User.AvatarUrl,
                         Content = x.Comment.Content,
                         ParentCommentId = x.Comment.ParentCommentId,
@@ -607,7 +607,7 @@ namespace Kpett.ChatApp.Services.Interfaces
                     Id = item.Comment.Id,
                     PostId = item.Comment.PostId,
                     UserId = item.Comment.UserId,
-                    UserName = item.User.DisplayName ?? item.User.Name,
+                    UserName = item.User.DisplayName ?? item.User.Username,
                     UserAvatar = item.User.AvatarUrl,
                     Content = item.Comment.Content,
                     ParentCommentId = item.Comment.ParentCommentId,
@@ -679,7 +679,7 @@ namespace Kpett.ChatApp.Services.Interfaces
                 Id = comment.Id,
                 PostId = comment.PostId,
                 UserId = comment.UserId,
-                UserName = userInfo?.DisplayName ?? userInfo?.Name ?? "Anonymous",
+                UserName = userInfo?.DisplayName ?? userInfo?.Username ?? "Anonymous",
                 UserAvatar = userInfo?.AvatarUrl,
                 Content = comment.Content,
                 ParentCommentId = comment.ParentCommentId,

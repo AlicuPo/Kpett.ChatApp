@@ -33,7 +33,7 @@ namespace Kpett.ChatApp.Services.Impls
             return new UserResponse
             {
                 Id = user.Id,
-                Username = user.Name,
+                Username = user.Username,
                 Email = user.Email,
                 DisplayName = user.DisplayName,
                 AvatarUrl = user.AvatarUrl,
@@ -48,7 +48,7 @@ namespace Kpett.ChatApp.Services.Impls
             if (!string.IsNullOrEmpty(search.Search))
             {
                 query = query.Where(u =>
-                    u.Name.Contains(search.Search) ||
+                    u.Username.Contains(search.Search) ||
                     (u.DisplayName != null && u.DisplayName.Contains(search.Search)) ||
                     (u.Email != null && u.Email.Contains(search.Search)));
             }
@@ -61,7 +61,7 @@ namespace Kpett.ChatApp.Services.Impls
                 .Select(u => new UserResponse
                 {
                     Id = u.Id,
-                    Username = u.Name,
+                    Username = u.Username,
                     Email = u.Email,
                     DisplayName = u.DisplayName,
                     AvatarUrl = u.AvatarUrl,
@@ -97,7 +97,7 @@ namespace Kpett.ChatApp.Services.Impls
             return new UserResponse
             {
                 Id = user.Id,
-                Username = user.Name,
+                Username = user.Username,
                 Email = user.Email,
                 DisplayName = user.DisplayName,
                 AvatarUrl = user.AvatarUrl,
@@ -133,7 +133,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             var normalizedUsername = username.Trim().ToLower();
 
-            bool exists = await _dbcontext.Users.AnyAsync(u => u.Name.ToLower() == normalizedUsername);
+            bool exists = await _dbcontext.Users.AnyAsync(u => u.Username.ToLower() == normalizedUsername);
 
             return new UsernameCheckResponse
             {

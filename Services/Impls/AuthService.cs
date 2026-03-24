@@ -43,7 +43,7 @@ public class AuthService : IAuthService
             .Select(u => new
             {
                 Id = u.Id,
-                Username = u.Name,
+                Username = u.Username,
                 Email = u.Email,
                 DisplayName = u.DisplayName,
                 AvatarUrl = u.AvatarUrl,

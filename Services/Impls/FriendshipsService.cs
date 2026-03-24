@@ -91,7 +91,7 @@ namespace Kpett.ChatApp.Services.Impls
                     type = "FRIEND_REQUEST_SENT",
                     friendRequestId = friendRequest.Id,
                     senderId,
-                    senderName = sender?.DisplayName ?? sender?.Name,
+                    senderName = sender?.DisplayName ?? sender?.Username,
                     senderAvatar = sender?.AvatarUrl,
                     timestamp = DateTime.UtcNow
                 });
@@ -161,7 +161,7 @@ namespace Kpett.ChatApp.Services.Impls
                         type = "FRIEND_REQUEST_ACCEPTED",
                         friendRequestId = friendRequest.Id,
                         acceptedById = currentUserId,
-                        acceptedByName = receiver?.DisplayName ?? receiver?.Name,
+                        acceptedByName = receiver?.DisplayName ?? receiver?.Username,
                         acceptedByAvatar = receiver?.AvatarUrl,
                         timestamp = DateTime.UtcNow
                     });
@@ -256,7 +256,7 @@ namespace Kpett.ChatApp.Services.Impls
                     {
                         FriendRequestId = fr.Id,
                         SenderId = fr.SenderId,
-                        SenderName = u.DisplayName ?? u.Name ?? string.Empty,
+                        SenderName = u.DisplayName ?? u.Username ?? string.Empty,
                         SenderAvatar = u.AvatarUrl,
                         SenderEmail = u.Email,
                         Status = fr.Status,
@@ -276,7 +276,7 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 FriendRequestId = friendRequest.Id,
                 SenderId = friendRequest.SenderId,
-                SenderName = sender?.DisplayName ?? sender?.Name ?? string.Empty,
+                SenderName = sender?.DisplayName ?? sender?.Username ?? string.Empty,
                 SenderAvatar = sender?.AvatarUrl,
                 SenderEmail = sender?.Email,
                 Status = friendRequest.Status,

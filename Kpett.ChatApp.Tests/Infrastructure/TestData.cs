@@ -11,7 +11,7 @@ public static class TestData
         return new User
         {
             Id = id,
-            Name = id,
+            Username = id,
             Email = email,
             Password = BCrypt.Net.BCrypt.HashPassword("Password123!"),
             DisplayName = id,
