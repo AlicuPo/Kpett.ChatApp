@@ -229,7 +229,7 @@ namespace Kpett.ChatApp.Hubs
             try
             {
                 // Send message to database
-                await _messageService.SendMessageAsync(conversationId, userId, request, cancel);
+                var message = await _messageService.SendMessageAsync(conversationId, userId, request, cancel);
 
                 // Create message DTO for broadcast but DO NOT broadcast here manually
                 // _messageService.SendMessageAsync already handles broadcasting via RealtimeService
@@ -238,6 +238,7 @@ namespace Kpett.ChatApp.Hubs
                 await Clients.Caller.SendAsync("MessageSent", new
                 {
                     clientMessageId = request.ClientMessageId,
+                    messageId = message.Id,
                     success = true,
                     timestamp = DateTime.UtcNow
                 });

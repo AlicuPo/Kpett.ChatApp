@@ -6,7 +6,7 @@ namespace Kpett.ChatApp.Services.Interfaces
 {
     public interface IConversationService
     {
-        Task<List<ConversationResponse>> GetConversationList(string currentUserId, SearchRequest search, CancellationToken cancel);
-        Task<ConversationResponse> CreateConversaTion(string currentUserId, ConversationKeysRequest request, CancellationToken cancel);
+        Task<List<ConversationResponse>> GetConversationsAsync(string currentUserId, SearchRequest search, CancellationToken cancel);
+        Task<ConversationResponse> CreateConversationAsync(string currentUserId, ConversationKeysRequest request, CancellationToken cancel);
     }
 }

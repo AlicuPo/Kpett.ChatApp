@@ -1,16 +1,14 @@
 using Kpett.ChatApp.DTOs.Request.Conversation;
 using Kpett.ChatApp.DTOs.Request.Shared;
 using Kpett.ChatApp.DTOs.Response.Conversation;
-using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Kpett.ChatApp.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/conversations")]
     [ApiController]
     [Authorize]
     public class ConversationsController : ControllerBase
@@ -22,32 +20,20 @@ namespace Kpett.ChatApp.Controllers
             _conversation = conversation;
         }
 
-        [HttpPost("CreateConversations")]
-        public async Task<IActionResult> CreateConversation([FromBody] ConversationKeysRequest request, CancellationToken cancel)
+        [HttpPost]
+        public async Task<ActionResult<ConversationResponse>> CreateConversation([FromBody] ConversationKeysRequest request, CancellationToken cancel)
         {
             var currentUserId = User.GetRequiredUserId();
-            var conversation = await _conversation.CreateConversaTion(currentUserId, request, cancel);
-
-            return Ok(new GeneralResponse<ConversationResponse>
-            {
-                Data = conversation,
-                StatusCode = StatusCodes.Status200OK,
-                Message = "Tạo cuộc trò chuyện thành công",
-            });
+            var conversation = await _conversation.CreateConversationAsync(currentUserId, request, cancel);
+            return Created($"/api/conversations/{conversation.Id}", conversation);
         }
 
-        [HttpGet("GetConversationList")]
-        public async Task<IActionResult> GetConversationList([FromQuery] SearchRequest search, CancellationToken cancel)
+        [HttpGet]
+        public async Task<ActionResult<List<ConversationResponse>>> GetConversations([FromQuery] SearchRequest search, CancellationToken cancel)
         {
             var currentUserId = User.GetRequiredUserId();
-            var conversations = await _conversation.GetConversationList(currentUserId, search, cancel);
-
-            return Ok(new GeneralResponse<List<ConversationResponse>>
-            {
-                Data = conversations,
-                StatusCode = StatusCodes.Status200OK,
-                Message = "Lấy danh sách cuộc trò chuyện thành công",
-            });
+            var conversations = await _conversation.GetConversationsAsync(currentUserId, search, cancel);
+            return Ok(conversations);
         }
     }
 }

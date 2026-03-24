@@ -1,6 +1,6 @@
-﻿using CloudinaryDotNet;
-using CloudinaryDotNet.Actions;
-using dotenv.net;
+using CloudinaryDotNet;
+using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Middlewares;
@@ -9,27 +9,18 @@ using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Services.Impls;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using StackExchange.Redis;
-using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 
-
 var builder = WebApplication.CreateBuilder(args);
-
-/* =====================================================
- * 1. REGISTER SERVICES (TRƯỚC Build)
- * ===================================================== */
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// azdot env load
-//builder.WebHost.UseUrls("http://+:8080");
-
-// Đăng ký CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("ClientCors", policy =>
@@ -37,59 +28,48 @@ builder.Services.AddCors(options =>
         policy
             .WithOrigins(
                 "http://localhost:3000",
-                "http://localhost:5173"
-            )
+                "http://localhost:5173")
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
-            ;
     });
 });
 
-
-// Controllers
 builder.Services.AddControllers();
-
-// OpenAPI
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.SuppressModelStateInvalidFilter = true;
+});
 builder.Services.AddOpenApi();
-
-// HttpContext
 builder.Services.AddHttpContextAccessor();
-
-// SignalR
 builder.Services.AddSignalR();
 
-// Database
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("KpettChatAppDb")));
-// Redis
+
 var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
 if (string.IsNullOrEmpty(redisConnectionString))
 {
     throw new InvalidOperationException("Redis connection string is not configured.");
 }
 
-builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 {
     var configuration = ConfigurationOptions.Parse(redisConnectionString);
-    // Cho phép kết nối lại khi Redis sẵn sàng
     configuration.AbortOnConnectFail = false;
     return ConnectionMultiplexer.Connect(configuration);
 });
 
-// Set my Cloudinary credentials
 var account = new Account(
     builder.Configuration["CloudinarySettings:CloudName"],
     builder.Configuration["CloudinarySettings:ApiKey"],
     builder.Configuration["CloudinarySettings:ApiSecret"]);
-var cloudinary = new Cloudinary(account);
+builder.Services.AddSingleton(new Cloudinary(account));
 
-// JWT Authentication
 var jwtSection = builder.Configuration.GetSection("JwtSection");
 var issuer = jwtSection["Issuer"];
 var audience = jwtSection["Audience"];
-var KeyAccess = jwtSection["KeyAccess"];
-
+var keyAccess = jwtSection["KeyAccess"];
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -100,41 +80,55 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-
             ValidIssuer = issuer,
             ValidAudience = audience,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(KeyAccess!)
-            ),
-
-
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyAccess!)),
             ClockSkew = TimeSpan.Zero
         };
-
 
         options.Events = new JwtBearerEvents
         {
             OnTokenValidated = async context =>
             {
-                var redis = context.HttpContext.RequestServices
-                    .GetRequiredService<Kpett.ChatApp.Services.Interfaces.IRedisService>();
-
-                var jti = context.Principal!
-                    .Claims.First(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
+                var redis = context.HttpContext.RequestServices.GetRequiredService<IRedisService>();
+                var jti = context.Principal!.Claims.First(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
 
                 if (await redis.IsAccessTokenBlacklistedAsync(jti))
                 {
                     context.Fail("Token revoked");
                 }
             },
+            OnChallenge = async context =>
+            {
+                context.HandleResponse();
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
 
+                await context.Response.WriteAsJsonAsync(new ErrorResponse
+                {
+                    StatusCode = StatusCodes.Status401Unauthorized,
+                    ErrorCode = ErrorCodes.AUTH.UNAUTHORIZED,
+                    Message = "Unauthorized"
+                });
+            },
+            OnForbidden = async context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                context.Response.ContentType = "application/json";
+
+                await context.Response.WriteAsJsonAsync(new ErrorResponse
+                {
+                    StatusCode = StatusCodes.Status403Forbidden,
+                    ErrorCode = ErrorCodes.AUTH.FORBIDDEN,
+                    Message = "Forbidden"
+                });
+            },
             OnMessageReceived = context =>
             {
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
 
-                if (!string.IsNullOrEmpty(accessToken) &&
-                    path.StartsWithSegments("/chat-Hub"))
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/chat-Hub"))
                 {
                     context.Token = accessToken;
                 }
@@ -144,14 +138,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// Authorization
 builder.Services.AddAuthorization();
 
-// Application Services
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IRedisService, RedisService>();
-builder.Services.AddSingleton(cloudinary);
 builder.Services.AddScoped<ICloudinaryService, UploadFileService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
@@ -163,53 +154,32 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IFriendshipService, FriendshipServices>();
 builder.Services.AddScoped<IPostFeedService, PostFeedService>();
 
-// Global Exception Handler (ĐĂNG KÝ Ở ĐÂY)
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
-
-/* =====================================================
- * 2. BUILD APP (SAU KHI Add xong)
- * ===================================================== */
 
 var app = builder.Build();
 
 JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
-/* =====================================================
- * 3. MIDDLEWARE PIPELINE
- * ===================================================== */
 
-// Global Exception
 app.UseExceptionHandler();
-
-// HTTPS
 app.UseHttpsRedirection();
-
-// Routing
 app.UseRouting();
-
 app.UseCors("ClientCors");
-
-// Auth
 app.UseAuthentication();
 app.UseAuthorization();
-
-// Token blacklist validation (after auth, before endpoints)
 app.UseTokenBlacklistMiddleware();
 
-// OpenAPI (DEV only)
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Endpoints
 app.MapControllers();
 app.MapHub<ChatHub>("/chat-Hub").RequireCors("ClientCors");
 
-// Test exception
-//app.MapGet("/", () => { throw new Exception("Test error"); });
-//app.MapGet("/health", () => "OK");
-
-
 app.Run();
+
+public partial class Program
+{
+}

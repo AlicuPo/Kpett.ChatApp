@@ -1,6 +1,5 @@
-﻿using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Response.Friend;
-using Kpett.ChatApp.DTOs.Response.Message;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;
@@ -15,74 +14,63 @@ namespace Kpett.ChatApp.Services.Impls
     {
         private readonly AppDbContext _dbcontext;
         private readonly IRealtimeService _realtimeService;
-        private readonly INotificationService _notificationService;
 
-        public FriendshipServices(AppDbContext dbcontext, IRealtimeService realtimeService, INotificationService notificationService)
+        public FriendshipServices(AppDbContext dbcontext, IRealtimeService realtimeService)
         {
             _dbcontext = dbcontext;
             _realtimeService = realtimeService;
-            _notificationService = notificationService;
         }
 
-        /// <summary>
-        /// Send a friend request from senderId to receiverId
-        /// </summary>
-        public async Task RequestFriendRequestAsync(string senderId, string receiverId, CancellationToken cancel)
+        public async Task<FriendRequestDTO> CreateFriendRequestAsync(string senderId, string receiverId, CancellationToken cancel)
         {
-            // Validation
-            if (string.IsNullOrWhiteSpace(senderId)) 
+            if (string.IsNullOrWhiteSpace(senderId))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Sender ID cannot be empty");
 
             if (string.IsNullOrWhiteSpace(receiverId))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Receiver ID cannot be empty");
 
             if (senderId == receiverId)
-                throw new BadRequestException(ErrorCodes.FRIEND.SELF_REFERENCE,"You cannot send a friend request to yourself.");
+                throw new BadRequestException(ErrorCodes.FRIEND.SELF_REFERENCE, "You cannot send a friend request to yourself.");
 
             cancel.ThrowIfCancellationRequested();
 
-            // Check if users exist
-            var senderExists = await _dbcontext.Users.AnyAsync(_ => _.Id == senderId, cancel);
+            var senderExists = await _dbcontext.Users.AnyAsync(u => u.Id == senderId, cancel);
             if (!senderExists)
                 throw new NotFoundException(ErrorCodes.FRIEND.SENDER_NOT_FOUND, "Sender user not found");
 
-            var receiverExists = await _dbcontext.Users.AnyAsync(_ => _.Id == receiverId, cancel);
+            var receiverExists = await _dbcontext.Users.AnyAsync(u => u.Id == receiverId, cancel);
             if (!receiverExists)
                 throw new NotFoundException(ErrorCodes.FRIEND.RECEIVER_NOT_FOUND, "Receiver user not found");
 
-            // Check if either user is blocked
-            var isBlocked = await _dbcontext.Blocks.AnyAsync(_ =>
-                (_.BlockerId == senderId && _.BlockedId == receiverId) ||
-                (_.BlockerId == receiverId && _.BlockedId == senderId),
+            var isBlocked = await _dbcontext.Blocks.AnyAsync(b =>
+                (b.BlockerId == senderId && b.BlockedId == receiverId) ||
+                (b.BlockerId == receiverId && b.BlockedId == senderId),
                 cancel);
 
             if (isBlocked)
                 throw new ForbiddenException(ErrorCodes.FRIEND.BLOCKED_RELATIONSHIP, "Cannot send friend request due to block");
 
-            // Check if already friends
             var lowId = string.CompareOrdinal(senderId, receiverId) < 0 ? senderId : receiverId;
             var highId = string.CompareOrdinal(senderId, receiverId) < 0 ? receiverId : senderId;
 
-            var existingFriendship = await _dbcontext.Friendships.FirstOrDefaultAsync(_ =>
-                _.UserLowId == lowId &&
-                _.UserHighId == highId &&
-                _.Status == EnumHelper.GetDescription(FriendshipsEnums.Accepted),
+            var existingFriendship = await _dbcontext.Friendships.FirstOrDefaultAsync(f =>
+                f.UserLowId == lowId &&
+                f.UserHighId == highId &&
+                f.Status == EnumHelper.GetDescription(FriendshipsEnums.Accepted),
                 cancel);
 
             if (existingFriendship != null)
-                throw new BadRequestException(ErrorCodes.FRIEND.ALREADY_FRIENDS, "Already friends with this user");
+                throw new ConflictException(ErrorCodes.FRIEND.ALREADY_FRIENDS, "Already friends with this user");
 
-            // Check for existing pending request (in both directions)
-            var existingRequest = await _dbcontext.FriendRequests.FirstOrDefaultAsync(_ =>
-                (_.SenderId == senderId && _.ReceiverId == receiverId ||
-                 _.SenderId == receiverId && _.ReceiverId == senderId) &&
-                _.Status == EnumHelper.GetDescription(FriendshipsEnums.Pending),
+            var existingRequest = await _dbcontext.FriendRequests.FirstOrDefaultAsync(fr =>
+                ((fr.SenderId == senderId && fr.ReceiverId == receiverId) ||
+                 (fr.SenderId == receiverId && fr.ReceiverId == senderId)) &&
+                fr.Status == EnumHelper.GetDescription(FriendshipsEnums.Pending),
                 cancel);
 
             if (existingRequest != null)
                 throw new ConflictException(ErrorCodes.FRIEND.FRIEND_REQUEST_PENDING, "A friend request already exists between these users");
 
-            // Create new friend request
             var friendRequest = new FriendRequest
             {
                 Id = Guid.NewGuid().ToString(),
@@ -95,19 +83,14 @@ namespace Kpett.ChatApp.Services.Impls
             _dbcontext.FriendRequests.Add(friendRequest);
             await _dbcontext.SaveChangesAsync(cancel);
 
-            // Get sender info for notification
-            var sender = await _dbcontext.Users
-                .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Id == senderId, cancel);
-
-            // Send real-time notification
             try
             {
+                var sender = await _dbcontext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == senderId, cancel);
                 await _realtimeService.PublishAsync($"user:{receiverId}:notifications", new
                 {
                     type = "FRIEND_REQUEST_SENT",
                     friendRequestId = friendRequest.Id,
-                    senderId = senderId,
+                    senderId,
                     senderName = sender?.DisplayName ?? sender?.Name,
                     senderAvatar = sender?.AvatarUrl,
                     timestamp = DateTime.UtcNow
@@ -118,93 +101,68 @@ namespace Kpett.ChatApp.Services.Impls
                 Console.WriteLine($"Real-time notification failed: {ex.Message}");
             }
 
-            // Create push notification
-            try
-            {
-                var notificationDTO = new MessageDTO
-                {
-                    SenderId = senderId,
-                    Content = $"{sender?.DisplayName ?? sender?.Name} sent you a friend request"
-                };
-                await _notificationService.CreateMessageNotificationsAsync(receiverId, senderId, notificationDTO);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Notification creation failed: {ex.Message}");
-            }
+            return await MapFriendRequestAsync(friendRequest, cancel);
         }
 
-        /// <summary>
-        /// Accept a friend request
-        /// </summary>
-        public async Task AcceptFriendRequestAsync(string senderId, string receiverId, CancellationToken cancel)
+        public async Task<FriendRequestDTO> UpdateFriendRequestStatusAsync(string friendRequestId, string currentUserId, string status, CancellationToken cancel)
         {
-            // Validation
-            if (string.IsNullOrWhiteSpace(senderId) || string.IsNullOrWhiteSpace(receiverId))
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Sender ID and Receiver ID cannot be empty");
+            if (string.IsNullOrWhiteSpace(friendRequestId))
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Friend request ID cannot be empty");
+
+            if (string.IsNullOrWhiteSpace(currentUserId))
+                throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
+
+            if (string.IsNullOrWhiteSpace(status))
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Status cannot be empty");
 
             cancel.ThrowIfCancellationRequested();
 
-            using var transaction = await _dbcontext.Database.BeginTransactionAsync(cancel);
+            var normalizedStatus = status.Trim().ToLowerInvariant();
+            if (normalizedStatus != "accepted" && normalizedStatus != "rejected")
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Status must be either accepted or rejected.");
 
-            try
+            var friendRequest = await _dbcontext.FriendRequests.FirstOrDefaultAsync(fr => fr.Id == friendRequestId, cancel);
+            if (friendRequest == null)
+                throw new NotFoundException(ErrorCodes.FRIEND.FRIEND_REQUEST_NOT_FOUND, "Friend request not found");
+
+            if (friendRequest.ReceiverId != currentUserId)
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "Only the receiver can update this friend request.");
+
+            if (friendRequest.Status != EnumHelper.GetDescription(FriendshipsEnums.Pending))
+                throw new ConflictException(ErrorCodes.FRIEND.REQUEST_NOT_FOUND_OR_PROCESSED, "Friend request not found or already processed");
+
+            if (normalizedStatus == "accepted")
             {
-                // Find the pending friend request
-                var friendRequest = await _dbcontext.FriendRequests.FirstOrDefaultAsync(_ =>
-                    _.SenderId == senderId &&
-                    _.ReceiverId == receiverId &&
-                    _.Status == EnumHelper.GetDescription(FriendshipsEnums.Pending),
-                    cancel);
+                var lowId = string.CompareOrdinal(friendRequest.SenderId, friendRequest.ReceiverId) < 0
+                    ? friendRequest.SenderId
+                    : friendRequest.ReceiverId;
+                var highId = string.CompareOrdinal(friendRequest.SenderId, friendRequest.ReceiverId) < 0
+                    ? friendRequest.ReceiverId
+                    : friendRequest.SenderId;
 
-                if (friendRequest == null)
-                    throw new NotFoundException(ErrorCodes.FRIEND.REQUEST_NOT_FOUND_OR_PROCESSED, "Friend request not found or already processed");
-
-                // Create friendship
-                var lowId = string.CompareOrdinal(senderId, receiverId) < 0 ? senderId : receiverId;
-                var highId = string.CompareOrdinal(senderId, receiverId) < 0 ? receiverId : senderId;
-
-                var friendship = new Friendship
+                _dbcontext.Friendships.Add(new Friendship
                 {
                     UserLowId = lowId,
                     UserHighId = highId,
                     Status = EnumHelper.GetDescription(FriendshipsEnums.Accepted),
-                    ActionUserId = receiverId,
+                    ActionUserId = currentUserId,
                     CreatedAt = DateTime.UtcNow
-                };
+                });
 
-                _dbcontext.Friendships.Add(friendship);
-
-                // Update friend request status
                 friendRequest.Status = EnumHelper.GetDescription(FriendshipsEnums.Accepted);
                 friendRequest.UpdatedAt = DateTime.UtcNow;
-                _dbcontext.FriendRequests.Update(friendRequest);
-
                 await _dbcontext.SaveChangesAsync(cancel);
-                await transaction.CommitAsync(cancel);
 
-                // Get receiver info for notification
-                var receiver = await _dbcontext.Users
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(u => u.Id == receiverId, cancel);
-
-                // Send real-time notification to both users
                 try
                 {
-                    await _realtimeService.PublishAsync($"user:{senderId}:notifications", new
+                    var receiver = await _dbcontext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == currentUserId, cancel);
+                    await _realtimeService.PublishAsync($"user:{friendRequest.SenderId}:notifications", new
                     {
                         type = "FRIEND_REQUEST_ACCEPTED",
-                        friendshipId = $"{lowId}:{highId}",
-                        acceptedById = receiverId,
+                        friendRequestId = friendRequest.Id,
+                        acceptedById = currentUserId,
                         acceptedByName = receiver?.DisplayName ?? receiver?.Name,
                         acceptedByAvatar = receiver?.AvatarUrl,
-                        timestamp = DateTime.UtcNow
-                    });
-
-                    // Notify the acceptor
-                    await _realtimeService.PublishAsync($"user:{receiverId}:notifications", new
-                    {
-                        type = "FRIEND_REQUEST_ACCEPTED_CONFIRMATION",
-                        friendshipId = $"{lowId}:{highId}",
                         timestamp = DateTime.UtcNow
                     });
                 }
@@ -212,104 +170,63 @@ namespace Kpett.ChatApp.Services.Impls
                 {
                     Console.WriteLine($"Real-time notification failed: {ex.Message}");
                 }
+            }
+            else
+            {
+                friendRequest.Status = EnumHelper.GetDescription(FriendshipsEnums.Rejected);
+                friendRequest.UpdatedAt = DateTime.UtcNow;
+                await _dbcontext.SaveChangesAsync(cancel);
 
-                // Create notification
                 try
                 {
-                    var notificationDTO = new MessageDTO
+                    await _realtimeService.PublishAsync($"user:{friendRequest.SenderId}:notifications", new
                     {
-                        SenderId = receiverId,
-                        Content = $"{receiver?.DisplayName ?? receiver?.Name} accepted your friend request"
-                    };
-                    await _notificationService.CreateMessageNotificationsAsync(senderId, receiverId, notificationDTO);
+                        type = "FRIEND_REQUEST_REJECTED",
+                        friendRequestId = friendRequest.Id,
+                        rejectedById = currentUserId,
+                        timestamp = DateTime.UtcNow
+                    });
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Notification creation failed: {ex.Message}");
+                    Console.WriteLine($"Real-time notification failed: {ex.Message}");
                 }
             }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync(cancel);
-                throw;
-            }
+
+            return await MapFriendRequestAsync(friendRequest, cancel);
         }
 
-        /// <summary>
-        /// Reject a friend request
-        /// </summary>
-        public async Task RejectFriendRequestAsync(string senderId, string receiverId, CancellationToken cancel)
+        public async Task CancelFriendRequestAsync(string friendRequestId, string currentUserId, CancellationToken cancel)
         {
-            if (string.IsNullOrWhiteSpace(senderId) || string.IsNullOrWhiteSpace(receiverId))
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Sender ID and Receiver ID cannot be empty");
+            if (string.IsNullOrWhiteSpace(friendRequestId))
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Friend request ID cannot be empty");
+
+            if (string.IsNullOrWhiteSpace(currentUserId))
+                throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
 
             cancel.ThrowIfCancellationRequested();
 
-            var friendRequest = await _dbcontext.FriendRequests.FirstOrDefaultAsync(_ =>
-                _.SenderId == senderId &&
-                _.ReceiverId == receiverId &&
-                _.Status == EnumHelper.GetDescription(FriendshipsEnums.Pending),
-                cancel);
-
+            var friendRequest = await _dbcontext.FriendRequests.FirstOrDefaultAsync(fr => fr.Id == friendRequestId, cancel);
             if (friendRequest == null)
                 throw new NotFoundException(ErrorCodes.FRIEND.FRIEND_REQUEST_NOT_FOUND, "Friend request not found");
 
-            // Update status to rejected
-            friendRequest.Status = EnumHelper.GetDescription(FriendshipsEnums.Rejected);
-            friendRequest.UpdatedAt = DateTime.UtcNow;
-            _dbcontext.FriendRequests.Update(friendRequest);
+            if (friendRequest.SenderId != currentUserId)
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "Only the sender can cancel this friend request.");
 
-            await _dbcontext.SaveChangesAsync(cancel);
+            if (friendRequest.Status != EnumHelper.GetDescription(FriendshipsEnums.Pending))
+                throw new ConflictException(ErrorCodes.FRIEND.REQUEST_NOT_FOUND_OR_PROCESSED, "Friend request not found or already processed");
 
-            // Send real-time notification
-            try
-            {
-                await _realtimeService.PublishAsync($"user:{senderId}:notifications", new
-                {
-                    type = "FRIEND_REQUEST_REJECTED",
-                    rejectedById = receiverId,
-                    timestamp = DateTime.UtcNow
-                });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Real-time notification failed: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Cancel a sent friend request
-        /// </summary>
-        public async Task CancelFriendRequestAsync(string senderId, string receiverId, CancellationToken cancel)
-        {
-            if (string.IsNullOrWhiteSpace(senderId) || string.IsNullOrWhiteSpace(receiverId))
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Sender ID and Receiver ID cannot be empty");
-
-            cancel.ThrowIfCancellationRequested();
-
-            var friendRequest = await _dbcontext.FriendRequests.FirstOrDefaultAsync(_ =>
-                _.SenderId == senderId &&
-                _.ReceiverId == receiverId &&
-                _.Status == EnumHelper.GetDescription(FriendshipsEnums.Pending),
-                cancel);
-
-            if (friendRequest == null)
-                throw new NotFoundException(ErrorCodes.FRIEND.FRIEND_REQUEST_NOT_FOUND, "Friend request not found");
-
-            // Update status to cancelled
             friendRequest.Status = EnumHelper.GetDescription(FriendshipsEnums.Cancelled);
             friendRequest.UpdatedAt = DateTime.UtcNow;
-            _dbcontext.FriendRequests.Update(friendRequest);
-
             await _dbcontext.SaveChangesAsync(cancel);
 
-            // Send real-time notification
             try
             {
-                await _realtimeService.PublishAsync($"user:{receiverId}:notifications", new
+                await _realtimeService.PublishAsync($"user:{friendRequest.ReceiverId}:notifications", new
                 {
                     type = "FRIEND_REQUEST_CANCELLED",
-                    cancelledById = senderId,
+                    friendRequestId = friendRequest.Id,
+                    cancelledById = currentUserId,
                     timestamp = DateTime.UtcNow
                 });
             }
@@ -319,9 +236,6 @@ namespace Kpett.ChatApp.Services.Impls
             }
         }
 
-        /// <summary>
-        /// Get all pending friend requests for a user
-        /// </summary>
         public async Task<List<FriendRequestDTO>> GetPendingFriendRequestsAsync(string userId, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(userId))
@@ -329,31 +243,45 @@ namespace Kpett.ChatApp.Services.Impls
 
             cancel.ThrowIfCancellationRequested();
 
-            var requests = await _dbcontext.FriendRequests
+            return await _dbcontext.FriendRequests
                 .AsNoTracking()
                 .Where(fr =>
                     fr.ReceiverId == userId &&
                     fr.Status == EnumHelper.GetDescription(FriendshipsEnums.Pending))
                 .Join(
-                    _dbcontext.Users,
+                    _dbcontext.Users.AsNoTracking(),
                     fr => fr.SenderId,
                     u => u.Id,
                     (fr, u) => new FriendRequestDTO
                     {
                         FriendRequestId = fr.Id,
                         SenderId = fr.SenderId,
-                        SenderName = u.DisplayName ?? u.Name,
+                        SenderName = u.DisplayName ?? u.Name ?? string.Empty,
                         SenderAvatar = u.AvatarUrl,
                         SenderEmail = u.Email,
                         Status = fr.Status,
                         CreatedAt = fr.CreatedAt
-                    }
-                )
+                    })
                 .OrderByDescending(x => x.CreatedAt)
                 .ToListAsync(cancel);
+        }
 
-            return requests;
+        private async Task<FriendRequestDTO> MapFriendRequestAsync(FriendRequest friendRequest, CancellationToken cancel)
+        {
+            var sender = await _dbcontext.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == friendRequest.SenderId, cancel);
+
+            return new FriendRequestDTO
+            {
+                FriendRequestId = friendRequest.Id,
+                SenderId = friendRequest.SenderId,
+                SenderName = sender?.DisplayName ?? sender?.Name ?? string.Empty,
+                SenderAvatar = sender?.AvatarUrl,
+                SenderEmail = sender?.Email,
+                Status = friendRequest.Status,
+                CreatedAt = friendRequest.CreatedAt
+            };
         }
     }
-
 }

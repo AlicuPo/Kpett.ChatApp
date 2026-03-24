@@ -53,47 +53,19 @@ namespace Kpett.ChatApp.Services.Impls
                     Content = d.Content,
                     Metadata = m.Metadata,
                     CreatedAt = m.CreatedAt
-                }
-            )
-            .Take(pageSize)
-            .ToListAsync(cancel);
-
-            long? oldestMessageId = messages.Any()
-                ? messages.Min(x => x.Id)
-                : null;
+                })
+                .Take(pageSize)
+                .ToListAsync(cancel);
 
             return new MessagePageResult
             {
                 Messages = messages,
-                OldestMessageId = oldestMessageId,
+                OldestMessageId = messages.Any() ? messages.Min(x => x.Id) : null,
                 HasMore = messages.Count == pageSize
             };
         }
 
-        public async Task MarkAsRead(string conversationId, string currentUserId, ReadMessageRequest request, CancellationToken cancel)
-        {
-            await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, currentUserId, cancel);
-
-            var participant = await _dbcontext.ConversationParticipants
-                .FirstOrDefaultAsync(p => p.ConversationId == conversationId && p.UserId == currentUserId, cancel);
-
-            if (participant == null)
-                throw new ForbiddenException(ErrorCodes.CONVERSATION.USER_NOT_IN_CONVERSATION, "User is not a participant of this conversation.");
-
-            if (request.LastReadMessageId > (participant.LastReadMessageId ?? 0))
-            {
-                var messageExists = await _dbcontext.Messages
-                    .AnyAsync(m => m.Id == request.LastReadMessageId && m.ConversationId == conversationId, cancel);
-
-                if (!messageExists)
-                    throw new ConflictException(ErrorCodes.CONVERSATION.INVALID_MESSAGE, "Invalid Message ID for this conversation.");
-
-                participant.LastReadMessageId = request.LastReadMessageId;
-                await _dbcontext.SaveChangesAsync(cancel);
-            }
-        }
-
-        public async Task SendMessageAsync(string conversationId, string senderId, SendMessageRequest request, CancellationToken cancel)
+        public async Task<MessageDTO> SendMessageAsync(string conversationId, string senderId, SendMessageRequest request, CancellationToken cancel)
         {
             await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, senderId, cancel);
 
@@ -114,17 +86,15 @@ namespace Kpett.ChatApp.Services.Impls
             _dbcontext.Messages.Add(message);
             await _dbcontext.SaveChangesAsync(cancel);
 
-            var messageDetail = new MessageDetail
+            _dbcontext.MessageDetails.Add(new MessageDetail
             {
                 MessageId = message.Id,
                 Content = request.Content,
                 Color = request.Color
-            };
-
-            _dbcontext.MessageDetails.Add(messageDetail);
+            });
             await _dbcontext.SaveChangesAsync(cancel);
 
-            var messageDTO = new MessageDTO
+            var messageDto = new MessageDTO
             {
                 Id = message.Id,
                 SenderId = senderId,
@@ -142,7 +112,7 @@ namespace Kpett.ChatApp.Services.Impls
                     new
                     {
                         conversationId,
-                        message = messageDTO,
+                        message = messageDto,
                         timestamp = DateTime.UtcNow
                     });
             }
@@ -153,24 +123,44 @@ namespace Kpett.ChatApp.Services.Impls
 
             try
             {
-                await _notificationService.CreateMessageNotificationsAsync(conversationId, senderId, messageDTO);
+                await _notificationService.CreateMessageNotificationsAsync(conversationId, senderId, messageDto);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Notification creation failed: {ex.Message}");
             }
+
+            return messageDto;
         }
 
-        public async Task MarkAsReadAsync(string conversationId, string userId, long lastReadMessageId, CancellationToken cancel)
+        public async Task MarkAsReadAsync(string conversationId, string currentUserId, ReadMessageRequest request, CancellationToken cancel)
         {
-            await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, userId, cancel);
+            if (request == null)
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Read message request is required.");
+
+            await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, currentUserId, cancel);
 
             var participant = await _dbcontext.ConversationParticipants
-                .FirstAsync(x => x.ConversationId == conversationId && x.UserId == userId, cancel);
+                .FirstOrDefaultAsync(p => p.ConversationId == conversationId && p.UserId == currentUserId, cancel);
 
-            participant.LastReadMessageId = lastReadMessageId;
-            participant.LastReadAt = DateTime.UtcNow;
+            if (participant == null)
+                throw new ForbiddenException(ErrorCodes.CONVERSATION.USER_NOT_IN_CONVERSATION, "User is not a participant of this conversation.");
 
+            if (request.LastReadMessageId <= (participant.LastReadMessageId ?? 0))
+            {
+                participant.LastReadAt = request.ReadAt ?? DateTime.UtcNow;
+                await _dbcontext.SaveChangesAsync(cancel);
+                return;
+            }
+
+            var messageExists = await _dbcontext.Messages
+                .AnyAsync(m => m.Id == request.LastReadMessageId && m.ConversationId == conversationId, cancel);
+
+            if (!messageExists)
+                throw new ConflictException(ErrorCodes.CONVERSATION.INVALID_MESSAGE, "Invalid Message ID for this conversation.");
+
+            participant.LastReadMessageId = request.LastReadMessageId;
+            participant.LastReadAt = request.ReadAt ?? DateTime.UtcNow;
             await _dbcontext.SaveChangesAsync(cancel);
         }
     }
