@@ -1,4 +1,4 @@
-namespace Kpett.ChatApp.DTOs
+namespace Kpett.ChatApp.DTOs.Response.Post
 {
     public class PostResponseDTO
     {

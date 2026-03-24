@@ -1,6 +1,8 @@
 ﻿using Kpett.ChatApp.Contants;
-using Kpett.ChatApp.DTOs.Request;
+using Kpett.ChatApp.DTOs.Request.Auth;
 using Kpett.ChatApp.DTOs.Response;
+using Kpett.ChatApp.DTOs.Response.Auth;
+using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;
@@ -15,13 +17,13 @@ public class AuthService : IAuthService
 {
     private readonly ICloudinaryService _cloudinary;
 
-    private readonly AppDbContext _dbcontext;
+    private readonly AppDbContext _dbContext;
     private readonly IRedisService _redis;
     private readonly IJwtService _token;
 
     public AuthService(AppDbContext context, IJwtService token, IRedisService redis, ICloudinaryService cloudinary)
     {
-        _dbcontext = context;
+        _dbContext = context;
         _token = token;
         _redis = redis;
         _cloudinary = cloudinary;
@@ -29,18 +31,27 @@ public class AuthService : IAuthService
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancel = default)
     {
-        if (string.IsNullOrEmpty(request.UsernameOrEmail))
+        if (string.IsNullOrEmpty(request.Email))
         {
-            throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Username not empty");
+            throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Email not empty");
         }
 
-        var user = await _dbcontext.Users
-            .FirstOrDefaultAsync(x =>
-                x.Email == request.UsernameOrEmail || x.Name == request.UsernameOrEmail);
+        var user = await _dbContext.Users
+            .Select(u => new
+            {
+                Id = u.Id,
+                Username = u.Name,
+                Email = u.Email,
+                DisplayName = u.DisplayName,
+                AvatarUrl = u.AvatarUrl,
+                Password = u.Password,
+                IsActive = u.IsActive
+            })
+            .FirstOrDefaultAsync(x => x.Email == request.Email);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.Password))
         {
-            throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "The account not found");
+            throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "Wrong email or password");
         }
 
         if (!user.IsActive)
@@ -48,46 +59,48 @@ public class AuthService : IAuthService
             throw new ForbiddenException(ErrorCodes.USER.INACTIVE, "User inactive");
         }
 
-        var status = UserStatusEnums.Online.GetDescription();
-        user.Status = status;
-        await _dbcontext.SaveChangesAsync(cancel);
-
-        await _redis.RemoveRefreshTokenAsync(user.Id);
-
         // Tạo JWT Token
-        var accessToken = _token.GenerateAccessToken(user.Id, user.Name, user.Email, user.DisplayName);
-        var refreshToken = _token.GenerateRefreshToken(user.Id, user.Name, user.Email);
-        await _redis.SaveRefreshTokenAsync(user.Id, refreshToken, TimeSpan.FromDays(30));
+        var accessToken = _token.GenerateAccessToken(user.Id, user.Username, user.Email, user.DisplayName);
+        var refreshToken = _token.GenerateRefreshToken(user.Id, user.Username, user.Email);
 
-        return new LoginResponse
+        var userRes = new UserResponse()
+        {
+            Id = user.Id,
+            Username = user.Username,
+            Email = user.Email,
+            DisplayName = user.DisplayName,
+            AvatarUrl = user.AvatarUrl,
+            isProfileCompleted = !string.IsNullOrEmpty(user.DisplayName) && !string.IsNullOrEmpty(user.Username),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var tokenRes = new TokenResponse()
         {
             AccessToken = accessToken,
             RefreshToken = refreshToken,
-            ExpiresIn = 30 * 60,
-            IssuedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(30),
-            DisplayName = user.DisplayName,
-            AvatarUrl = user.AvatarUrl
+            TokenType = "Bearer"
+        };
+
+        return new LoginResponse
+        {
+            User = userRes,
+            Token = tokenRes
         };
     }
-
 
     public async Task<int> RegisterAsync(RegisterRequest request, CancellationToken cancel = default)
     {
         cancel.ThrowIfCancellationRequested();
 
-        var existingUser =
-            await _dbcontext.Users.FirstOrDefaultAsync(x => x.Email == request.Email || x.Name == request.Username);
+        ValidateAuthRequest(request);
 
-        if (existingUser != null)
+        var existingUserByEmail =
+            await _dbContext.Users.AnyAsync(x => x.Email == request.Email);
+        if (existingUserByEmail)
         {
-            throw new ConflictException(ErrorCodes.USER.ALREADY_EXISTS, "Username or Email really existing");
+            throw new ConflictException(ErrorCodes.USER.ALREADY_EXISTS_BY_EMAIL, "Email really existing");
         }
 
-        if (string.IsNullOrEmpty(request.Password) || string.IsNullOrEmpty(request.Username))
-        {
-            throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Username and Password is required");
-        }
         var hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
         var avatarUrl = string.Empty;
@@ -97,31 +110,35 @@ public class AuthService : IAuthService
         var newUser = new User
         {
             Id = _id,
-            Name = request.Username ?? string.Empty,
             Password = hashedPassword,
             Email = request.Email,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             Status = UserStatusEnums.Offline.GetDescription()
         };
-        _dbcontext.Users.Add(newUser);
-        var result = await _dbcontext.SaveChangesAsync(cancel);
+        _dbContext.Users.Add(newUser);
+        var result = await _dbContext.SaveChangesAsync(cancel);
         return result;
     }
 
     public async Task<bool> LogoutAsync(string userId, CancellationToken cancel = default)
     {
-        // Xoá refresh token trong Redis
-        await _redis.RemoveRefreshTokenAsync(userId);
-
-        // Cập nhật trạng thái user trong DB
-        var user = await _dbcontext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancel);
+        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancel);
         if (user != null)
         {
             user.Status = UserStatusEnums.Offline.GetDescription();
-            await _dbcontext.SaveChangesAsync(cancel);
+            await _dbContext.SaveChangesAsync(cancel);
         }
 
         return true;
     }
+
+    private void ValidateAuthRequest(RegisterRequest request)
+    {
+        if (string.IsNullOrEmpty(request.Password) || string.IsNullOrEmpty(request.Email))
+        {
+            throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Password or Email is required");
+        }
+    }
+
 }

@@ -1,4 +1,4 @@
-﻿namespace Kpett.ChatApp.DTOs.Request
+﻿namespace Kpett.ChatApp.DTOs.Request.Shared
 {
     public class SearchRequest
     {

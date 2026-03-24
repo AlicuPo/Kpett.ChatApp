@@ -1,7 +1,6 @@
-﻿using Kpett.ChatApp.DTOs.Request;
-using Kpett.ChatApp.DTOs.Response;
+﻿using Kpett.ChatApp.DTOs.Response;
 
-namespace Kpett.ChatApp.DTOs.Request
+namespace Kpett.ChatApp.DTOs.Request.Conversation
 {
     public class ConversationsRequest
     {

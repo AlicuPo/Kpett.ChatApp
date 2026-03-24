@@ -1,4 +1,6 @@
-﻿namespace Kpett.ChatApp.DTOs.Response
+﻿using Kpett.ChatApp.DTOs.Response.Message;
+
+namespace Kpett.ChatApp.DTOs.Response.Conversation
 {
     public class ConversationResponse
     {

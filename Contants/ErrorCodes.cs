@@ -6,6 +6,8 @@
         {
             public const string NOT_FOUND = "USER.NOT_FOUND";
             public const string ALREADY_EXISTS = "USER.ALREADY_EXISTS";
+            public const string ALREADY_EXISTS_BY_EMAIL = "USER.ALREADY_EXISTS_BY_EMAIL";
+            public const string ALREADY_EXISTS_BY_USERNAME = "USER.ALREADY_EXISTS_BY_USERNAME";
             public const string INACTIVE = "USER.INACTIVE";
         }
 

@@ -1,5 +1,6 @@
 ﻿using Kpett.ChatApp.Contants;
-using Kpett.ChatApp.DTOs;
+using Kpett.ChatApp.DTOs.Response.Friend;
+using Kpett.ChatApp.DTOs.Response.Message;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;

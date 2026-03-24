@@ -1,5 +1,5 @@
-using Kpett.ChatApp.DTOs.Request;
-using Kpett.ChatApp.DTOs.Response;
+using Kpett.ChatApp.DTOs.Request.User;
+using Kpett.ChatApp.DTOs.Response.User;
 
 namespace Kpett.ChatApp.Services.Interfaces
 {

@@ -1,6 +1,6 @@
 using Kpett.ChatApp.Contants;
-using Kpett.ChatApp.DTOs;
-using Kpett.ChatApp.DTOs.Request;
+using Kpett.ChatApp.DTOs.Request.Message;
+using Kpett.ChatApp.DTOs.Response.Message;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;

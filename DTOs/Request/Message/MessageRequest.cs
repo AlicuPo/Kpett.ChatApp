@@ -1,4 +1,4 @@
-﻿namespace Kpett.ChatApp.DTOs.Request
+﻿namespace Kpett.ChatApp.DTOs.Request.Message
 {
     public class MessageRequest
     {

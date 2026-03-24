@@ -1,8 +1,9 @@
 ﻿using Azure.Core;
 using CloudinaryDotNet;
 using Kpett.ChatApp.Contants;
-using Kpett.ChatApp.DTOs;
-using Kpett.ChatApp.DTOs.Request;
+using Kpett.ChatApp.DTOs.Request.Post;
+using Kpett.ChatApp.DTOs.Request.Shared;
+using Kpett.ChatApp.DTOs.Response.Post;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;

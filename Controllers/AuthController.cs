@@ -1,5 +1,7 @@
-﻿using Kpett.ChatApp.DTOs.Request;
+﻿using Kpett.ChatApp.DTOs.Request.Auth;
 using Kpett.ChatApp.DTOs.Response;
+using Kpett.ChatApp.DTOs.Response.Auth;
+using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -20,11 +22,11 @@ namespace Kpett.ChatApp.Controllers
     {
         private readonly IJwtService _token;
         private readonly IRedisService _redis;
-        private readonly IAuthService _loginRepository;
+        private readonly IAuthService _authService;
         private readonly AppDbContext _dbContext;
         public AuthController(IAuthService loginRepository, IRedisService redis, IJwtService token, AppDbContext dbContext)
         {
-            _loginRepository = loginRepository;
+            _authService = loginRepository;
             _redis = redis;
             _token = token;
             _dbContext = dbContext;
@@ -34,13 +36,13 @@ namespace Kpett.ChatApp.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
-            var result = await _loginRepository.LoginAsync(request);
+            var result = await _authService.LoginAsync(request);
             return Ok(new GeneralResponse<LoginResponse>
             {
                 StatusCode = 200,
                 IsSuccess = true,
                 Data = result,
-                Message = "Đăng nhập thành công."
+                Message = "Login successfully."
             });
         }
 
@@ -48,12 +50,12 @@ namespace Kpett.ChatApp.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancel = default)
         {
-            var result = await _loginRepository.RegisterAsync(request, cancel);
-            return Ok(new
+            var result = await _authService.RegisterAsync(request, cancel);
+            return Ok(new GeneralResponse()
             {
-                Return = true,
-                message = "Đăng ký tài khoản thành công.",
-                StatusCode = StatusCode(StatusCodes.Status201Created)
+                IsSuccess = true,
+                Message = "Register successfully.",
+                StatusCode = StatusCodes.Status201Created
             });
         }
 
@@ -84,7 +86,7 @@ namespace Kpett.ChatApp.Controllers
                 await _redis.RemoveRefreshTokenAsync(userId);
             }
 
-            var result = await _loginRepository.LogoutAsync(userId, cancel);
+            var result = await _authService.LogoutAsync(userId, cancel);
             if (result)
             {
                 return Ok(new GeneralResponse
@@ -182,9 +184,6 @@ namespace Kpett.ChatApp.Controllers
             {
                 AccessToken = newAccessToken,
                 RefreshToken = newRefreshToken,
-                ExpiresIn = 30 * 60,
-                IssuedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddMinutes(30)
             };
 
             return Ok(new GeneralResponse<TokenResponse>
