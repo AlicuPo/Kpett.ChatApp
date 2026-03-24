@@ -1,13 +1,13 @@
 using Kpett.ChatApp.DTOs.Request.Message;
+using Kpett.ChatApp.DTOs.Response.Message;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Kpett.ChatApp.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/conversations/{conversationId}")]
     [ApiController]
     [Authorize]
     public class MessagesController : ControllerBase
@@ -19,73 +19,35 @@ namespace Kpett.ChatApp.Controllers
             _message = message;
         }
 
-        [HttpPost("GetMessages")]
-        public async Task<IActionResult> GetMessages(string conversationId, long? cursorMessageId, int pageSize, CancellationToken cancel)
+        [HttpGet("messages")]
+        public async Task<ActionResult<MessagePageResult>> GetMessages(
+            string conversationId,
+            [FromQuery] long? cursorMessageId,
+            [FromQuery] int pageSize = 40,
+            CancellationToken cancel = default)
         {
             var currentUserId = User.GetRequiredUserId();
             var result = await _message.GetMessagesAsync(conversationId, currentUserId, cursorMessageId, pageSize, cancel);
-
-            return Ok(new
-            {
-                StatusCode = StatusCodes.Status200OK,
-                Messages = result.Messages,
-                OldestMessageId = result.OldestMessageId,
-                HasMore = result.HasMore,
-            });
+            return Ok(result);
         }
 
-        [HttpPost("MarkAsRead/{id}")]
-        public async Task<IActionResult> MarkAsRead(string id, [FromBody] ReadMessageRequest request, CancellationToken cancel)
-        {
-            var currentUserId = User.GetRequiredUserId();
-            await _message.MarkAsRead(id, currentUserId, request, cancel);
-
-            return Ok(new
-            {
-                StatusCode = StatusCodes.Status200OK,
-                Message = "Messages marked as read successfully."
-            });
-        }
-
-        [HttpPost("SendMessage")]
-        public async Task<IActionResult> SendMessageAsync(string conversationId, [FromBody] SendMessageRequest request, CancellationToken cancel)
+        [HttpPost("messages")]
+        public async Task<ActionResult<MessageDTO>> SendMessage(
+            string conversationId,
+            [FromBody] SendMessageRequest request,
+            CancellationToken cancel)
         {
             var senderId = User.GetRequiredUserId();
-            await _message.SendMessageAsync(conversationId, senderId, request, cancel);
-
-            return Ok(new
-            {
-                StatusCode = StatusCodes.Status200OK,
-                Message = "gửi tin nhắn thành công"
-            });
+            var result = await _message.SendMessageAsync(conversationId, senderId, request, cancel);
+            return Created($"/api/conversations/{conversationId}/messages/{result.Id}", result);
         }
 
-        [HttpPost("GetMessagesAsync")]
-        public async Task<IActionResult> GetMessagesAsync(string conversationId, [FromBody] long? cursorMessageId, [FromQuery] int pageSize, CancellationToken cancel)
+        [HttpPut("participants/me/read-state")]
+        public async Task<IActionResult> MarkAsRead(string conversationId, [FromBody] ReadMessageRequest request, CancellationToken cancel)
         {
             var currentUserId = User.GetRequiredUserId();
-            var result = await _message.GetMessagesAsync(conversationId, currentUserId, cursorMessageId, pageSize, cancel);
-
-            return Ok(new
-            {
-                StatusCode = StatusCodes.Status200OK,
-                Messages = result.Messages,
-                OldestMessageId = result.OldestMessageId,
-                HasMore = result.HasMore
-            });
-        }
-
-        [HttpPost("MarkAsReadAsync/{conversationId}")]
-        public async Task<IActionResult> MarkAsReadAsync(string conversationId, [FromBody] long request, CancellationToken cancel)
-        {
-            var userId = User.GetRequiredUserId();
-            await _message.MarkAsReadAsync(conversationId, userId, request, cancel);
-
-            return Ok(new
-            {
-                StatusCode = StatusCodes.Status200OK,
-                Message = "Messages marked as read successfully."
-            });
+            await _message.MarkAsReadAsync(conversationId, currentUserId, request, cancel);
+            return NoContent();
         }
     }
 }

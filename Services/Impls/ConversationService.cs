@@ -1,5 +1,4 @@
 using Kpett.ChatApp.Contants;
-using Kpett.ChatApp.DTOs;
 using Kpett.ChatApp.DTOs.Request.Conversation;
 using Kpett.ChatApp.DTOs.Request.Shared;
 using Kpett.ChatApp.DTOs.Response.Conversation;
@@ -20,7 +19,7 @@ namespace Kpett.ChatApp.Services.Impls
             _dbcontext = dbContext;
         }
 
-        public async Task<ConversationResponse> CreateConversaTion(string currentUserId, ConversationKeysRequest request, CancellationToken cancel)
+        public async Task<ConversationResponse> CreateConversationAsync(string currentUserId, ConversationKeysRequest request, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(currentUserId))
                 throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
@@ -51,57 +50,55 @@ namespace Kpett.ChatApp.Services.Impls
             var userHigh = string.CompareOrdinal(request.UserLow, request.UserHigh) < 0 ? request.UserHigh : request.UserLow;
 
             var conversationId = Guid.NewGuid().ToString();
-            var newconversation = new Conversation
+            var newConversation = new Conversation
             {
                 Id = conversationId,
                 Name = request.Name,
                 AvatarUrl = request.AvatarUrl,
                 Type = request.Type,
-                LastMessageAt = DateTime.UtcNow,
+                LastMessageAt = DateTime.UtcNow
             };
 
-            await _dbcontext.Conversations.AddAsync(newconversation, cancel);
-
-            var newconversationKeys = new ConversationKey
+            await _dbcontext.Conversations.AddAsync(newConversation, cancel);
+            await _dbcontext.ConversationKeys.AddAsync(new ConversationKey
             {
                 Id = Guid.NewGuid().ToString(),
-                ConversationId = newconversation.Id,
+                ConversationId = newConversation.Id,
                 UserLowId = userLow,
                 UserHighId = userHigh
-            };
-            await _dbcontext.ConversationKeys.AddAsync(newconversationKeys, cancel);
+            }, cancel);
 
-            var participantLow = new ConversationParticipant
-            {
-                Id = Guid.NewGuid().ToString(),
-                ConversationId = newconversation.Id,
-                UserId = userLow,
-                JoinedAt = DateTime.UtcNow,
-                LastReadAt = DateTime.UtcNow
-            };
-            var participantHigh = new ConversationParticipant
-            {
-                Id = Guid.NewGuid().ToString(),
-                ConversationId = newconversation.Id,
-                UserId = userHigh,
-                JoinedAt = DateTime.UtcNow,
-                LastReadAt = DateTime.UtcNow
-            };
+            await _dbcontext.ConversationParticipants.AddRangeAsync(
+                new ConversationParticipant
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    ConversationId = newConversation.Id,
+                    UserId = userLow,
+                    JoinedAt = DateTime.UtcNow,
+                    LastReadAt = DateTime.UtcNow
+                },
+                new ConversationParticipant
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    ConversationId = newConversation.Id,
+                    UserId = userHigh,
+                    JoinedAt = DateTime.UtcNow,
+                    LastReadAt = DateTime.UtcNow
+                });
 
-            await _dbcontext.ConversationParticipants.AddRangeAsync(participantLow, participantHigh);
             await _dbcontext.SaveChangesAsync(cancel);
 
             return new ConversationResponse
             {
-                Id = newconversation.Id,
-                Name = request.Name,
-                AvatarUrl = request.AvatarUrl,
-                Type = request.Type,
-                LastMessageAt = newconversation.LastMessageAt,
+                Id = newConversation.Id,
+                Name = newConversation.Name,
+                AvatarUrl = newConversation.AvatarUrl,
+                Type = newConversation.Type,
+                LastMessageAt = newConversation.LastMessageAt
             };
         }
 
-        public async Task<List<ConversationResponse>> GetConversationList(string currentUserId, SearchRequest search, CancellationToken cancel)
+        public async Task<List<ConversationResponse>> GetConversationsAsync(string currentUserId, SearchRequest search, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(currentUserId))
                 throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
@@ -109,20 +106,17 @@ namespace Kpett.ChatApp.Services.Impls
             var query = from p in _dbcontext.ConversationParticipants.AsNoTracking()
                         where p.UserId == currentUserId && (p.IsArchived == null || p.IsArchived == false)
                         join c in _dbcontext.Conversations.AsNoTracking() on p.ConversationId equals c.Id
-
                         let lastMessage = _dbcontext.Messages
                             .AsNoTracking()
-                            .Where(_ => _.ConversationId == c.Id)
+                            .Where(m => m.ConversationId == c.Id)
                             .OrderByDescending(m => m.Id)
                             .FirstOrDefault()
-
                         let unreadCount = _dbcontext.Messages
                             .AsNoTracking()
-                            .Where(_ => _.ConversationId == c.Id
-                                   && _.SenderId != currentUserId
-                                   && _.Id > (p.LastReadMessageId ?? 0))
+                            .Where(m => m.ConversationId == c.Id
+                                && m.SenderId != currentUserId
+                                && m.Id > (p.LastReadMessageId ?? 0))
                             .Count()
-
                         orderby c.LastMessageAt descending
                         select new ConversationResponse
                         {
@@ -132,12 +126,14 @@ namespace Kpett.ChatApp.Services.Impls
                             Type = c.Type,
                             LastMessageAt = c.LastMessageAt,
                             UnreadCount = unreadCount,
-                            LastMessage = lastMessage != null ? new LastMessageDto
-                            {
-                                Content = lastMessage.Metadata,
-                                SenderId = lastMessage.SenderId,
-                                CreatedAt = lastMessage.CreatedAt
-                            } : null
+                            LastMessage = lastMessage != null
+                                ? new LastMessageDto
+                                {
+                                    Content = lastMessage.Metadata,
+                                    SenderId = lastMessage.SenderId,
+                                    CreatedAt = lastMessage.CreatedAt
+                                }
+                                : null
                         };
 
             return await query

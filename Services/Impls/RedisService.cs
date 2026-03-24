@@ -1,6 +1,4 @@
 ﻿using StackExchange.Redis;
-using Microsoft.EntityFrameworkCore.Storage;
-
 namespace Kpett.ChatApp.Services.Impls
 {
     public class RedisService : Interfaces.IRedisService
@@ -15,6 +13,9 @@ namespace Kpett.ChatApp.Services.Impls
         private static string RefreshKey(string userId) => $"refresh_token:{userId}";
         private static string AccessBlacklistKey(string jti) => $"blacklist:access:{jti}";
         private static string RefreshBlacklistKey(string token) => $"blacklist:refresh:{token}";
+        private static string UserConnectionsKey(string userId) => $"user:{userId}:connections";
+        private static string ConversationUsersKey(string conversationId) => $"conversation:{conversationId}:users";
+        private static string ConnectionConversationsKey(string connectionId) => $"connection:{connectionId}:conversations";
 
         public async Task SaveRefreshTokenAsync(string userId, string refreshToken, TimeSpan ttl)
         {
@@ -65,20 +66,20 @@ namespace Kpett.ChatApp.Services.Impls
         // Connection / presence helpers
         public async Task AddConnectionAsync(string userId, string connectionId)
         {
-            var key = $"user:{userId}:connections";
+            var key = UserConnectionsKey(userId);
             await _redis.ListRightPushAsync(key, connectionId);
             await _redis.KeyExpireAsync(key, TimeSpan.FromHours(24));
         }
 
         public async Task RemoveConnectionAsync(string userId, string connectionId)
         {
-            var key = $"user:{userId}:connections";
+            var key = UserConnectionsKey(userId);
             await _redis.ListRemoveAsync(key, connectionId);
         }
 
         public async Task<string[]> GetConnectionsAsync(string userId)
         {
-            var key = $"user:{userId}:connections";
+            var key = UserConnectionsKey(userId);
             var values = await _redis.ListRangeAsync(key);
             return values.Where(v => v.HasValue).Select(v => v.ToString()!).ToArray();
         }
@@ -86,25 +87,48 @@ namespace Kpett.ChatApp.Services.Impls
         // Conversation membership helpers
         public async Task AddUserToConversationAsync(string conversationId, string userId)
         {
-            await _redis.SetAddAsync($"conversation:{conversationId}:users", userId);
+            await _redis.SetAddAsync(ConversationUsersKey(conversationId), userId);
         }
 
         public async Task RemoveUserFromConversationAsync(string conversationId, string userId)
         {
-            await _redis.SetRemoveAsync($"conversation:{conversationId}:users", userId);
+            await _redis.SetRemoveAsync(ConversationUsersKey(conversationId), userId);
         }
 
         public async Task<string[]> GetConversationUsersAsync(string conversationId)
         {
-            var members = await _redis.SetMembersAsync($"conversation:{conversationId}:users");
+            var members = await _redis.SetMembersAsync(ConversationUsersKey(conversationId));
             return members.Where(m => m.HasValue).Select(m => m.ToString()!).ToArray();
+        }
+
+        public async Task TrackConnectionConversationAsync(string connectionId, string conversationId)
+        {
+            var key = ConnectionConversationsKey(connectionId);
+            await _redis.SetAddAsync(key, conversationId);
+            await _redis.KeyExpireAsync(key, TimeSpan.FromHours(24));
+        }
+
+        public async Task UntrackConnectionConversationAsync(string connectionId, string conversationId)
+        {
+            await _redis.SetRemoveAsync(ConnectionConversationsKey(connectionId), conversationId);
+        }
+
+        public async Task<string[]> GetConnectionConversationsAsync(string connectionId)
+        {
+            var members = await _redis.SetMembersAsync(ConnectionConversationsKey(connectionId));
+            return members.Where(m => m.HasValue).Select(m => m.ToString()!).ToArray();
+        }
+
+        public async Task ClearConnectionConversationsAsync(string connectionId)
+        {
+            await _redis.KeyDeleteAsync(ConnectionConversationsKey(connectionId));
         }
 
         // Publish wrapper using multiplexer subscriber
         public async Task<long> PublishAsync(string channel, string message)
         {
             var sub = _multiplexer.GetSubscriber();
-            return await sub.PublishAsync(channel, message);
+            return await sub.PublishAsync(RedisChannel.Literal(channel), message);
         }
     }
 }

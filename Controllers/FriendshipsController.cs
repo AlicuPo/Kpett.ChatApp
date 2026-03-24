@@ -1,12 +1,15 @@
+using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.DTOs.Request.Friend;
+using Kpett.ChatApp.DTOs.Response.Friend;
+using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Kpett.ChatApp.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/friend-requests")]
     [ApiController]
     [Authorize]
     public class FriendshipsController : ControllerBase
@@ -18,116 +21,44 @@ namespace Kpett.ChatApp.Controllers
             _friendshipsServices = friendshipsServices;
         }
 
-        [HttpPost("SendFriendRequest")]
-        public async Task<IActionResult> SendFriendRequest([FromQuery] string receiverId, CancellationToken cancel)
+        [HttpPost]
+        public async Task<ActionResult<FriendRequestDTO>> CreateFriendRequest([FromBody] CreateFriendRequestRequest request, CancellationToken cancel)
         {
-            if (string.IsNullOrEmpty(receiverId))
-            {
-                return BadRequest(new
-                {
-                    errorCode = StatusCodes.Status400BadRequest,
-                    return_value = false,
-                    message = "Receiver ID is required"
-                });
-            }
-
             var senderId = User.GetRequiredUserId();
-            await _friendshipsServices.RequestFriendRequestAsync(senderId, receiverId, cancel);
-
-            return Ok(new
-            {
-                statusCode = StatusCodes.Status200OK,
-                return_value = true,
-                message = "Friend request sent successfully"
-            });
+            var result = await _friendshipsServices.CreateFriendRequestAsync(senderId, request?.ReceiverId ?? string.Empty, cancel);
+            return Created($"/api/friend-requests/{result.FriendRequestId}", result);
         }
 
-        [HttpPost("AcceptFriendRequest")]
-        public async Task<IActionResult> AcceptFriendRequest([FromQuery] string senderId, CancellationToken cancel)
+        [HttpGet]
+        public async Task<ActionResult<List<FriendRequestDTO>>> GetPendingFriendRequests([FromQuery] string? status, CancellationToken cancel)
         {
-            if (string.IsNullOrEmpty(senderId))
+            if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "pending", StringComparison.OrdinalIgnoreCase))
             {
-                return BadRequest(new
-                {
-                    errorCode = StatusCodes.Status400BadRequest,
-                    return_value = false,
-                    message = "Sender ID is required"
-                });
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Only pending friend requests are supported.");
             }
 
-            var receiverId = User.GetRequiredUserId();
-            await _friendshipsServices.AcceptFriendRequestAsync(senderId, receiverId, cancel);
-
-            return Ok(new
-            {
-                statusCode = StatusCodes.Status200OK,
-                return_value = true,
-                message = "Friend request accepted successfully"
-            });
-        }
-
-        [HttpPost("RejectFriendRequest")]
-        public async Task<IActionResult> RejectFriendRequest([FromQuery] string senderId, CancellationToken cancel)
-        {
-            if (string.IsNullOrEmpty(senderId))
-            {
-                return BadRequest(new
-                {
-                    errorCode = StatusCodes.Status400BadRequest,
-                    return_value = false,
-                    message = "Sender ID is required"
-                });
-            }
-
-            var receiverId = User.GetRequiredUserId();
-            await _friendshipsServices.RejectFriendRequestAsync(senderId, receiverId, cancel);
-
-            return Ok(new
-            {
-                statusCode = StatusCodes.Status200OK,
-                return_value = true,
-                message = "Friend request rejected successfully"
-            });
-        }
-
-        [HttpPost("CancelFriendRequest")]
-        public async Task<IActionResult> CancelFriendRequest([FromQuery] string receiverId, CancellationToken cancel)
-        {
-            if (string.IsNullOrEmpty(receiverId))
-            {
-                return BadRequest(new
-                {
-                    errorCode = StatusCodes.Status400BadRequest,
-                    return_value = false,
-                    message = "Receiver ID is required"
-                });
-            }
-
-            var senderId = User.GetRequiredUserId();
-            await _friendshipsServices.CancelFriendRequestAsync(senderId, receiverId, cancel);
-
-            return Ok(new
-            {
-                statusCode = StatusCodes.Status200OK,
-                return_value = true,
-                message = "Friend request cancelled successfully"
-            });
-        }
-
-        [HttpGet("PendingFriendRequests")]
-        public async Task<IActionResult> GetPendingFriendRequests(CancellationToken cancel)
-        {
             var userId = User.GetRequiredUserId();
             var requests = await _friendshipsServices.GetPendingFriendRequestsAsync(userId, cancel);
+            return Ok(requests);
+        }
 
-            return Ok(new
-            {
-                statusCode = StatusCodes.Status200OK,
-                return_value = true,
-                message = "Pending friend requests retrieved successfully",
-                data = requests,
-                totalCount = requests.Count
-            });
+        [HttpPatch("{friendRequestId}")]
+        public async Task<ActionResult<FriendRequestDTO>> UpdateFriendRequestStatus(
+            string friendRequestId,
+            [FromBody] UpdateFriendRequestStatusRequest request,
+            CancellationToken cancel)
+        {
+            var currentUserId = User.GetRequiredUserId();
+            var result = await _friendshipsServices.UpdateFriendRequestStatusAsync(friendRequestId, currentUserId, request?.Status ?? string.Empty, cancel);
+            return Ok(result);
+        }
+
+        [HttpDelete("{friendRequestId}")]
+        public async Task<IActionResult> CancelFriendRequest(string friendRequestId, CancellationToken cancel)
+        {
+            var currentUserId = User.GetRequiredUserId();
+            await _friendshipsServices.CancelFriendRequestAsync(friendRequestId, currentUserId, cancel);
+            return NoContent();
         }
     }
 }

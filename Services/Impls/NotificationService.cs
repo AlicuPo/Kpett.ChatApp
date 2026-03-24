@@ -4,8 +4,8 @@ using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
-using Kpett.ChatApp.Services;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 namespace Kpett.ChatApp.Services.Impls
 {
     public class NotificationService : INotificationService
@@ -16,31 +16,59 @@ namespace Kpett.ChatApp.Services.Impls
             _dbContext = dbContext;
         }
 
-        public Task CreateMessageNotificationsAsync(string conversationId, string senderId, MessageDTO dto)
+        public async Task CreateMessageNotificationsAsync(string conversationId, string senderId, MessageDTO dto)
         {
             if (string.IsNullOrEmpty(conversationId))
             {
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED,"conversationId not null or empty");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "conversationId not null or empty");
             }
             if (string.IsNullOrEmpty(senderId))
             {
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "senderId not null or empty");
             }
-            return Task.Run(async () =>
+
+            if (dto == null)
             {
-                var participants = await _dbContext.ConversationParticipants
-                    .Where(cp => cp.ConversationId == conversationId && cp.UserId != senderId)
-                    .ToListAsync();
-                var notifications = participants.Select(participant => new Notification
-                {
-                    UserId = participant.UserId,
-                    //MessageId = dto.Id!.Value,
-                    IsRead = false,
-                    CreatedAt = DateTime.UtcNow
-                }).ToList();
-                await _dbContext.Notifications.AddRangeAsync(notifications);
-                await _dbContext.SaveChangesAsync();
-            });
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "message dto not null");
+            }
+
+            var recipientIds = await _dbContext.ConversationParticipants
+                .AsNoTracking()
+                .Where(cp => cp.ConversationId == conversationId && cp.UserId != senderId)
+                .Select(cp => cp.UserId)
+                .ToListAsync();
+
+            if (recipientIds.Count == 0)
+            {
+                return;
+            }
+
+            var payload = new Dictionary<string, object?>
+            {
+                ["conversationId"] = conversationId
+            };
+
+            if (dto.Id.HasValue)
+            {
+                payload["messageId"] = dto.Id.Value;
+            }
+
+            var now = DateTime.UtcNow;
+            var data = JsonSerializer.Serialize(payload);
+            var notifications = recipientIds.Select(recipientId => new Notification
+            {
+                Id = Guid.NewGuid().ToString(),
+                UserId = recipientId,
+                SenderId = senderId,
+                Type = "MESSAGE",
+                Content = dto.Content,
+                Data = data,
+                IsRead = false,
+                CreatedAt = now
+            }).ToList();
+
+            await _dbContext.Notifications.AddRangeAsync(notifications);
+            await _dbContext.SaveChangesAsync();
         }
     }
 }

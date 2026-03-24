@@ -14,40 +14,23 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly AppDbContext _dbcontext;
         private readonly IRealtimeService _realtime;
         private readonly INotificationService _notificationService;
+        private readonly IConversationAccessService _conversationAccessService;
 
-        public MessageService(AppDbContext dbContext, IRealtimeService realtime, INotificationService notification)
+        public MessageService(
+            AppDbContext dbContext,
+            IRealtimeService realtime,
+            INotificationService notification,
+            IConversationAccessService conversationAccessService)
         {
             _dbcontext = dbContext;
             _realtime = realtime;
             _notificationService = notification;
-        }
-
-        private async Task EnsureConversationAccessAsync(string conversationId, string userId, CancellationToken cancel)
-        {
-            if (string.IsNullOrWhiteSpace(conversationId))
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Conversation ID cannot be null or empty.");
-
-            if (string.IsNullOrWhiteSpace(userId))
-                throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
-
-            var conversationExists = await _dbcontext.Conversations
-                .AsNoTracking()
-                .AnyAsync(c => c.Id == conversationId, cancel);
-
-            if (!conversationExists)
-                throw new NotFoundException(ErrorCodes.CONVERSATION.NOT_FOUND, "Conversation not found.");
-
-            var isParticipant = await _dbcontext.ConversationParticipants
-                .AsNoTracking()
-                .AnyAsync(p => p.ConversationId == conversationId && p.UserId == userId, cancel);
-
-            if (!isParticipant)
-                throw new ForbiddenException(ErrorCodes.CONVERSATION.USER_NOT_IN_CONVERSATION, "User is not a participant of this conversation.");
+            _conversationAccessService = conversationAccessService;
         }
 
         public async Task<MessagePageResult> GetMessagesAsync(string conversationId, string currentUserId, long? cursorMessageId, int pageSize, CancellationToken cancel)
         {
-            await EnsureConversationAccessAsync(conversationId, currentUserId, cancel);
+            await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, currentUserId, cancel);
 
             var query = _dbcontext.Messages
                 .AsNoTracking()
@@ -70,49 +53,21 @@ namespace Kpett.ChatApp.Services.Impls
                     Content = d.Content,
                     Metadata = m.Metadata,
                     CreatedAt = m.CreatedAt
-                }
-            )
-            .Take(pageSize)
-            .ToListAsync(cancel);
-
-            long? oldestMessageId = messages.Any()
-                ? messages.Min(x => x.Id)
-                : null;
+                })
+                .Take(pageSize)
+                .ToListAsync(cancel);
 
             return new MessagePageResult
             {
                 Messages = messages,
-                OldestMessageId = oldestMessageId,
+                OldestMessageId = messages.Any() ? messages.Min(x => x.Id) : null,
                 HasMore = messages.Count == pageSize
             };
         }
 
-        public async Task MarkAsRead(string conversationId, string currentUserId, ReadMessageRequest request, CancellationToken cancel)
+        public async Task<MessageDTO> SendMessageAsync(string conversationId, string senderId, SendMessageRequest request, CancellationToken cancel)
         {
-            await EnsureConversationAccessAsync(conversationId, currentUserId, cancel);
-
-            var participant = await _dbcontext.ConversationParticipants
-                .FirstOrDefaultAsync(p => p.ConversationId == conversationId && p.UserId == currentUserId, cancel);
-
-            if (participant == null)
-                throw new ForbiddenException(ErrorCodes.CONVERSATION.USER_NOT_IN_CONVERSATION, "User is not a participant of this conversation.");
-
-            if (request.LastReadMessageId > (participant.LastReadMessageId ?? 0))
-            {
-                var messageExists = await _dbcontext.Messages
-                    .AnyAsync(m => m.Id == request.LastReadMessageId && m.ConversationId == conversationId, cancel);
-
-                if (!messageExists)
-                    throw new ConflictException(ErrorCodes.CONVERSATION.INVALID_MESSAGE, "Invalid Message ID for this conversation.");
-
-                participant.LastReadMessageId = request.LastReadMessageId;
-                await _dbcontext.SaveChangesAsync(cancel);
-            }
-        }
-
-        public async Task SendMessageAsync(string conversationId, string senderId, SendMessageRequest request, CancellationToken cancel)
-        {
-            await EnsureConversationAccessAsync(conversationId, senderId, cancel);
+            await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, senderId, cancel);
 
             if (string.IsNullOrWhiteSpace(request?.Content))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Message content cannot be empty.");
@@ -131,17 +86,15 @@ namespace Kpett.ChatApp.Services.Impls
             _dbcontext.Messages.Add(message);
             await _dbcontext.SaveChangesAsync(cancel);
 
-            var messageDetail = new MessageDetail
+            _dbcontext.MessageDetails.Add(new MessageDetail
             {
                 MessageId = message.Id,
                 Content = request.Content,
                 Color = request.Color
-            };
-
-            _dbcontext.MessageDetails.Add(messageDetail);
+            });
             await _dbcontext.SaveChangesAsync(cancel);
 
-            var messageDTO = new MessageDTO
+            var messageDto = new MessageDTO
             {
                 Id = message.Id,
                 SenderId = senderId,
@@ -159,7 +112,7 @@ namespace Kpett.ChatApp.Services.Impls
                     new
                     {
                         conversationId,
-                        message = messageDTO,
+                        message = messageDto,
                         timestamp = DateTime.UtcNow
                     });
             }
@@ -170,24 +123,44 @@ namespace Kpett.ChatApp.Services.Impls
 
             try
             {
-                await _notificationService.CreateMessageNotificationsAsync(conversationId, senderId, messageDTO);
+                await _notificationService.CreateMessageNotificationsAsync(conversationId, senderId, messageDto);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Notification creation failed: {ex.Message}");
             }
+
+            return messageDto;
         }
 
-        public async Task MarkAsReadAsync(string conversationId, string userId, long lastReadMessageId, CancellationToken cancel)
+        public async Task MarkAsReadAsync(string conversationId, string currentUserId, ReadMessageRequest request, CancellationToken cancel)
         {
-            await EnsureConversationAccessAsync(conversationId, userId, cancel);
+            if (request == null)
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Read message request is required.");
+
+            await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, currentUserId, cancel);
 
             var participant = await _dbcontext.ConversationParticipants
-                .FirstAsync(x => x.ConversationId == conversationId && x.UserId == userId, cancel);
+                .FirstOrDefaultAsync(p => p.ConversationId == conversationId && p.UserId == currentUserId, cancel);
 
-            participant.LastReadMessageId = lastReadMessageId;
-            participant.LastReadAt = DateTime.UtcNow;
+            if (participant == null)
+                throw new ForbiddenException(ErrorCodes.CONVERSATION.USER_NOT_IN_CONVERSATION, "User is not a participant of this conversation.");
 
+            if (request.LastReadMessageId <= (participant.LastReadMessageId ?? 0))
+            {
+                participant.LastReadAt = request.ReadAt ?? DateTime.UtcNow;
+                await _dbcontext.SaveChangesAsync(cancel);
+                return;
+            }
+
+            var messageExists = await _dbcontext.Messages
+                .AnyAsync(m => m.Id == request.LastReadMessageId && m.ConversationId == conversationId, cancel);
+
+            if (!messageExists)
+                throw new ConflictException(ErrorCodes.CONVERSATION.INVALID_MESSAGE, "Invalid Message ID for this conversation.");
+
+            participant.LastReadMessageId = request.LastReadMessageId;
+            participant.LastReadAt = request.ReadAt ?? DateTime.UtcNow;
             await _dbcontext.SaveChangesAsync(cancel);
         }
     }

@@ -17,12 +17,11 @@ namespace Kpett.ChatApp.Services.Interfaces
     public interface IPostFeedService
     {
         // Post operations
-        Task PostFeed (PostMediaRequest postRequest, CancellationToken cancel);
         Task<PostResponseDTO> CreatePostAsync(string userId, PostMediaRequest postRequest, CancellationToken cancel);
         Task<PostResponseDTO> GetPostAsync(long postId, string? currentUserId, CancellationToken cancel);
         Task<List<UserFeedDTO>> GetUserFeedAsync(string userId, SearchRequest request, CancellationToken cancel = default);
-        Task<List<PostResponseDTO>> GetUserPostsAsync(string userId,SearchRequest request, CancellationToken cancel = default);
-        Task UpdatePostAsync(long postId, string userId, string content, string privacy, CancellationToken cancel);
+        Task<List<PostResponseDTO>> GetUserPostsAsync(string userId, SearchRequest request, CancellationToken cancel = default);
+        Task<PostResponseDTO> UpdatePostAsync(long postId, string userId, string content, string privacy, CancellationToken cancel);
         Task DeletePostAsync(long postId, string userId, CancellationToken cancel);
 
         // Reaction operations
@@ -33,7 +32,7 @@ namespace Kpett.ChatApp.Services.Interfaces
         // Comment operations
         Task<CommentDTO> AddCommentAsync(long postId, string userId, string content, string? parentCommentId, CancellationToken cancel);
         Task<List<CommentDTO>> GetCommentsAsync(long postId, CancellationToken cancel);
-        Task UpdateCommentAsync(string commentId, string userId, string content, CancellationToken cancel);
+        Task<CommentDTO> UpdateCommentAsync(string commentId, string userId, string content, CancellationToken cancel);
         Task DeleteCommentAsync(string commentId, string userId, CancellationToken cancel);
     }
 
@@ -193,7 +192,7 @@ namespace Kpett.ChatApp.Services.Interfaces
             // Get comment count
             var commentCount = await _dbContext.Comments
                 .AsNoTracking()
-                .CountAsync(c => c.PostId == postId && string.IsNullOrEmpty(c.ParentCommentId), cancel);
+                .CountAsync(c => c.PostId == postId && c.DeletedAt == null && string.IsNullOrEmpty(c.ParentCommentId), cancel);
 
             return new PostResponseDTO
             {
@@ -221,7 +220,9 @@ namespace Kpett.ChatApp.Services.Interfaces
             if (string.IsNullOrWhiteSpace(userId))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
 
-          
+            var userExists = await _dbContext.Users.AnyAsync(u => u.Id == userId, cancel);
+            if (!userExists)
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
 
             cancel.ThrowIfCancellationRequested();
 
@@ -271,6 +272,10 @@ namespace Kpett.ChatApp.Services.Interfaces
             if (string.IsNullOrWhiteSpace(userId))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
 
+            var userExists = await _dbContext.Users.AnyAsync(u => u.Id == userId, cancel);
+            if (!userExists)
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
+
             cancel.ThrowIfCancellationRequested();
 
             var skip = (request.Page - 1) * request.PageSize;
@@ -298,7 +303,7 @@ namespace Kpett.ChatApp.Services.Interfaces
         /// <summary>
         /// Update a post
         /// </summary>
-        public async Task UpdatePostAsync(long postId, string userId, string content, string privacy, CancellationToken cancel)
+        public async Task<PostResponseDTO> UpdatePostAsync(long postId, string userId, string content, string privacy, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(content))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Content cannot be empty");
@@ -319,6 +324,8 @@ namespace Kpett.ChatApp.Services.Interfaces
 
             _dbContext.Posts.Update(post);
             await _dbContext.SaveChangesAsync(cancel);
+
+            return await GetPostAsync(postId, userId, cancel);
         }
 
         /// <summary>
@@ -349,6 +356,9 @@ namespace Kpett.ChatApp.Services.Interfaces
         public async Task<PostReactionDTO> AddReactionAsync(long postId, string userId, byte reactionType, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
+
+            if (reactionType == 0)
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Reaction type is required");
 
             var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
             if (post == null)
@@ -423,6 +433,11 @@ namespace Kpett.ChatApp.Services.Interfaces
         {
             cancel.ThrowIfCancellationRequested();
 
+            var postExists = await _dbContext.Posts
+                .AnyAsync(p => p.Id == postId && (!p.IsDeleted.HasValue || !p.IsDeleted.Value), cancel);
+            if (!postExists)
+                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
+
             var reaction = await _dbContext.PostReactions
                 .FirstOrDefaultAsync(r => r.PostId == postId && r.UserId == userId, cancel);
 
@@ -439,6 +454,11 @@ namespace Kpett.ChatApp.Services.Interfaces
         public async Task<List<PostReactionDTO>> GetPostReactionsAsync(long postId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
+
+            var postExists = await _dbContext.Posts
+                .AnyAsync(p => p.Id == postId && (!p.IsDeleted.HasValue || !p.IsDeleted.Value), cancel);
+            if (!postExists)
+                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
             var reactions = await _dbContext.PostReactions
                 .AsNoTracking()
@@ -474,7 +494,7 @@ namespace Kpett.ChatApp.Services.Interfaces
             if (!string.IsNullOrEmpty(parentCommentId))
             {
                 var parentComment = await _dbContext.Comments
-                    .FirstOrDefaultAsync(c => c.Id == parentCommentId && c.PostId == postId, cancel);
+                    .FirstOrDefaultAsync(c => c.Id == parentCommentId && c.PostId == postId && c.DeletedAt == null, cancel);
 
                 if (parentComment == null)
                     throw new NotFoundException(ErrorCodes.POST.PARENT_POST_NOT_FOUND, "Parent comment not found");
@@ -537,9 +557,14 @@ namespace Kpett.ChatApp.Services.Interfaces
         {
             cancel.ThrowIfCancellationRequested();
 
+            var postExists = await _dbContext.Posts
+                .AnyAsync(p => p.Id == postId && (!p.IsDeleted.HasValue || !p.IsDeleted.Value), cancel);
+            if (!postExists)
+                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
+
             var comments = await _dbContext.Comments
                 .AsNoTracking()
-                .Where(c => c.PostId == postId && string.IsNullOrEmpty(c.ParentCommentId))
+                .Where(c => c.PostId == postId && c.DeletedAt == null && string.IsNullOrEmpty(c.ParentCommentId))
                 .Join(
                     _dbContext.Users,
                     c => c.UserId,
@@ -555,7 +580,7 @@ namespace Kpett.ChatApp.Services.Interfaces
             {
                 var replies = await _dbContext.Comments
                     .AsNoTracking()
-                    .Where(c => c.ParentCommentId == item.Comment.Id)
+                    .Where(c => c.ParentCommentId == item.Comment.Id && c.DeletedAt == null)
                     .Join(
                         _dbContext.Users,
                         c => c.UserId,
@@ -598,7 +623,7 @@ namespace Kpett.ChatApp.Services.Interfaces
         /// <summary>
         /// Update a comment
         /// </summary>
-        public async Task UpdateCommentAsync(string commentId, string userId, string content, CancellationToken cancel)
+        public async Task<CommentDTO> UpdateCommentAsync(string commentId, string userId, string content, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(content))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Comment content cannot be empty");
@@ -618,6 +643,8 @@ namespace Kpett.ChatApp.Services.Interfaces
 
             _dbContext.Comments.Update(comment);
             await _dbContext.SaveChangesAsync(cancel);
+
+            return await MapCommentAsync(comment, cancel);
         }
 
         /// <summary>
@@ -641,16 +668,24 @@ namespace Kpett.ChatApp.Services.Interfaces
             await _dbContext.SaveChangesAsync(cancel);
         }
 
-        // Deprecated - use CreatePostAsync instead
-        public async Task PostFeed(PostMediaRequest postRequest, CancellationToken cancel)
+        private async Task<CommentDTO> MapCommentAsync(Comment comment, CancellationToken cancel)
         {
-            if (postRequest == null)
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Post request cannot be null");
+            var userInfo = await _dbContext.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == comment.UserId, cancel);
 
-            if (string.IsNullOrWhiteSpace(postRequest.CreatedByUserId))
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
-
-            await CreatePostAsync(postRequest.CreatedByUserId, postRequest, cancel);
+            return new CommentDTO
+            {
+                Id = comment.Id,
+                PostId = comment.PostId,
+                UserId = comment.UserId,
+                UserName = userInfo?.DisplayName ?? userInfo?.Name ?? "Anonymous",
+                UserAvatar = userInfo?.AvatarUrl,
+                Content = comment.Content,
+                ParentCommentId = comment.ParentCommentId,
+                CreatedAt = comment.CreatedAt,
+                UpdatedAt = comment.UpdatedAt
+            };
         }
     }
 }

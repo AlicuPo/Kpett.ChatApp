@@ -1,5 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Services.Interfaces;
 
 namespace Kpett.ChatApp.Middlewares
@@ -38,7 +40,12 @@ namespace Kpett.ChatApp.Middlewares
                             _logger.LogWarning($"Access attempt with blacklisted token JTI: {jtiClaim}");
                             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                             context.Response.ContentType = "application/json";
-                            await context.Response.WriteAsync("{\"message\": \"Token has been revoked.\"}");
+                            await context.Response.WriteAsJsonAsync(new ErrorResponse
+                            {
+                                StatusCode = StatusCodes.Status401Unauthorized,
+                                ErrorCode = ErrorCodes.AUTH.UNAUTHORIZED,
+                                Message = "Token has been revoked."
+                            });
                             return;
                         }
                     }
