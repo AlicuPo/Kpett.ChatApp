@@ -63,8 +63,8 @@ public class AuthService : IAuthService
         }
 
         // Tạo JWT Token
-        var accessToken = _token.GenerateAccessToken(user.Id, user.Username, user.Email, user.DisplayName);
-        var refreshToken = _token.GenerateRefreshToken(user.Id, user.Username, user.Email);
+        var accessToken = _token.GenerateAccessToken(user.Id, user.Email);
+        var refreshToken = _token.GenerateRefreshToken(user.Id, user.Email);
 
         var userRes = new UserResponse()
         {
@@ -199,12 +199,14 @@ public class AuthService : IAuthService
         var userId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value
                      ?? principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.NameId)?.Value;
 
-        var username = principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Name)?.Value
-                       ?? principal.FindFirst(ClaimTypes.Name)?.Value ?? string.Empty;
+        if (string.IsNullOrEmpty(userId))
+        {
+            throw new UnauthorizedException(ErrorCodes.AUTH.REFRESH_TOKEN_INVALID, "Invalid refresh token");
+        }
 
         var email = principal.FindFirst(ClaimTypes.Email)?.Value;
 
-        if (string.IsNullOrEmpty(userId))
+                if(string.IsNullOrEmpty(email))
         {
             throw new UnauthorizedException(ErrorCodes.AUTH.REFRESH_TOKEN_INVALID, "Invalid refresh token");
         }
@@ -215,7 +217,7 @@ public class AuthService : IAuthService
         }
 
         // 6. Tạo cặp token mới
-        var newAccessToken = _token.GenerateAccessToken(userId, username, email);
+        var newAccessToken = _token.GenerateAccessToken(userId, email);
 
         // 8. Trả về kết quả thành công
         return new TokenResponse

@@ -23,7 +23,7 @@ namespace Kpett.ChatApp.Services.Impls
             _config = config;
         }
 
-        public string GenerateAccessToken(string userId, string UserName, string? email = null, string? displayName = null)
+        public string GenerateAccessToken(string userId, string email)
         {
             var jwtKey = _config["JwtSection:KeyAccess"];
             if (string.IsNullOrEmpty(jwtKey))
@@ -43,16 +43,9 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 new Claim(JwtRegisteredClaimNames.NameId, userId),
                 new Claim(JwtRegisteredClaimNames.Jti, jti),
-                new Claim(JwtRegisteredClaimNames.Name, UserName),
                 new Claim(ClaimTypes.NameIdentifier, userId),
+                new Claim(ClaimTypes.Email, email),
             };
-
-            // Add optional claims
-            if (!string.IsNullOrEmpty(email))
-                claims.Add(new Claim(ClaimTypes.Email, email));
-
-            if (!string.IsNullOrEmpty(displayName))
-                claims.Add(new Claim("DisplayName", displayName));
 
             var token = new JwtSecurityToken(
                 issuer: _config["JwtSection:Issuer"],
@@ -64,7 +57,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
-        public string GenerateRefreshToken(string userId, string UserName, string? email = null)
+        public string GenerateRefreshToken(string userId, string email)
         {
             var jwtKey = _config["JwtSection:KeyRefres"];
             if (string.IsNullOrEmpty(jwtKey))
@@ -84,13 +77,9 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 new Claim(JwtRegisteredClaimNames.NameId, userId),
                 new Claim(JwtRegisteredClaimNames.Jti, jti),
-                new Claim(JwtRegisteredClaimNames.Name, UserName),
+                new Claim(ClaimTypes.Email, email),
                 new Claim(ClaimTypes.NameIdentifier, userId)
             };
-
-            // Add optional email claim
-            if (!string.IsNullOrEmpty(email))
-                claims.Add(new Claim(ClaimTypes.Email, email));
 
             var token = new JwtSecurityToken(
                 issuer: _config["JwtSection:Issuer"],
