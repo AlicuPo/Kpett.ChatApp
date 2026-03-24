@@ -15,18 +15,18 @@ namespace Kpett.ChatApp.Controllers
     [Authorize]
     public class UsersController : ControllerBase
     {
-        private readonly IUserService _usersRepository;
+        private readonly IUserService _userService;
 
-        public UsersController(IUserService usersRepository)
+        public UsersController(IUserService usersService)
         {
-            _usersRepository = usersRepository;
+            _userService = usersService;
         }
 
         [HttpPost("inforUser")]
         public async Task<IActionResult> GetAllUser(UserRequest usercurrent, CancellationToken cancel = default)
         {
             usercurrent.Id ??= User.GetRequiredUserId();
-            var inforUser = await _usersRepository.inforUser(usercurrent, cancel);
+            var inforUser = await _userService.inforUser(usercurrent, cancel);
 
             return Ok(new GeneralResponse<UserResponse>
             {
@@ -40,7 +40,7 @@ namespace Kpett.ChatApp.Controllers
         [HttpGet("GetAllUser")]
         public async Task<IActionResult> getListUsers([FromQuery] UserRequest search, CancellationToken cancel = default)
         {
-            var (users, total) = await _usersRepository.GetAllUser(search, cancel);
+            var (users, total) = await _userService.GetAllUser(search, cancel);
 
             return Ok(new GeneralResponse<List<UserResponse>>
             {
@@ -55,7 +55,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<IActionResult> updateUserBy(string id, [FromBody] UpdateUserRequest request, CancellationToken cancel = default)
         {
             var currentUserId = User.GetRequiredUserId();
-            var user = await _usersRepository.UpdateUser(id, currentUserId, request, cancel);
+            var user = await _userService.UpdateUser(id, currentUserId, request, cancel);
 
             return Ok(new GeneralResponse<UserResponse>
             {
@@ -70,13 +70,27 @@ namespace Kpett.ChatApp.Controllers
         public async Task<IActionResult> DeleteUser(string id, CancellationToken cancel = default)
         {
             var currentUserId = User.GetRequiredUserId();
-            var result = await _usersRepository.DeleteUser(id, currentUserId, cancel);
+            var result = await _userService.DeleteUser(id, currentUserId, cancel);
 
             return Ok(new GeneralResponse<bool>
             {
                 StatusCode = StatusCodes.Status200OK,
                 Message = "Delete user successfully",
                 IsSuccess = true,
+                Data = result
+            });
+        }
+
+        [HttpGet("check-username")]
+        public async Task<IActionResult> CheckUsername([FromQuery] string username, CancellationToken cancel = default)
+        {
+            var result = await _userService.CheckExistByUsername(username, cancel);
+
+            return Ok(new GeneralResponse<UsernameCheckResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Check username successfully",
                 Data = result
             });
         }

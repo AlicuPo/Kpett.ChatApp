@@ -1,4 +1,5 @@
-﻿using Kpett.ChatApp.DTOs.Request.Auth;
+﻿using Azure.Core;
+using Kpett.ChatApp.DTOs.Request.Auth;
 using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.DTOs.Response.Auth;
 using Kpett.ChatApp.DTOs.Response.Shared;
@@ -61,138 +62,22 @@ namespace Kpett.ChatApp.Controllers
 
         [Authorize]
         [HttpPost("logout")]
-        public async Task<IActionResult> Logout(CancellationToken cancel = default)
+        public async Task<IActionResult> Logout([FromBody] LogoutRequest logoutRequest, CancellationToken cancel = default)
         {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || string.IsNullOrWhiteSpace(userIdClaim.Value))
-            {
-                return Unauthorized(new { message = "Invalid user." });
-            }
-            var userId = userIdClaim.Value;
+            await _authService.LogoutAsync(logoutRequest, User, cancel);
 
-            // Extract JTI from current access token to blacklist it
-            var jtiClaim = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
-            if (!string.IsNullOrEmpty(jtiClaim))
+            return Ok(new GeneralResponse
             {
-                // Blacklist the current access token (30 min expiry)
-                await _redis.BlacklistAccessTokenAsync(jtiClaim, TimeSpan.FromMinutes(30));
-            }
-
-            // Blacklist refresh token
-            var refreshToken = await _redis.GetRefreshTokenAsync(userId);
-            if (!string.IsNullOrEmpty(refreshToken))
-            {
-                await _redis.BlacklistRefreshTokenAsync(refreshToken, TimeSpan.FromDays(30));
-                await _redis.RemoveRefreshTokenAsync(userId);
-            }
-
-            var result = await _authService.LogoutAsync(userId, cancel);
-            if (result)
-            {
-                return Ok(new GeneralResponse
-                {
-                    IsSuccess = true,
-                    Message = "Logout successful.",
-                    StatusCode = 200
-                });
-            } 
-            else
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    IsSuccess = false,
-                    Message = "Logout failed."
-                });
-            }
+                IsSuccess = true,
+                Message = "Logout successful.",
+                StatusCode = 200
+            });
         }
 
-        [HttpPost("refresh")]
-        public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
+        [HttpPost("refresh-token")]
+        public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
         {
-            if (request == null || string.IsNullOrEmpty(request.RefreshToken))
-            {
-                return BadRequest(new ErrorResponse
-                {
-                    IsSuccess = false,
-                    Message = "Refresh token is required.",
-                    ErrorCode = "AUTH.REFRESH_TOKEN_MISSING"
-                });
-            }
-
-            // Validate refresh token signature and extract claims
-            var principal = _token.GetPrincipalFromExpiredToken(request.RefreshToken, true);
-            if (principal == null)
-            {
-                return Unauthorized(new ErrorResponse
-                {
-                    IsSuccess = false,
-                    Message = "Invalid refresh token.",
-                    ErrorCode = "AUTH.INVALID_REFRESH_TOKEN"
-                });
-            }
-
-            var userId = principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                         ?? principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.NameId)?.Value;
-
-            var username = principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Name)?.Value
-                           ?? principal.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? string.Empty;
-
-            var email = principal.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
-
-            if (string.IsNullOrEmpty(userId))
-            {
-                return Unauthorized(new ErrorResponse
-                {
-                    IsSuccess = false,
-                    Message = "Invalid token claims.",
-                    ErrorCode = "AUTH.INVALID_TOKEN_CLAIMS"
-                });
-            }
-
-            // Check blacklist
-            if (await _redis.IsRefreshTokenBlacklistedAsync(request.RefreshToken))
-            {
-                return Unauthorized(new ErrorResponse
-                {
-                    IsSuccess = false,
-                    Message = "Refresh token revoked.",
-                    ErrorCode = "AUTH.REFRESH_TOKEN_REVOKED"
-                });
-            }
-
-            // Ensure refresh token matches stored value
-            var saved = await _redis.GetRefreshTokenAsync(userId);
-            if (string.IsNullOrEmpty(saved) || saved != request.RefreshToken)
-            {
-                return Unauthorized(new ErrorResponse
-                {
-                    IsSuccess = false,
-                    Message = "Refresh token does not match.",
-                    ErrorCode = "AUTH.REFRESH_TOKEN_MISMATCH"
-                });
-            }
-
-            // Generate new tokens
-            var newAccessToken = _token.GenerateAccessToken(userId, username, email);
-            var newRefreshToken = _token.GenerateRefreshToken(userId, username, email);
-
-            // Blacklist old refresh token and save new one
-            await _redis.BlacklistRefreshTokenAsync(request.RefreshToken, TimeSpan.FromDays(30));
-            await _redis.SaveRefreshTokenAsync(userId, newRefreshToken, TimeSpan.FromDays(30));
-
-            var response = new TokenResponse
-            {
-                AccessToken = newAccessToken,
-                RefreshToken = newRefreshToken,
-            };
-
-            return Ok(new GeneralResponse<TokenResponse>
-            {
-                StatusCode = 200,
-                IsSuccess = true,
-                Data = response,
-                Message = "Token refreshed successfully."
-            });
+            return Ok(await _authService.RefreshTokenAsync(request));
         }
 
         [Authorize]

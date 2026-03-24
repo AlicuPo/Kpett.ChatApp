@@ -58,7 +58,7 @@ namespace Kpett.ChatApp.Services.Impls
                 issuer: _config["JwtSection:Issuer"],
                 audience: _config["JwtSection:Audience"],
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(30),
+                expires: DateTime.UtcNow.AddMinutes(5),
                 signingCredentials: creds
             );
 
@@ -96,7 +96,7 @@ namespace Kpett.ChatApp.Services.Impls
                 issuer: _config["JwtSection:Issuer"],
                 audience: _config["JwtSection:Audience"],
                 claims: claims,
-                expires: DateTime.UtcNow.AddDays(30),
+                expires: DateTime.UtcNow.AddYears(1),
                 signingCredentials: creds
             );
 

@@ -16,6 +16,8 @@
             public const string INVALID_CREDENTIALS = "AUTH.INVALID_CREDENTIALS";
             public const string UNAUTHORIZED = "AUTH.UNAUTHORIZED";
             public const string FORBIDDEN = "AUTH.FORBIDDEN";
+            public const string ACCESS_TOKEN_INVALID = "AUTH.ACCESS_TOKEN_INVALID";
+            public const string REFRESH_TOKEN_INVALID = "AUTH.REFRESH_TOKEN_INVALID";
         }
 
         public static class FRIEND

@@ -1,7 +1,9 @@
-﻿using Kpett.ChatApp.Contants;
+﻿using Azure.Core;
+using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Request.Auth;
 using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.DTOs.Response.Auth;
+using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
@@ -9,6 +11,7 @@ using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using UUIDNext;
 
 namespace Kpett.ChatApp.Services.Impls;
@@ -121,13 +124,50 @@ public class AuthService : IAuthService
         return result;
     }
 
-    public async Task<bool> LogoutAsync(string userId, CancellationToken cancel = default)
+    public async Task<bool> LogoutAsync(LogoutRequest logoutRequest, ClaimsPrincipal user, CancellationToken cancel = default)
     {
-        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancel);
-        if (user != null)
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || string.IsNullOrWhiteSpace(userIdClaim.Value))
         {
-            user.Status = UserStatusEnums.Offline.GetDescription();
-            await _dbContext.SaveChangesAsync(cancel);
+            throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "Invalid user");
+        }
+        var userId = userIdClaim.Value;
+
+        // THU HỒI ACCESS TOKEN (Lấy từ Header Authorization)
+        var jtiClaim = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
+        var expClaim = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Exp)?.Value;
+
+        if (!string.IsNullOrEmpty(jtiClaim) && long.TryParse(expClaim, out long expSeconds))
+        {
+            var expirationTime = DateTimeOffset.FromUnixTimeSeconds(expSeconds).UtcDateTime;
+            var remainTtl = expirationTime - DateTime.UtcNow;
+
+            if (remainTtl > TimeSpan.Zero)
+            {
+                await _redis.BlacklistAccessTokenAsync(jtiClaim, remainTtl);
+            }
+        }
+
+        // THU HỒI REFRESH TOKEN
+        if (logoutRequest != null && !string.IsNullOrEmpty(logoutRequest.RefreshToken))
+        {
+            TimeSpan refreshRemainTtl = TimeSpan.FromDays(30);
+
+            var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+
+            // Kiểm tra xem token client gửi lên có phải JWT hợp lệ không
+            if (handler.CanReadToken(logoutRequest.RefreshToken))
+            {
+                var jwtToken = handler.ReadJwtToken(logoutRequest.RefreshToken);
+                var calculatedTtl = jwtToken.ValidTo - DateTime.UtcNow;
+
+                if (calculatedTtl > TimeSpan.Zero)
+                {
+                    refreshRemainTtl = calculatedTtl;
+                }
+            }
+
+            await _redis.BlacklistRefreshTokenAsync(logoutRequest.RefreshToken, refreshRemainTtl);        
         }
 
         return true;
@@ -141,4 +181,47 @@ public class AuthService : IAuthService
         }
     }
 
+    public async Task<TokenResponse> RefreshTokenAsync(RefreshTokenRequest request)
+    {
+        if (string.IsNullOrEmpty(request.RefreshToken))
+        {
+            throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Refresh token is required");
+        }
+
+        // Xác thực chữ ký token và trích xuất claims
+        var principal = _token.GetPrincipalFromExpiredToken(request.RefreshToken, true);
+        if (principal == null)
+        {
+            throw new UnauthorizedException(ErrorCodes.AUTH.REFRESH_TOKEN_INVALID, "Invalid refresh token");
+        }
+
+        // Trích xuất thông tin user từ claims
+        var userId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                     ?? principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.NameId)?.Value;
+
+        var username = principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Name)?.Value
+                       ?? principal.FindFirst(ClaimTypes.Name)?.Value ?? string.Empty;
+
+        var email = principal.FindFirst(ClaimTypes.Email)?.Value;
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            throw new UnauthorizedException(ErrorCodes.AUTH.REFRESH_TOKEN_INVALID, "Invalid refresh token");
+        }
+
+        if(await _redis.IsRefreshTokenBlacklistedAsync(request.RefreshToken))
+        {
+            throw new UnauthorizedException(ErrorCodes.AUTH.REFRESH_TOKEN_INVALID, "Token in black list");
+        }
+
+        // 6. Tạo cặp token mới
+        var newAccessToken = _token.GenerateAccessToken(userId, username, email);
+
+        // 8. Trả về kết quả thành công
+        return new TokenResponse
+        {
+            AccessToken = newAccessToken,
+            RefreshToken = request.RefreshToken
+        };
+    }
 }

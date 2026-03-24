@@ -1,4 +1,7 @@
 ﻿namespace Kpett.ChatApp.DTOs.Request.Auth
 {
-    public record LogoutRequest(bool LogoutAllDevices = false);
+    public class LogoutRequest() 
+    {
+        public string RefreshToken { get; set; } = null!;
+    }
 }

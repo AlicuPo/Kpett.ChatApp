@@ -123,5 +123,22 @@ namespace Kpett.ChatApp.Services.Impls
             await _dbcontext.SaveChangesAsync(cancel);
             return true;
         }
+
+        public async Task<UsernameCheckResponse> CheckExistByUsername(string username, CancellationToken cancel)
+        {
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Username cannot be null or empty");
+            }
+
+            var normalizedUsername = username.Trim().ToLower();
+
+            bool exists = await _dbcontext.Users.AnyAsync(u => u.Name.ToLower() == normalizedUsername);
+
+            return new UsernameCheckResponse
+            {
+                IsAvailable = !exists
+            };
+        }
     }
 }
