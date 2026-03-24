@@ -10,6 +10,7 @@ namespace Kpett.ChatApp.DTOs.Response.User
         public string? DisplayName { get; set; }
         public string? AvatarUrl { get; set; }
         public bool isProfileCompleted { get; set; }
+        public bool isVerified { get; set; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public DateTime? LastActiveAt { get; set; }

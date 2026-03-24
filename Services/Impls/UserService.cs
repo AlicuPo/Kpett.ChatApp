@@ -140,5 +140,38 @@ namespace Kpett.ChatApp.Services.Impls
                 IsAvailable = !exists
             };
         }
+
+        public async Task<UserResponse> AccountSetup(string userId, AccountSetupRequest accountSetupRequest, CancellationToken cancel)
+        {
+            var user = await _dbcontext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancel);
+            if (user == null)
+            {
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
+            }
+
+            if (string.IsNullOrEmpty(accountSetupRequest.Username) || string.IsNullOrEmpty(accountSetupRequest.DisplayName))
+            {
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Username and DisplayName are required");
+            }
+
+            user.Username = accountSetupRequest.Username;
+            user.DisplayName = accountSetupRequest.DisplayName;
+            user.Biography = accountSetupRequest.Biography;
+            user.Interests = string.Join(",", accountSetupRequest.Interests);
+
+            await _dbcontext.SaveChangesAsync();
+
+            return new UserResponse
+            {
+                Id = user.Id,
+                Username = user.Username,
+                Email = user.Email!,
+                DisplayName = user.DisplayName,
+                AvatarUrl = user.AvatarUrl,
+                isVerified = user.IsVerified,
+                isProfileCompleted = true,
+                CreatedAt = user.CreatedAt
+            };
+        }
     }
 }

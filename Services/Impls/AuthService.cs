@@ -48,7 +48,8 @@ public class AuthService : IAuthService
                 DisplayName = u.DisplayName,
                 AvatarUrl = u.AvatarUrl,
                 Password = u.Password,
-                IsActive = u.IsActive
+                IsActive = u.IsActive,
+                IsVerified = u.IsVerified
             })
             .FirstOrDefaultAsync(x => x.Email == request.Email);
 
@@ -73,6 +74,7 @@ public class AuthService : IAuthService
             Email = user.Email,
             DisplayName = user.DisplayName,
             AvatarUrl = user.AvatarUrl,
+            isVerified = user.IsVerified,
             isProfileCompleted = !string.IsNullOrEmpty(user.DisplayName) && !string.IsNullOrEmpty(user.Username),
             CreatedAt = DateTime.UtcNow
         };

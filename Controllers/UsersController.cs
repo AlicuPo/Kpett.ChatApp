@@ -94,5 +94,19 @@ namespace Kpett.ChatApp.Controllers
                 Data = result
             });
         }
+
+        [HttpPost("account-setup")]
+        public async Task<IActionResult> AccountSetup([FromBody] AccountSetupRequest accountSetupRequest, CancellationToken cancel = default)
+        {
+            var result = await _userService.AccountSetup(User.GetRequiredUserId(), accountSetupRequest, cancel);
+
+            return Ok(new GeneralResponse<UserResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Account setup successfully",
+                Data = result
+            });
+        }
     }
 }
