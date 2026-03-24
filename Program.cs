@@ -1,6 +1,4 @@
 using CloudinaryDotNet;
-using CloudinaryDotNet.Actions;
-using dotenv.net;
 using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Helper;
@@ -90,13 +88,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = issuer,
-            ValidAudience = audience,
+            ValidIssuer = issuer, // Đảm bảo biến này đã được khai báo ở trên
+            ValidAudience = audience, // Đảm bảo biến này đã được khai báo ở trên
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(KeyAccess!)
+                Encoding.UTF8.GetBytes(KeyAccess!) // Đảm bảo KeyAccess đã được khai báo
             ),
-
-
             ClockSkew = TimeSpan.Zero
         };
 
@@ -107,10 +103,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var redis = context.HttpContext.RequestServices
                     .GetRequiredService<Kpett.ChatApp.Services.Interfaces.IRedisService>();
 
-                var jti = context.Principal!
-                    .Claims.First(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
+                var jtiClaim = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti);
 
-                if (jtiClaim != null)
+                if (jtiClaim != null && !string.IsNullOrEmpty(jtiClaim.Value))
                 {
                     if (await redis.IsAccessTokenBlacklistedAsync(jtiClaim.Value))
                     {
@@ -118,36 +113,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     }
                 }
             },
-            OnChallenge = async context =>
-            {
-                context.HandleResponse();
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                context.Response.ContentType = "application/json";
 
-                await context.Response.WriteAsJsonAsync(new ErrorResponse
-                {
-                    StatusCode = StatusCodes.Status401Unauthorized,
-                    ErrorCode = ErrorCodes.AUTH.UNAUTHORIZED,
-                    Message = "Unauthorized"
-                });
-            },
-            OnForbidden = async context =>
-            {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                context.Response.ContentType = "application/json";
-
-                await context.Response.WriteAsJsonAsync(new ErrorResponse
-                {
-                    StatusCode = StatusCodes.Status403Forbidden,
-                    ErrorCode = ErrorCodes.AUTH.FORBIDDEN,
-                    Message = "Forbidden"
-                });
-            },
             OnMessageReceived = context =>
             {
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
 
+                // Xử lý token cho kết nối WebSockets / SignalR
                 if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/chat-Hub"))
                 {
                     context.Token = accessToken;
@@ -156,26 +128,20 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 return Task.CompletedTask;
             },
 
-            // Custom Response khi lỗi 401 (Không có token, sai token, hoặc bị Fail() ở OnTokenValidated)
             OnChallenge = async context =>
             {
-                // Vô hiệu hóa cơ chế sinh lỗi mặc định của ASP.NET
                 context.HandleResponse();
 
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 context.Response.ContentType = "application/json";
 
-                // Message mặc định
                 string errorMessage = "Token invalid";
 
-                // Bắt chính xác lỗi để trả về thông báo phù hợp cho client
                 if (context.AuthenticateFailure != null)
                 {
-                    // Lỗi do token hết hạn
                     if (context.AuthenticateFailure.GetType() == typeof(SecurityTokenExpiredException))
                     {
                         errorMessage = "Token has Expired";
-                    
                         context.Response.Headers.Append("Token-Expired", "true");
                     }
                 }
@@ -191,7 +157,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 await context.Response.WriteAsync(JsonSerializer.Serialize(errorResponse));
             },
 
-            // Custom Response khi lỗi 403 (Có token hợp lệ nhưng không đủ quyền Role/Policy)
             OnForbidden = async context =>
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -200,7 +165,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var errorResponse = new ErrorResponse
                 {
                     IsSuccess = false,
-                    StatusCode = 401,
+                    StatusCode = 403,
                     ErrorCode = ErrorCodes.AUTH.FORBIDDEN,
                     Message = "You do not have permission to access this resource."
                 };
