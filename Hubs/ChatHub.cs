@@ -4,7 +4,6 @@ using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-using StackExchange.Redis;
 
 namespace Kpett.ChatApp.Hubs
 {
@@ -13,11 +12,19 @@ namespace Kpett.ChatApp.Hubs
     {
         private readonly Services.Interfaces.IRedisService _redis;
         private readonly IMessageService _messageService;
+        private readonly IConversationAccessService _conversationAccessService;
+        private readonly IConversationPresenceService _conversationPresenceService;
 
-        public ChatHub(Services.Interfaces.IRedisService redis, IMessageService messageService)
+        public ChatHub(
+            Services.Interfaces.IRedisService redis,
+            IMessageService messageService,
+            IConversationAccessService conversationAccessService,
+            IConversationPresenceService conversationPresenceService)
         {
             _redis = redis;
             _messageService = messageService;
+            _conversationAccessService = conversationAccessService;
+            _conversationPresenceService = conversationPresenceService;
         }
 
         public override async Task OnConnectedAsync()
@@ -46,11 +53,19 @@ namespace Kpett.ChatApp.Hubs
         {
             var userId = Context.UserIdentifier;
 
+            try
+            {
+                await _conversationPresenceService.CleanupConnectionAsync(userId, Context.ConnectionId);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Conversation cleanup error: {ex.Message}");
+            }
+
             if (!string.IsNullOrEmpty(userId))
             {
                 try
                 {
-                    // Remove connection from Redis
                     await _redis.RemoveConnectionAsync(userId, Context.ConnectionId);
                 }
                 catch (Exception ex)
@@ -75,14 +90,25 @@ namespace Kpett.ChatApp.Hubs
                 return;
             }
 
+            if (string.IsNullOrWhiteSpace(conversationId))
+            {
+                await Clients.Caller.SendAsync("Error", "Conversation ID is required.");
+                return;
+            }
+
+            var presenceTracked = false;
+            var addedToGroup = false;
+
             try
             {
+                await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, userId, Context.ConnectionAborted);
+
+                await _conversationPresenceService.TrackConversationConnectionAsync(conversationId, userId, Context.ConnectionId);
+                presenceTracked = true;
+
                 await Groups.AddToGroupAsync(Context.ConnectionId, conversationId);
+                addedToGroup = true;
 
-                // Store in Redis
-                await _redis.AddUserToConversationAsync(conversationId, userId);
-
-                // Notify others that user joined
                 await Clients.OthersInGroup(conversationId).SendAsync("UserJoined", new
                 {
                     userId,
@@ -90,8 +116,56 @@ namespace Kpett.ChatApp.Hubs
                     timestamp = DateTime.UtcNow
                 });
             }
+            catch (AppException appEx)
+            {
+                if (presenceTracked)
+                {
+                    try
+                    {
+                        await _conversationPresenceService.UntrackConversationConnectionAsync(conversationId, userId, Context.ConnectionId);
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                if (addedToGroup)
+                {
+                    try
+                    {
+                        await Groups.RemoveFromGroupAsync(Context.ConnectionId, conversationId);
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                await Clients.Caller.SendAsync("Error", appEx.Message);
+            }
             catch (Exception ex)
             {
+                if (presenceTracked)
+                {
+                    try
+                    {
+                        await _conversationPresenceService.UntrackConversationConnectionAsync(conversationId, userId, Context.ConnectionId);
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                if (addedToGroup)
+                {
+                    try
+                    {
+                        await Groups.RemoveFromGroupAsync(Context.ConnectionId, conversationId);
+                    }
+                    catch
+                    {
+                    }
+                }
+
                 await Clients.Caller.SendAsync("Error", $"Failed to join conversation: {ex.Message}");
             }
         }
@@ -103,14 +177,23 @@ namespace Kpett.ChatApp.Hubs
         {
             var userId = Context.UserIdentifier;
 
+            if (string.IsNullOrWhiteSpace(conversationId))
+            {
+                await Clients.Caller.SendAsync("Error", "Conversation ID is required.");
+                return;
+            }
+
             try
             {
                 await Groups.RemoveFromGroupAsync(Context.ConnectionId, conversationId);
 
-                // Remove from Redis
-                await _redis.RemoveUserFromConversationAsync(conversationId, userId);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return;
+                }
 
-                // Notify others that user left
+                await _conversationPresenceService.UntrackConversationConnectionAsync(conversationId, userId, Context.ConnectionId);
+
                 await Clients.OthersInGroup(conversationId).SendAsync("UserLeft", new
                 {
                     userId,
@@ -176,11 +259,22 @@ namespace Kpett.ChatApp.Hubs
         {
             var userId = Context.UserIdentifier;
 
-            if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(conversationId))
+            if (string.IsNullOrEmpty(userId))
+            {
+                await Clients.Caller.SendAsync("Error", "User ID not found.");
                 return;
+            }
+
+            if (string.IsNullOrWhiteSpace(conversationId))
+            {
+                await Clients.Caller.SendAsync("Error", "Conversation ID is required.");
+                return;
+            }
 
             try
             {
+                await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, userId, Context.ConnectionAborted);
+
                 await Clients.OthersInGroup(conversationId).SendAsync("UserTyping", new
                 {
                     userId,
@@ -189,9 +283,13 @@ namespace Kpett.ChatApp.Hubs
                     timestamp = DateTime.UtcNow
                 });
             }
+            catch (AppException appEx)
+            {
+                await Clients.Caller.SendAsync("Error", appEx.Message);
+            }
             catch (Exception ex)
             {
-                Console.WriteLine($"Typing indicator error: {ex.Message}");
+                await Clients.Caller.SendAsync("Error", $"Typing indicator error: {ex.Message}");
             }
         }
     }

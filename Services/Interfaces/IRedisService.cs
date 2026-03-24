@@ -21,6 +21,10 @@
         Task AddUserToConversationAsync(string conversationId, string userId);
         Task RemoveUserFromConversationAsync(string conversationId, string userId);
         Task<string[]> GetConversationUsersAsync(string conversationId);
+        Task TrackConnectionConversationAsync(string connectionId, string conversationId);
+        Task UntrackConnectionConversationAsync(string connectionId, string conversationId);
+        Task<string[]> GetConnectionConversationsAsync(string connectionId);
+        Task ClearConnectionConversationsAsync(string connectionId);
 
         // Publish wrapper
         Task<long> PublishAsync(string channel, string message);

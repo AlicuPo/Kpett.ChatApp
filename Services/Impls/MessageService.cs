@@ -14,40 +14,23 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly AppDbContext _dbcontext;
         private readonly IRealtimeService _realtime;
         private readonly INotificationService _notificationService;
+        private readonly IConversationAccessService _conversationAccessService;
 
-        public MessageService(AppDbContext dbContext, IRealtimeService realtime, INotificationService notification)
+        public MessageService(
+            AppDbContext dbContext,
+            IRealtimeService realtime,
+            INotificationService notification,
+            IConversationAccessService conversationAccessService)
         {
             _dbcontext = dbContext;
             _realtime = realtime;
             _notificationService = notification;
-        }
-
-        private async Task EnsureConversationAccessAsync(string conversationId, string userId, CancellationToken cancel)
-        {
-            if (string.IsNullOrWhiteSpace(conversationId))
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Conversation ID cannot be null or empty.");
-
-            if (string.IsNullOrWhiteSpace(userId))
-                throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
-
-            var conversationExists = await _dbcontext.Conversations
-                .AsNoTracking()
-                .AnyAsync(c => c.Id == conversationId, cancel);
-
-            if (!conversationExists)
-                throw new NotFoundException(ErrorCodes.CONVERSATION.NOT_FOUND, "Conversation not found.");
-
-            var isParticipant = await _dbcontext.ConversationParticipants
-                .AsNoTracking()
-                .AnyAsync(p => p.ConversationId == conversationId && p.UserId == userId, cancel);
-
-            if (!isParticipant)
-                throw new ForbiddenException(ErrorCodes.CONVERSATION.USER_NOT_IN_CONVERSATION, "User is not a participant of this conversation.");
+            _conversationAccessService = conversationAccessService;
         }
 
         public async Task<MessagePageResult> GetMessagesAsync(string conversationId, string currentUserId, long? cursorMessageId, int pageSize, CancellationToken cancel)
         {
-            await EnsureConversationAccessAsync(conversationId, currentUserId, cancel);
+            await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, currentUserId, cancel);
 
             var query = _dbcontext.Messages
                 .AsNoTracking()
@@ -89,7 +72,7 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task MarkAsRead(string conversationId, string currentUserId, ReadMessageRequest request, CancellationToken cancel)
         {
-            await EnsureConversationAccessAsync(conversationId, currentUserId, cancel);
+            await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, currentUserId, cancel);
 
             var participant = await _dbcontext.ConversationParticipants
                 .FirstOrDefaultAsync(p => p.ConversationId == conversationId && p.UserId == currentUserId, cancel);
@@ -112,7 +95,7 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task SendMessageAsync(string conversationId, string senderId, SendMessageRequest request, CancellationToken cancel)
         {
-            await EnsureConversationAccessAsync(conversationId, senderId, cancel);
+            await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, senderId, cancel);
 
             if (string.IsNullOrWhiteSpace(request?.Content))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Message content cannot be empty.");
@@ -180,7 +163,7 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task MarkAsReadAsync(string conversationId, string userId, long lastReadMessageId, CancellationToken cancel)
         {
-            await EnsureConversationAccessAsync(conversationId, userId, cancel);
+            await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, userId, cancel);
 
             var participant = await _dbcontext.ConversationParticipants
                 .FirstAsync(x => x.ConversationId == conversationId && x.UserId == userId, cancel);

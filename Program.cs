@@ -155,6 +155,8 @@ builder.Services.AddSingleton(cloudinary);
 builder.Services.AddScoped<ICloudinaryService, UploadFileService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
+builder.Services.AddScoped<IConversationAccessService, ConversationAccessService>();
+builder.Services.AddScoped<IConversationPresenceService, ConversationPresenceService>();
 builder.Services.AddScoped<IRealtimeService, RealtimeService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IUserService, UserService>();
