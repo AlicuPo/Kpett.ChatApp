@@ -95,7 +95,7 @@ public class AuthApiTests
 
         var jwtService = scope.ServiceProvider.GetRequiredService<IJwtService>();
         var redisService = scope.ServiceProvider.GetRequiredService<IRedisService>();
-        var refreshToken = jwtService.GenerateRefreshToken("refresh-user", "refresh-user", "refresh@example.com");
+        var refreshToken = jwtService.GenerateRefreshToken("refresh-user", "refresh@example.com");
 
         await redisService.SaveRefreshTokenAsync("refresh-user", refreshToken, TimeSpan.FromDays(30));
 

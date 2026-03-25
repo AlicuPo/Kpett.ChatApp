@@ -168,10 +168,43 @@ namespace Kpett.ChatApp.Services.Impls
                 Email = user.Email!,
                 DisplayName = user.DisplayName,
                 AvatarUrl = user.AvatarUrl,
-                isVerified = user.IsVerified,
-                isProfileCompleted = true,
+                IsVerified = user.IsVerified,
+                IsProfileCompleted = true,
                 CreatedAt = user.CreatedAt
             };
+        }
+
+        public async Task<UserStatsResponse> GetUserStatsAsync(string userId, CancellationToken cancel)
+        {
+            var userStats = await _dbcontext.Users
+                .AsNoTracking() 
+                .Where(u => u.Id == userId)
+                .Select(u => new UserStatsResponse
+                {
+                    Id = u.Id,
+                    Username = u.Username,
+                    DisplayName = u.DisplayName,
+                    AvatarUrl = u.AvatarUrl,
+                    Email = u.Email!,
+                    IsVerified = u.IsVerified,
+                    IsProfileCompleted = !string.IsNullOrEmpty(u.Username) && !string.IsNullOrEmpty(u.DisplayName),
+
+                    TotalPosts = _dbcontext.UserFeeds.Count(p => p.UserId == u.Id),
+
+                    Followers = _dbcontext.Follows.Count(f => f.FolloweeId == u.Id),
+
+                    Following = _dbcontext.Follows.Count(f => f.FollowerId == u.Id),
+
+                    CreatedAt = u.CreatedAt,
+                })
+                .FirstOrDefaultAsync();
+
+            if (userStats == null)
+            {
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
+            }
+
+            return userStats;
         }
     }
 }

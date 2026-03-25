@@ -74,8 +74,8 @@ public class AuthService : IAuthService
             Email = user.Email,
             DisplayName = user.DisplayName,
             AvatarUrl = user.AvatarUrl,
-            isVerified = user.IsVerified,
-            isProfileCompleted = !string.IsNullOrEmpty(user.DisplayName) && !string.IsNullOrEmpty(user.Username),
+            IsVerified = user.IsVerified,
+            IsProfileCompleted = !string.IsNullOrEmpty(user.DisplayName) && !string.IsNullOrEmpty(user.Username),
             CreatedAt = DateTime.UtcNow
         };
 

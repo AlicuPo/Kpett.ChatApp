@@ -108,5 +108,19 @@ namespace Kpett.ChatApp.Controllers
                 Data = result
             });
         }
+
+        [HttpGet("me/stats")]
+        public async Task<IActionResult> GetMyStats(CancellationToken cancel = default)
+        {
+            var result = await _userService.GetUserStatsAsync(User.GetRequiredUserId(), cancel);
+
+            return Ok(new GeneralResponse<UserStatsResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Get my stats successfully",
+                Data = result
+            });
+        }
     }
 }

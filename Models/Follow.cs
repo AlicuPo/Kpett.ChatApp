@@ -9,9 +9,10 @@ public partial class Follow
 
     public string FollowerId { get; set; } = null!;
 
-    public string FollowingId { get; set; } = null!;
+    public string FolloweeId { get; set; } = null!;
+
+    public bool? IsMuted { get; set; }
 
     public DateTime? CreatedAt { get; set; }
 
-    public bool? IsMuted { get; set; }
 }

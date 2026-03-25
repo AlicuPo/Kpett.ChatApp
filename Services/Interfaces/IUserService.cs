@@ -11,5 +11,6 @@ namespace Kpett.ChatApp.Services.Interfaces
         Task<UserResponse> UpdateUser(string id, string currentUserId, UpdateUserRequest request, CancellationToken cancel);
         Task<bool> DeleteUser(string id, string currentUserId, CancellationToken cancel);
         Task<UserResponse> AccountSetup(string userId, AccountSetupRequest accountSetupRequest, CancellationToken cancel);
+        Task<UserStatsResponse> GetUserStatsAsync(string userId, CancellationToken cancel);
     }
 }
