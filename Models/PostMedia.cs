@@ -7,7 +7,7 @@ public partial class PostMedia
 {
     public string Id { get; set; } = null!;
 
-    public long PostId { get; set; }
+    public string? PostId { get; set; }
 
     public string? MediaUrl { get; set; }
 

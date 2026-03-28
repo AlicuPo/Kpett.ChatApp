@@ -6,6 +6,7 @@ using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Middlewares;
 using Kpett.ChatApp.Models;
+using Kpett.ChatApp.Options;
 using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Services.Impls;
 using Kpett.ChatApp.Services.Interfaces;
@@ -178,7 +179,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+// Options pattern
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("JwtSection"));
+builder.Services.Configure<CloudinaryOptions>(builder.Configuration.GetSection("CloudinarySettings"));
+builder.Services.Configure<MediaOptions>(builder.Configuration.GetSection("MediaSettings"));
 
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -192,7 +196,8 @@ builder.Services.AddScoped<IRealtimeService, RealtimeService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IFriendshipService, FriendshipServices>();
-builder.Services.AddScoped<IPostFeedService, PostFeedService>();
+builder.Services.AddScoped<IPostService, PostService>();
+builder.Services.AddScoped<IMediaService, MediaService>();
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();

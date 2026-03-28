@@ -2,7 +2,7 @@ namespace Kpett.ChatApp.DTOs.Response.Post
 {
     public class PostResponseDTO
     {
-        public long Id { get; set; }
+        public string Id { get; set; } = null!;
         public string CreatedByUserId { get; set; } = null!;
         public string CreatedByName { get; set; } = null!;
         public string? CreatedByAvatar { get; set; }
@@ -15,13 +15,12 @@ namespace Kpett.ChatApp.DTOs.Response.Post
         public int LikeCount { get; set; }
         public int CommentCount { get; set; }
         public bool IsLikedByCurrentUser { get; set; }
-        public List<CommentDTO>? Comments { get; set; }
     }
 
     public class PostMediaDTO
     {
         public string Id { get; set; } = null!;
-        public long PostId { get; set; }
+        public string PostId { get; set; }
         public string? MediaUrl { get; set; }
         public string? MediaType { get; set; }
         public string? ThumbnailUrl { get; set; }
@@ -34,7 +33,7 @@ namespace Kpett.ChatApp.DTOs.Response.Post
     public class CommentDTO
     {
         public string Id { get; set; } = null!;
-        public long PostId { get; set; }
+        public string PostId { get; set; } = null!;
         public string UserId { get; set; } = null!;
         public string UserName { get; set; } = null!;
         public string? UserAvatar { get; set; }
@@ -49,7 +48,7 @@ namespace Kpett.ChatApp.DTOs.Response.Post
     {
         public string Id { get; set; } = null!;
         public string UserId { get; set; } = null!;
-        public long PostId { get; set; }
+        public string PostId { get; set; } = null!;
         public string? SourceUserId { get; set; }
         public string? SourceUserName { get; set; }
         public string? SourceType { get; set; }
@@ -60,7 +59,7 @@ namespace Kpett.ChatApp.DTOs.Response.Post
     public class PostReactionDTO
     {
         public long Id { get; set; }
-        public long PostId { get; set; }
+        public string PostId { get; set; } = null!;
         public string UserId { get; set; } = null!;
         public byte? Type { get; set; }
         public DateTime? CreatedAt { get; set; }

@@ -46,6 +46,22 @@
             public const string PARENT_POST_NOT_FOUND = "POST.PARENT_POST_NOT_FOUND";
         }
 
+        public static class MEDIA
+        {
+            public const string FILE_EMPTY = "MEDIA.FILE_EMPTY";
+            public const string FILE_SIZE_EXCEEDS_LIMIT = "MEDIA.FILE_SIZE_EXCEEDS_LIMIT";
+            public const string INVALID_FILE_EXTENSION = "MEDIA.INVALID_FILE_EXTENSION";
+
+            public const string TOO_MANY_FILES = "MEDIA.TOO_MANY_FILES";
+            public const string ALL_FILES_FAILED = "MEDIA.ALL_FILES_FAILED";
+
+            public const string UPLOAD_FAILED = "MEDIA.UPLOAD_FAILED";
+
+            public const string PUBLIC_ID_REQUIRED = "MEDIA.PUBLIC_ID_REQUIRED";
+            public const string NOT_FOUND = "MEDIA.NOT_FOUND";
+            public const string DELETE_FAILED = "MEDIA.DELETE_FAILED";
+        }
+
         public static class COMMENT
         {
             public const string NOT_FOUND = "COMMENT.NOT_FOUND";

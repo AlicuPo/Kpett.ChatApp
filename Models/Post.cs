@@ -5,7 +5,7 @@ namespace Kpett.ChatApp.Models;
 
 public partial class Post
 {
-    public long Id { get; set; }
+    public string Id { get; set; } = null!;
 
     public string CreatedByUserId { get; set; } = null!;
 

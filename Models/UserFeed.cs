@@ -9,7 +9,7 @@ public partial class UserFeed
 
     public string UserId { get; set; } = null!;
 
-    public long PostId { get; set; }
+    public string PostId { get; set; } = null!;
 
     public string? SourceUserId { get; set; }
 

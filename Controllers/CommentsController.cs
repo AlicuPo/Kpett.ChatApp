@@ -12,9 +12,9 @@ namespace Kpett.ChatApp.Controllers
     [Authorize]
     public class CommentsController : ControllerBase
     {
-        private readonly IPostFeedService _postFeedService;
+        private readonly IPostService _postFeedService;
 
-        public CommentsController(IPostFeedService postFeedService)
+        public CommentsController(IPostService postFeedService)
         {
             _postFeedService = postFeedService;
         }

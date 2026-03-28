@@ -7,7 +7,7 @@ public partial class PostReaction
 {
     public long Id { get; set; }
 
-    public long PostId { get; set; }
+    public string PostId { get; set; } = null!;
 
     public string UserId { get; set; } = null!;
 
