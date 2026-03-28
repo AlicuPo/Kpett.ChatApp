@@ -1,15 +1,17 @@
 using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Request.Shared;
+using Kpett.ChatApp.DTOs.Response.Media;
 using Kpett.ChatApp.DTOs.Response.Post;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
-namespace Kpett.ChatApp.Services.Interfaces
+namespace Kpett.ChatApp.Services.Impls
 {
-    public interface IPostFeedService
+    public class PostService : IPostService
     {
         Task<PostResponseDTO> CreatePostAsync(string userId, PostMediaRequest postRequest, CancellationToken cancel);
         Task<PostResponseDTO> GetPostAsync(long postId, string? currentUserId, CancellationToken cancel);
@@ -32,7 +34,7 @@ namespace Kpett.ChatApp.Services.Interfaces
         private readonly IRealtimeService _realtimeService;
         private readonly INotificationService _notificationService;
 
-        public PostFeedService(AppDbContext dbContext, IRealtimeService realtimeService, INotificationService notificationService)
+        public PostService(AppDbContext dbContext, IRealtimeService realtimeService, INotificationService notificationService)
         {
             _dbContext = dbContext;
             _realtimeService = realtimeService;
@@ -41,14 +43,8 @@ namespace Kpett.ChatApp.Services.Interfaces
 
         public async Task<PostResponseDTO> CreatePostAsync(string userId, PostMediaRequest postRequest, CancellationToken cancel)
         {
-            if (postRequest == null)
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Post request cannot be null");
-
             if (string.IsNullOrWhiteSpace(userId))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
-
-            if (string.IsNullOrWhiteSpace(postRequest.Content))
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Post content cannot be empty");
 
             cancel.ThrowIfCancellationRequested();
 
@@ -58,6 +54,7 @@ namespace Kpett.ChatApp.Services.Interfaces
 
             var newPost = new Post
             {
+                Id = Guid.NewGuid().ToString(),
                 CreatedByUserId = userId,
                 Content = postRequest.Content,
                 Privacy = postRequest.Privacy ?? "Public",
@@ -67,23 +64,17 @@ namespace Kpett.ChatApp.Services.Interfaces
             };
 
             await _dbContext.Posts.AddAsync(newPost, cancel);
-            await _dbContext.SaveChangesAsync(cancel);
 
             if (!string.IsNullOrEmpty(postRequest.MediaUrl))
             {
                 var postMedia = new PostMedia
                 {
-                    Id = Guid.NewGuid().ToString(),
+                    Id = mediaItem.PublicId,
                     PostId = newPost.Id,
-                    MediaType = postRequest.MediaType ?? "Image",
-                    MediaUrl = postRequest.MediaUrl,
-                    ThumbnailUrl = postRequest.ThumbnailUrl,
-                    Height = postRequest.height ?? 700,
-                    Width = postRequest.width ?? 400
+                    MediaUrl = mediaItem.SecureUrl,
+                    MediaType = mediaItem.Type,
                 };
-
                 await _dbContext.PostMedia.AddAsync(postMedia, cancel);
-                await _dbContext.SaveChangesAsync(cancel);
             }
 
             var userFeed = new UserFeed
@@ -192,13 +183,32 @@ namespace Kpett.ChatApp.Services.Interfaces
             if (string.IsNullOrWhiteSpace(userId))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
 
-            var userExists = await _dbContext.Users.AnyAsync(u => u.Id == userId, cancel);
-            if (!userExists)
-                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
+            var mappedPosts = itemsToProcess.Select(data => new PostFeedResponse
+            {
+                Id = data.Post.Id,
+                Content = data.Post.Content,
+                CreatedAt = data.Post.CreatedAt ?? DateTime.Now,
+                UpdatedAt = data.Post.UpdatedAt,
+                Privacy = data.Post.Privacy,
 
-            cancel.ThrowIfCancellationRequested();
+                Author = data.Author != null
+            ? new UserResponse
+            {
+                Id = data.Author.Id,
+                Username = data.Author.Username,
+                AvatarUrl = data.Author.AvatarUrl,
+                DisplayName = data.Author.DisplayName,
+                Email = data.Author.Email,
+                IsVerified = data.Author.IsVerified,
+            }
+            : new UserResponse { Id = data.Post.CreatedByUserId, Username = "Unknown User" },
 
-            var skip = (request.Page - 1) * request.PageSize;
+                Media = data.Medias.Select(m => new MediaPostResponse
+                {
+                    Id = m.Id,
+                    Url = m.MediaUrl,
+                    Type = m.MediaType
+                }).ToList(),
 
             var feeds = await _dbContext.UserFeeds
                 .AsNoTracking()
@@ -213,26 +223,55 @@ namespace Kpett.ChatApp.Services.Interfaces
                     (f, u) => new { Feed = f, SourceUser = u })
                 .ToListAsync(cancel);
 
-            var result = new List<UserFeedDTO>();
-
-            foreach (var item in feeds)
-            {
-                var post = await GetPostAsync(item.Feed.PostId, userId, cancel);
-
-                result.Add(new UserFeedDTO
+                ViewerContext = new PostViewerContextResponse
                 {
-                    Id = item.Feed.Id,
-                    UserId = item.Feed.UserId,
-                    PostId = item.Feed.PostId,
-                    SourceUserId = item.Feed.SourceUserId,
-                    SourceUserName = item.SourceUser.DisplayName ?? item.SourceUser.Username,
-                    SourceType = item.Feed.SourceType,
-                    CreatedAt = item.Feed.CreatedAt,
-                    Post = post
-                });
-            }
+                    IsOwner = data.Post.CreatedByUserId == currentUserId,
+                    IsLiked = data.IsLiked,
+                    IsSaved = false,
+                    IsPinned = false,
+                    CanEdit = data.Post.CreatedByUserId == currentUserId,
+                    CanDelete = data.Post.CreatedByUserId == currentUserId,
+                    CanLike = true,
+                    CanComment = true,
+                    CanPin = data.Post.CreatedByUserId == currentUserId
+                }
+            }).ToList();
 
-            return result;
+            return new PaginatedData<PostFeedResponse>
+            {
+                Items = mappedPosts,
+                Pagination = new CursorPaginationMeta
+                {
+                    NextCursor = nextCursor,
+                    Limit = limit
+                }
+            };
+        }
+
+        private string EncodeCursor(DateTime createdAt, string id)
+        {
+            var plainText = $"{createdAt.Ticks}_{id}";
+            var plainTextBytes = Encoding.UTF8.GetBytes(plainText);
+            return Convert.ToBase64String(plainTextBytes);
+        }
+
+        private (DateTime Date, string Id)? DecodeCursor(string cursor)
+        {
+            try
+            {
+                var base64EncodedBytes = Convert.FromBase64String(cursor);
+                var plainText = Encoding.UTF8.GetString(base64EncodedBytes);
+                var parts = plainText.Split('_', 2);
+
+                if (parts.Length == 2 && long.TryParse(parts[0], out long ticks))
+                {
+                    var date = new DateTime(ticks);
+                    var id = parts[1];
+                    return (date, id);
+                }
+            }
+            catch { }
+            return null;
         }
 
         public async Task<List<PostResponseDTO>> GetUserPostsAsync(string userId, SearchRequest request, CancellationToken cancel = default)
@@ -910,4 +949,5 @@ namespace Kpett.ChatApp.Services.Interfaces
 
         private sealed record CommentRow(Comment Comment, User User);
     }
+
 }
