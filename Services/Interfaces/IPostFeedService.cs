@@ -21,7 +21,7 @@ namespace Kpett.ChatApp.Services.Interfaces
         Task RemoveReactionAsync(long postId, string userId, CancellationToken cancel);
         Task<List<PostReactionDTO>> GetPostReactionsAsync(long postId, CancellationToken cancel);
         Task<CommentDTO> AddCommentAsync(long postId, string userId, string content, string? parentCommentId, IEnumerable<string>? mentions, CancellationToken cancel);
-        Task<List<CommentDTO>> GetCommentsAsync(long postId, CancellationToken cancel);
+        Task<CommentsPageDTO> GetCommentsAsync(long postId, string currentUserId, DateTime? cursor, int limit, CancellationToken cancel);
         Task<CommentDTO> UpdateCommentAsync(string commentId, string userId, string content, IEnumerable<string>? mentions, CancellationToken cancel);
         Task DeleteCommentAsync(string commentId, string userId, CancellationToken cancel);
     }
@@ -494,7 +494,12 @@ namespace Kpett.ChatApp.Services.Interfaces
             return await MapCommentAsync(comment, cancel);
         }
 
-        public async Task<List<CommentDTO>> GetCommentsAsync(long postId, CancellationToken cancel)
+        public async Task<CommentsPageDTO> GetCommentsAsync(
+            long postId,
+            string currentUserId,
+            DateTime? cursor,
+            int limit,
+            CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
 
@@ -503,9 +508,23 @@ namespace Kpett.ChatApp.Services.Interfaces
             if (!postExists)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
-            var commentRows = await _dbContext.Comments
+            var normalizedLimit = limit <= 0 ? 20 : Math.Min(limit, 100);
+            var totalCount = await _dbContext.Comments
                 .AsNoTracking()
-                .Where(c => c.PostId == postId && c.DeletedAt == null)
+                .CountAsync(c => c.PostId == postId && c.DeletedAt == null && string.IsNullOrEmpty(c.ParentCommentId), cancel);
+
+            var query = _dbContext.Comments
+                .AsNoTracking()
+                .Where(c => c.PostId == postId && c.DeletedAt == null && string.IsNullOrEmpty(c.ParentCommentId));
+
+            if (cursor.HasValue)
+            {
+                query = query.Where(c => c.CreatedAt.HasValue && c.CreatedAt.Value < cursor.Value);
+            }
+
+            var commentRows = await query
+                .OrderByDescending(c => c.CreatedAt)
+                .Take(normalizedLimit + 1)
                 .Join(
                     _dbContext.Users.AsNoTracking(),
                     c => c.UserId,
@@ -513,36 +532,40 @@ namespace Kpett.ChatApp.Services.Interfaces
                     (c, u) => new CommentRow(c, u))
                 .ToListAsync(cancel);
 
+            var hasMore = commentRows.Count > normalizedLimit;
+            var pagedCommentRows = hasMore
+                ? commentRows.Take(normalizedLimit).ToList()
+                : commentRows;
+
             var mentionLookup = await GetCommentMentionsLookupAsync(
-                commentRows.Select(x => x.Comment.Id).ToList(),
+                pagedCommentRows.Select(x => x.Comment.Id).ToList(),
                 cancel);
 
-            var repliesByParentId = commentRows
-                .Where(x => !string.IsNullOrEmpty(x.Comment.ParentCommentId))
-                .GroupBy(x => x.Comment.ParentCommentId!, StringComparer.Ordinal)
-                .ToDictionary(
-                    group => group.Key,
-                    group => group
-                        .OrderBy(x => x.Comment.CreatedAt)
-                        .Select(x => MapComment(
-                            x.Comment,
-                            x.User,
-                            GetMentions(mentionLookup, x.Comment.Id),
-                            new List<CommentDTO>()))
-                        .ToList(),
-                    StringComparer.Ordinal);
+            var likedCommentIds = await GetLikedCommentIdsAsync(
+                pagedCommentRows.Select(x => x.Comment.Id).ToList(),
+                currentUserId,
+                cancel);
 
-            return commentRows
-                .Where(x => string.IsNullOrEmpty(x.Comment.ParentCommentId))
-                .OrderByDescending(x => x.Comment.CreatedAt)
-                .Select(x => MapComment(
+            var items = pagedCommentRows
+                .Select(x => MapCommentListItem(
                     x.Comment,
                     x.User,
-                    GetMentions(mentionLookup, x.Comment.Id),
-                    repliesByParentId.TryGetValue(x.Comment.Id, out var replies)
-                        ? replies
-                        : new List<CommentDTO>()))
+                    GetMentionSummaries(mentionLookup, x.Comment.Id),
+                    likedCommentIds.Contains(x.Comment.Id),
+                    currentUserId))
                 .ToList();
+
+            return new CommentsPageDTO
+            {
+                Items = items,
+                Pagination = new CommentPaginationDTO
+                {
+                    NextCursor = hasMore ? items.Last().CreatedAt?.ToString("O") : null,
+                    HasMore = hasMore,
+                    Limit = normalizedLimit,
+                    TotalCount = totalCount
+                }
+            };
         }
 
         public async Task<CommentDTO> UpdateCommentAsync(
@@ -655,6 +678,89 @@ namespace Kpett.ChatApp.Services.Interfaces
                     group => group.Key,
                     group => group.Select(x => x.Mention).ToList(),
                     StringComparer.Ordinal);
+        }
+
+        private async Task<HashSet<string>> GetLikedCommentIdsAsync(
+            IReadOnlyCollection<string> commentIds,
+            string currentUserId,
+            CancellationToken cancel)
+        {
+            if (commentIds.Count == 0 || string.IsNullOrWhiteSpace(currentUserId))
+            {
+                return new HashSet<string>(StringComparer.Ordinal);
+            }
+
+            var likedCommentIds = await _dbContext.CommentLikes
+                .AsNoTracking()
+                .Where(cl => cl.UserId == currentUserId && commentIds.Contains(cl.CommentId))
+                .Select(cl => cl.CommentId)
+                .ToListAsync(cancel);
+
+            return likedCommentIds.ToHashSet(StringComparer.Ordinal);
+        }
+
+        private static List<CommentMentionSummaryDTO> GetMentionSummaries(
+            IReadOnlyDictionary<string, List<CommentMentionDTO>> mentionLookup,
+            string commentId)
+        {
+            if (!mentionLookup.TryGetValue(commentId, out var mentions))
+            {
+                return new List<CommentMentionSummaryDTO>();
+            }
+
+            return mentions
+                .Select(m => new CommentMentionSummaryDTO
+                {
+                    UserId = m.UserId,
+                    Username = m.Username,
+                    DisplayName = m.DisplayName
+                })
+                .ToList();
+        }
+
+        private static CommentListItemDTO MapCommentListItem(
+            Comment comment,
+            User userInfo,
+            List<CommentMentionSummaryDTO> mentions,
+            bool isLiked,
+            string currentUserId)
+        {
+            var isDeleted = comment.DeletedAt != null;
+            var isOwner = string.Equals(comment.UserId, currentUserId, StringComparison.Ordinal);
+
+            return new CommentListItemDTO
+            {
+                Id = comment.Id,
+                PostId = comment.PostId,
+                ParentId = comment.ParentCommentId,
+                Author = new CommentAuthorDTO
+                {
+                    Id = userInfo.Id,
+                    Username = userInfo.Username,
+                    DisplayName = userInfo.DisplayName,
+                    AvatarUrl = userInfo.AvatarUrl,
+                    IsVerified = userInfo.IsVerified
+                },
+                Content = comment.Content,
+                Mentions = mentions,
+                Attachments = new List<CommentAttachmentDTO>(),
+                Metrics = new CommentMetricsDTO
+                {
+                    LikeCount = comment.LikeCount,
+                    ReplyCount = comment.ReplyCount
+                },
+                ViewerContext = new CommentViewerContextDTO
+                {
+                    IsLiked = isLiked,
+                    CanEdit = !isDeleted && isOwner,
+                    CanDelete = !isDeleted && isOwner,
+                    CanReply = !isDeleted
+                },
+                IsEdited = comment.IsEdited,
+                IsDeleted = isDeleted,
+                CreatedAt = comment.CreatedAt,
+                UpdatedAt = comment.UpdatedAt
+            };
         }
 
         private async Task SyncCommentMentionsAsync(

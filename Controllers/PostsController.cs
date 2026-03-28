@@ -1,5 +1,6 @@
 using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Response.Post;
+using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -95,10 +96,21 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpGet("{postId:long}/comments")]
-        public async Task<ActionResult<List<CommentDTO>>> GetComments(long postId, CancellationToken cancel)
+        public async Task<ActionResult<GeneralResponse<CommentsPageDTO>>> GetComments(
+            long postId,
+            [FromQuery] DateTime? cursor,
+            [FromQuery] int limit = 20,
+            CancellationToken cancel = default)
         {
-            var result = await _postFeedService.GetCommentsAsync(postId, cancel);
-            return Ok(result);
+            var userId = User.GetRequiredUserId();
+            var result = await _postFeedService.GetCommentsAsync(postId, userId, cursor, limit, cancel);
+            return Ok(new GeneralResponse<CommentsPageDTO>
+            {
+                IsSuccess = true,
+                Message = "Get comments successfully",
+                StatusCode = 200,
+                Data = result
+            });
         }
     }
 }

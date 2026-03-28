@@ -232,13 +232,36 @@ public class UsersAndPostsApiTests
 
         Assert.Equal(HttpStatusCode.OK, getCommentsResponse.StatusCode);
 
-        var (_, comments) = await HttpTestHelpers.ReadJsonAsync<List<CommentDTO>>(getCommentsResponse);
-        var rootComment = Assert.Single(comments);
-        Assert.Equal(1, rootComment.ReplyCount);
+        var (_, commentsResponse) = await HttpTestHelpers.ReadJsonAsync<GeneralResponse<CommentsPageDTO>>(getCommentsResponse);
+        Assert.True(commentsResponse.IsSuccess);
+        Assert.Equal(StatusCodes.Status200OK, commentsResponse.StatusCode);
+        Assert.NotNull(commentsResponse.Data);
+        var rootComment = Assert.Single(commentsResponse.Data.Items);
+        Assert.Equal(comment.Id, rootComment.Id);
+        Assert.Null(rootComment.ParentId);
+        Assert.NotNull(rootComment.Author);
+        Assert.Equal("author-1", rootComment.Author.Id);
+        Assert.Equal("author-1", rootComment.Author.Username);
+        Assert.Equal("author-1", rootComment.Author.DisplayName);
         Assert.NotNull(rootComment.Mentions);
-        Assert.Equal("tagged-1", Assert.Single(rootComment.Mentions!).UserId);
-        Assert.NotNull(rootComment.RepliesComments);
-        Assert.Equal(reply.Id, Assert.Single(rootComment.RepliesComments!).Id);
+        Assert.Equal("tagged-1", Assert.Single(rootComment.Mentions).UserId);
+        Assert.NotNull(rootComment.Attachments);
+        Assert.Empty(rootComment.Attachments);
+        Assert.NotNull(rootComment.Metrics);
+        Assert.Equal(0, rootComment.Metrics.LikeCount);
+        Assert.Equal(1, rootComment.Metrics.ReplyCount);
+        Assert.NotNull(rootComment.ViewerContext);
+        Assert.False(rootComment.ViewerContext.IsLiked);
+        Assert.True(rootComment.ViewerContext.CanEdit);
+        Assert.True(rootComment.ViewerContext.CanDelete);
+        Assert.True(rootComment.ViewerContext.CanReply);
+        Assert.False(rootComment.IsEdited);
+        Assert.False(rootComment.IsDeleted);
+        Assert.NotNull(commentsResponse.Data.Pagination);
+        Assert.False(commentsResponse.Data.Pagination.HasMore);
+        Assert.Null(commentsResponse.Data.Pagination.NextCursor);
+        Assert.Equal(20, commentsResponse.Data.Pagination.Limit);
+        Assert.Equal(1, commentsResponse.Data.Pagination.TotalCount);
 
         var updateCommentResponse = await client.PatchAsJsonAsync($"/api/comments/{comment.Id}", new UpdateCommentRequest
         {
@@ -275,10 +298,9 @@ public class UsersAndPostsApiTests
 
         Assert.Equal(HttpStatusCode.OK, getCommentsAfterDeleteResponse.StatusCode);
 
-        var (_, commentsAfterDelete) = await HttpTestHelpers.ReadJsonAsync<List<CommentDTO>>(getCommentsAfterDeleteResponse);
-        var rootCommentAfterDelete = Assert.Single(commentsAfterDelete);
-        Assert.Equal(0, rootCommentAfterDelete.ReplyCount);
-        Assert.Empty(rootCommentAfterDelete.RepliesComments!);
+        var (_, commentsAfterDeleteResponse) = await HttpTestHelpers.ReadJsonAsync<GeneralResponse<CommentsPageDTO>>(getCommentsAfterDeleteResponse);
+        var rootCommentAfterDelete = Assert.Single(commentsAfterDeleteResponse.Data.Items);
+        Assert.Equal(0, rootCommentAfterDelete.Metrics.ReplyCount);
 
         var deleteCommentResponse = await client.DeleteAsync($"/api/comments/{comment.Id}");
 

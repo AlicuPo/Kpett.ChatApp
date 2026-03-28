@@ -60,6 +60,74 @@ namespace Kpett.ChatApp.DTOs.Response.Post
         public DateTime? UpdatedAt { get; set; }
     }
 
+    public class CommentsPageDTO
+    {
+        public List<CommentListItemDTO> Items { get; set; } = new();
+        public CommentPaginationDTO Pagination { get; set; } = new();
+    }
+
+    public class CommentListItemDTO
+    {
+        public string Id { get; set; } = null!;
+        public long PostId { get; set; }
+        public string? ParentId { get; set; }
+        public CommentAuthorDTO Author { get; set; } = new();
+        public string? Content { get; set; }
+        public List<CommentMentionSummaryDTO> Mentions { get; set; } = new();
+        public List<CommentAttachmentDTO> Attachments { get; set; } = new();
+        public CommentMetricsDTO Metrics { get; set; } = new();
+        public CommentViewerContextDTO ViewerContext { get; set; } = new();
+        public bool IsEdited { get; set; }
+        public bool IsDeleted { get; set; }
+        public DateTime? CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+    }
+
+    public class CommentAuthorDTO
+    {
+        public string Id { get; set; } = null!;
+        public string? Username { get; set; }
+        public string? DisplayName { get; set; }
+        public string? AvatarUrl { get; set; }
+        public bool IsVerified { get; set; }
+    }
+
+    public class CommentMentionSummaryDTO
+    {
+        public string UserId { get; set; } = null!;
+        public string Username { get; set; } = null!;
+        public string? DisplayName { get; set; }
+    }
+
+    public class CommentAttachmentDTO
+    {
+        public string? Id { get; set; }
+        public string? Url { get; set; }
+        public string? Type { get; set; }
+    }
+
+    public class CommentMetricsDTO
+    {
+        public int LikeCount { get; set; }
+        public int ReplyCount { get; set; }
+    }
+
+    public class CommentViewerContextDTO
+    {
+        public bool IsLiked { get; set; }
+        public bool CanEdit { get; set; }
+        public bool CanDelete { get; set; }
+        public bool CanReply { get; set; }
+    }
+
+    public class CommentPaginationDTO
+    {
+        public string? NextCursor { get; set; }
+        public bool HasMore { get; set; }
+        public int Limit { get; set; }
+        public int TotalCount { get; set; }
+    }
+
     public class UserFeedDTO
     {
         public string Id { get; set; } = null!;
