@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
 namespace Kpett.ChatApp.Models;
 
@@ -13,6 +14,7 @@ public partial class Conversation
 
     public string? AvatarUrl { get; set; }
 
+    [MaxLength(450)]
     public string? CreatedByUserId { get; set; }
 
     public DateTime? CreatedAt { get; set; }

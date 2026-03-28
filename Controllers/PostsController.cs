@@ -124,7 +124,7 @@ namespace Kpett.ChatApp.Controllers
 
         [HttpGet("{postId:long}/comments")]
         public async Task<ActionResult<GeneralResponse<CommentsPageDTO>>> GetComments(
-            long postId,
+            string postId,
             [FromQuery] DateTime? cursor,
             [FromQuery] int limit = 20,
             CancellationToken cancel = default)

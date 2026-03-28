@@ -3,37 +3,22 @@ using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Request.Shared;
 using Kpett.ChatApp.DTOs.Response.Media;
 using Kpett.ChatApp.DTOs.Response.Post;
+using Kpett.ChatApp.DTOs.Response.Shared;
+using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using System.Text;
 
 namespace Kpett.ChatApp.Services.Impls
 {
     public class PostService : IPostService
     {
-        Task<PostResponseDTO> CreatePostAsync(string userId, PostMediaRequest postRequest, CancellationToken cancel);
-        Task<PostResponseDTO> GetPostAsync(long postId, string? currentUserId, CancellationToken cancel);
-        Task<List<UserFeedDTO>> GetUserFeedAsync(string userId, SearchRequest request, CancellationToken cancel = default);
-        Task<List<PostResponseDTO>> GetUserPostsAsync(string userId, SearchRequest request, CancellationToken cancel = default);
-        Task<PostResponseDTO> UpdatePostAsync(long postId, string userId, string content, string privacy, CancellationToken cancel);
-        Task DeletePostAsync(long postId, string userId, CancellationToken cancel);
-        Task<PostReactionDTO> AddReactionAsync(long postId, string userId, byte reactionType, CancellationToken cancel);
-        Task RemoveReactionAsync(long postId, string userId, CancellationToken cancel);
-        Task<List<PostReactionDTO>> GetPostReactionsAsync(long postId, CancellationToken cancel);
-        Task<CommentDTO> AddCommentAsync(long postId, string userId, string content, string? parentCommentId, IEnumerable<string>? mentions, CancellationToken cancel);
-        Task<CommentsPageDTO> GetCommentsAsync(long postId, string currentUserId, DateTime? cursor, int limit, CancellationToken cancel);
-        Task<CommentDTO> UpdateCommentAsync(string commentId, string userId, string content, IEnumerable<string>? mentions, CancellationToken cancel);
-        Task DeleteCommentAsync(string commentId, string userId, CancellationToken cancel);
-    }
-
-    public class PostFeedService : IPostFeedService
-    {
         private readonly AppDbContext _dbContext;
         private readonly IRealtimeService _realtimeService;
         private readonly INotificationService _notificationService;
-
         public PostService(AppDbContext dbContext, IRealtimeService realtimeService, INotificationService notificationService)
         {
             _dbContext = dbContext;
@@ -41,17 +26,22 @@ namespace Kpett.ChatApp.Services.Impls
             _notificationService = notificationService;
         }
 
-        public async Task<PostResponseDTO> CreatePostAsync(string userId, PostMediaRequest postRequest, CancellationToken cancel)
+        /// <summary>
+        /// Create a new post with optional media
+        /// </summary>
+        public async Task<string> CreatePostAsync(string userId, PostRequest postRequest, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(userId))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
 
             cancel.ThrowIfCancellationRequested();
 
+            // Check if user exists
             var userExists = await _dbContext.Users.AnyAsync(u => u.Id == userId, cancel);
             if (!userExists)
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
 
+            // Create post
             var newPost = new Post
             {
                 Id = Guid.NewGuid().ToString(),
@@ -65,7 +55,9 @@ namespace Kpett.ChatApp.Services.Impls
 
             await _dbContext.Posts.AddAsync(newPost, cancel);
 
-            if (!string.IsNullOrEmpty(postRequest.MediaUrl))
+            var media = postRequest.Media;
+
+            foreach (var mediaItem in media ?? [])
             {
                 var postMedia = new PostMedia
                 {
@@ -77,40 +69,15 @@ namespace Kpett.ChatApp.Services.Impls
                 await _dbContext.PostMedia.AddAsync(postMedia, cancel);
             }
 
-            var userFeed = new UserFeed
-            {
-                Id = Guid.NewGuid().ToString(),
-                UserId = userId,
-                PostId = newPost.Id,
-                SourceUserId = userId,
-                SourceType = "Post",
-                CreatedAt = DateTime.UtcNow
-            };
+            await _dbContext.SaveChangesAsync();
 
-            await _dbContext.UserFeeds.AddAsync(userFeed, cancel);
-            await _dbContext.SaveChangesAsync(cancel);
-
-            try
-            {
-                var user = await _dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, cancel);
-                await _realtimeService.PublishAsync("feed:updates", new
-                {
-                    type = "NEW_POST",
-                    postId = newPost.Id,
-                    userId,
-                    userName = user?.DisplayName ?? user?.Username,
-                    timestamp = DateTime.UtcNow
-                });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Real-time notification failed: {ex.Message}");
-            }
-
-            return await GetPostAsync(newPost.Id, userId, cancel);
+            return newPost.Id;
         }
 
-        public async Task<PostResponseDTO> GetPostAsync(long postId, string? currentUserId, CancellationToken cancel)
+        /// <summary>
+        /// Get a single post with details
+        /// </summary>
+        public async Task<PostResponseDTO> GetPostAsync(string postId, string? currentUserId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
 
@@ -118,15 +85,17 @@ namespace Kpett.ChatApp.Services.Impls
                 .AsNoTracking()
                 .Where(p => p.Id == postId && (!p.IsDeleted.HasValue || !p.IsDeleted.Value))
                 .Join(
-                    _dbContext.Users.AsNoTracking(),
+                    _dbContext.Users,
                     p => p.CreatedByUserId,
                     u => u.Id,
-                    (p, u) => new { Post = p, User = u })
+                    (p, u) => new { Post = p, User = u }
+                )
                 .FirstOrDefaultAsync(cancel);
 
             if (post == null)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
+            // Get media
             var media = await _dbContext.PostMedia
                 .AsNoTracking()
                 .Where(m => m.PostId == postId)
@@ -144,6 +113,7 @@ namespace Kpett.ChatApp.Services.Impls
                 })
                 .ToListAsync(cancel);
 
+            // Get reaction counts
             var likeCount = await _dbContext.PostReactions
                 .AsNoTracking()
                 .CountAsync(r => r.PostId == postId, cancel);
@@ -156,6 +126,7 @@ namespace Kpett.ChatApp.Services.Impls
                     .AnyAsync(r => r.PostId == postId && r.UserId == currentUserId, cancel);
             }
 
+            // Get comment count
             var commentCount = await _dbContext.Comments
                 .AsNoTracking()
                 .CountAsync(c => c.PostId == postId && c.DeletedAt == null && string.IsNullOrEmpty(c.ParentCommentId), cancel);
@@ -164,7 +135,7 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 Id = post.Post.Id,
                 CreatedByUserId = post.Post.CreatedByUserId,
-                CreatedByName = post.User.DisplayName ?? post.User.Username ?? "Anonymous",
+                CreatedByName = post.User.DisplayName ?? post.User.Username,
                 CreatedByAvatar = post.User.AvatarUrl,
                 Content = post.Post.Content,
                 Privacy = post.Post.Privacy,
@@ -178,10 +149,81 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
-        public async Task<List<UserFeedDTO>> GetUserFeedAsync(string userId, SearchRequest request, CancellationToken cancel = default)
+        /// <summary>
+        /// Get user feed with pagination
+        /// </summary>
+        public async Task<PaginatedData<PostFeedResponse>> GetFeedAsync(string currentUserId, string? cursor, int limit = 10)
         {
-            if (string.IsNullOrWhiteSpace(userId))
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
+            // Giải mã Cursor
+            DateTime? cursorDate = null;
+            string? cursorId = null;
+
+            if (!string.IsNullOrWhiteSpace(cursor))
+            {
+                var decoded = DecodeCursor(cursor);
+                if (decoded != null)
+                {
+                    cursorDate = decoded.Value.Date;
+                    cursorId = decoded.Value.Id;
+                }
+            }
+
+            var query = _dbContext.Posts.AsNoTracking();
+
+            if (cursorDate.HasValue && !string.IsNullOrEmpty(cursorId))
+            {
+                query = query.Where(p =>
+                    p.CreatedAt < cursorDate.Value ||
+                    (p.CreatedAt == cursorDate.Value && p.Id.CompareTo(cursorId) < 0));
+            }
+
+            var rawData = await query
+                .OrderByDescending(p => p.CreatedAt)
+                .ThenByDescending(p => p.Id)
+                .Take(limit + 1)
+                .Select(p => new
+                {
+                    Post = p,
+                    Author = _dbContext.Users.Where(u => u.Id == p.CreatedByUserId)
+                                               .Select(u => new
+                                               {
+                                                   Id = u.Id,
+                                                   Email = u.Email,
+                                                   Username = u.Username,
+                                                   DisplayName = u.DisplayName,
+                                                   IsVerified = u.IsVerified,
+                                                   AvatarUrl = u.AvatarUrl,
+                                               })
+                                               .FirstOrDefault(),
+
+                    Medias = _dbContext.PostMedia.Where(m => m.PostId == p.Id)
+                                         .Select(m => new { m.Id, m.MediaUrl, m.MediaType })
+                                         .ToList(),
+
+                    LikeCount = _dbContext.PostReactions.Count(r => r.PostId == p.Id),
+                    CommentCount = _dbContext.Comments.Count(c => c.PostId == p.Id),
+                    IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == currentUserId)
+                })
+                .ToListAsync();
+
+            if (!rawData.Any())
+            {
+                return new PaginatedData<PostFeedResponse>
+                {
+                    Items = new List<PostFeedResponse>(),
+                    Pagination = new CursorPaginationMeta { Limit = limit }
+                };
+            }
+
+            string? nextCursor = null;
+            var itemsToProcess = rawData;
+
+            if (rawData.Count > limit)
+            {
+                var lastItemInPage = rawData[limit - 1].Post;
+                nextCursor = EncodeCursor(lastItemInPage.CreatedAt ?? DateTime.Now, lastItemInPage.Id);
+                itemsToProcess = rawData.Take(limit).ToList();
+            }
 
             var mappedPosts = itemsToProcess.Select(data => new PostFeedResponse
             {
@@ -210,18 +252,11 @@ namespace Kpett.ChatApp.Services.Impls
                     Type = m.MediaType
                 }).ToList(),
 
-            var feeds = await _dbContext.UserFeeds
-                .AsNoTracking()
-                .Where(f => f.UserId == userId)
-                .OrderByDescending(f => f.CreatedAt)
-                .Skip(skip)
-                .Take(request.PageSize)
-                .Join(
-                    _dbContext.Users.AsNoTracking(),
-                    f => f.SourceUserId,
-                    u => u.Id,
-                    (f, u) => new { Feed = f, SourceUser = u })
-                .ToListAsync(cancel);
+                Metrics = new PostMetricsResponse
+                {
+                    LikeCount = data.LikeCount,
+                    CommentCount = data.CommentCount
+                },
 
                 ViewerContext = new PostViewerContextResponse
                 {
@@ -274,6 +309,9 @@ namespace Kpett.ChatApp.Services.Impls
             return null;
         }
 
+        /// <summary>
+        /// Get all posts from a user
+        /// </summary>
         public async Task<List<PostResponseDTO>> GetUserPostsAsync(string userId, SearchRequest request, CancellationToken cancel = default)
         {
             if (string.IsNullOrWhiteSpace(userId))
@@ -300,13 +338,17 @@ namespace Kpett.ChatApp.Services.Impls
 
             foreach (var postId in posts)
             {
-                result.Add(await GetPostAsync(postId, userId, cancel));
+                var post = await GetPostAsync(postId, userId, cancel);
+                result.Add(post);
             }
 
             return result;
         }
 
-        public async Task<PostResponseDTO> UpdatePostAsync(long postId, string userId, string content, string privacy, CancellationToken cancel)
+        /// <summary>
+        /// Update a post
+        /// </summary>
+        public async Task<PostResponseDTO> UpdatePostAsync(string postId, string userId, string content, string privacy, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(content))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Content cannot be empty");
@@ -325,12 +367,16 @@ namespace Kpett.ChatApp.Services.Impls
             post.Privacy = privacy ?? "Public";
             post.UpdatedAt = DateTime.UtcNow;
 
+            _dbContext.Posts.Update(post);
             await _dbContext.SaveChangesAsync(cancel);
 
             return await GetPostAsync(postId, userId, cancel);
         }
 
-        public async Task DeletePostAsync(long postId, string userId, CancellationToken cancel)
+        /// <summary>
+        /// Delete a post (soft delete)
+        /// </summary>
+        public async Task DeletePostAsync(string postId, string userId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
 
@@ -345,10 +391,14 @@ namespace Kpett.ChatApp.Services.Impls
             post.IsDeleted = true;
             post.UpdatedAt = DateTime.UtcNow;
 
+            _dbContext.Posts.Update(post);
             await _dbContext.SaveChangesAsync(cancel);
         }
 
-        public async Task<PostReactionDTO> AddReactionAsync(long postId, string userId, byte reactionType, CancellationToken cancel)
+        /// <summary>
+        /// Add a reaction to a post
+        /// </summary>
+        public async Task<PostReactionDTO> AddReactionAsync(string postId, string userId, byte reactionType, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
 
@@ -359,16 +409,20 @@ namespace Kpett.ChatApp.Services.Impls
             if (post == null)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
+            // Check if already reacted
             var existingReaction = await _dbContext.PostReactions
                 .FirstOrDefaultAsync(r => r.PostId == postId && r.UserId == userId, cancel);
 
             if (existingReaction != null)
             {
+                // Update existing reaction
                 existingReaction.Type = reactionType;
                 existingReaction.CreatedAt = DateTime.UtcNow;
+                _dbContext.PostReactions.Update(existingReaction);
             }
             else
             {
+                // Create new reaction
                 var reaction = new PostReaction
                 {
                     PostId = postId,
@@ -381,6 +435,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             await _dbContext.SaveChangesAsync(cancel);
 
+            // Notify post owner
             if (post.CreatedByUserId != userId)
             {
                 try
@@ -389,10 +444,10 @@ namespace Kpett.ChatApp.Services.Impls
                     await _realtimeService.PublishAsync($"user:{post.CreatedByUserId}:notifications", new
                     {
                         type = "POST_REACTION",
-                        postId,
-                        userId,
+                        postId = postId,
+                        userId = userId,
                         userName = user?.DisplayName ?? user?.Username,
-                        reactionType,
+                        reactionType = reactionType,
                         timestamp = DateTime.UtcNow
                     });
                 }
@@ -416,7 +471,10 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
-        public async Task RemoveReactionAsync(long postId, string userId, CancellationToken cancel)
+        /// <summary>
+        /// Remove a reaction from a post
+        /// </summary>
+        public async Task RemoveReactionAsync(string postId, string userId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
 
@@ -435,7 +493,10 @@ namespace Kpett.ChatApp.Services.Impls
             }
         }
 
-        public async Task<List<PostReactionDTO>> GetPostReactionsAsync(long postId, CancellationToken cancel)
+        /// <summary>
+        /// Get all reactions on a post
+        /// </summary>
+        public async Task<List<PostReactionDTO>> GetPostReactionsAsync(string postId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
 
@@ -444,7 +505,7 @@ namespace Kpett.ChatApp.Services.Impls
             if (!postExists)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
-            return await _dbContext.PostReactions
+            var reactions = await _dbContext.PostReactions
                 .AsNoTracking()
                 .Where(r => r.PostId == postId)
                 .Select(r => new PostReactionDTO
@@ -456,10 +517,12 @@ namespace Kpett.ChatApp.Services.Impls
                     CreatedAt = r.CreatedAt
                 })
                 .ToListAsync(cancel);
+
+            return reactions;
         }
 
         public async Task<CommentDTO> AddCommentAsync(
-            long postId,
+            string postId,
             string userId,
             string content,
             string? parentCommentId,
@@ -534,7 +597,7 @@ namespace Kpett.ChatApp.Services.Impls
         }
 
         public async Task<CommentsPageDTO> GetCommentsAsync(
-            long postId,
+            string postId,
             string currentUserId,
             DateTime? cursor,
             int limit,
@@ -949,5 +1012,4 @@ namespace Kpett.ChatApp.Services.Impls
 
         private sealed record CommentRow(Comment Comment, User User);
     }
-
 }

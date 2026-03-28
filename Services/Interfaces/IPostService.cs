@@ -31,9 +31,9 @@ namespace Kpett.ChatApp.Services.Interfaces
         Task<List<PostReactionDTO>> GetPostReactionsAsync(string postId, CancellationToken cancel);
 
         // Comment operations
-        Task<CommentDTO> AddCommentAsync(string postId, string userId, string content, string? parentCommentId, CancellationToken cancel);
-        Task<List<CommentDTO>> GetCommentsAsync(string postId, CancellationToken cancel);
-        Task<CommentDTO> UpdateCommentAsync(string commentId, string userId, string content, CancellationToken cancel);
+        Task<CommentDTO> AddCommentAsync(string postId, string userId, string content, string? parentCommentId, IEnumerable<string>? mentions, CancellationToken cancel);
+        Task<CommentsPageDTO> GetCommentsAsync(string postId, string currentUserId, DateTime? cursor, int limit, CancellationToken cancel);
+        Task<CommentDTO> UpdateCommentAsync(string commentId, string userId, string content, IEnumerable<string>? mentions, CancellationToken cancel);
         Task DeleteCommentAsync(string commentId, string userId, CancellationToken cancel);
     }
 }

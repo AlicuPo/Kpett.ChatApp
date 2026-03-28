@@ -1,4 +1,6 @@
-﻿namespace Kpett.ChatApp.DTOs.Response.Shared
+﻿using System.Text.Json.Serialization;
+
+namespace Kpett.ChatApp.DTOs.Response.Shared
 {
     public class CursorPaginationMeta
     {
@@ -6,6 +8,7 @@
 
         public bool HasMore => !string.IsNullOrEmpty(NextCursor);
 
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public int? TotalCount { get; set; }
 
         public int Limit { get; set; }

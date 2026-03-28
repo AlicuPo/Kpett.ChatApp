@@ -18,9 +18,9 @@ namespace Kpett.ChatApp.Controllers
     public class UsersController : ControllerBase
     {
         private readonly IUserService _userService;
-        private readonly IPostFeedService _postFeedService;
+        private readonly IPostService _postFeedService;
 
-        public UsersController(IUserService usersService, IPostFeedService postFeedService)
+        public UsersController(IUserService usersService, IPostService postFeedService)
         {
             _userService = usersService;
             _postFeedService = postFeedService;
@@ -91,13 +91,6 @@ namespace Kpett.ChatApp.Controllers
                 IsSuccess = true,
                 Data = result
             });
-        }
-
-        [HttpGet("me/feed")]
-        public async Task<ActionResult<List<UserFeedDTO>>> GetMyFeed([FromQuery] SearchRequest request, CancellationToken cancel = default)
-        {
-            var result = await _postFeedService.GetUserFeedAsync(User.GetRequiredUserId(), request, cancel);
-            return Ok(result);
         }
 
         [AllowAnonymous]

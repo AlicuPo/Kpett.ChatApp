@@ -223,7 +223,7 @@ namespace Kpett.ChatApp.Services.Impls
                     IsProfileCompleted = true,
 
                     Biography = u.Biography,
-                    Cocupation = u.Cocupation,
+                    Cocupation = u.Occupation,
                     Location = u.Location,
                     CoverUrl = u.CoverUrl,
 

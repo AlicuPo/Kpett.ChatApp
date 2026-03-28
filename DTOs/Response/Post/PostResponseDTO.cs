@@ -20,7 +20,7 @@ namespace Kpett.ChatApp.DTOs.Response.Post
     public class PostMediaDTO
     {
         public string Id { get; set; } = null!;
-        public string PostId { get; set; }
+        public string PostId { get; set; } = null!;
         public string? MediaUrl { get; set; }
         public string? MediaType { get; set; }
         public string? ThumbnailUrl { get; set; }
@@ -68,7 +68,7 @@ namespace Kpett.ChatApp.DTOs.Response.Post
     public class CommentListItemDTO
     {
         public string Id { get; set; } = null!;
-        public long PostId { get; set; }
+        public string PostId { get; set; } = null!;
         public string? ParentId { get; set; }
         public CommentAuthorDTO Author { get; set; } = new();
         public string? Content { get; set; }

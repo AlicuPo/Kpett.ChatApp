@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
 namespace Kpett.ChatApp.Models;
 
@@ -7,6 +8,7 @@ public partial class Notification
 {
     public string Id { get; set; } = null!;
 
+    [MaxLength(450)]
     public string UserId { get; set; } = null!;
 
     public string? Type { get; set; }
@@ -25,5 +27,6 @@ public partial class Notification
 
     public DateTime? ReadAt { get; set; }
 
+    [MaxLength(450)]
     public string? SenderId { get; set; }
 }

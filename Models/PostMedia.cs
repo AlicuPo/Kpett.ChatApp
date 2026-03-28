@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
 namespace Kpett.ChatApp.Models;
 
@@ -7,6 +8,7 @@ public partial class PostMedia
 {
     public string Id { get; set; } = null!;
 
+    [MaxLength(450)]
     public string? PostId { get; set; }
 
     public string? MediaUrl { get; set; }

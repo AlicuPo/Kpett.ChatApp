@@ -4,6 +4,7 @@ using Kpett.ChatApp.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Kpett.ChatApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260328131541_MaxLength")]
+    partial class MaxLength
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -655,6 +658,9 @@ namespace Kpett.ChatApp.Migrations
                     b.Property<string>("Biography")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Cocupation")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("CoverUrl")
                         .HasColumnType("nvarchar(max)");
 
@@ -668,9 +674,7 @@ namespace Kpett.ChatApp.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool?>("EmailConfirmed")
                         .HasColumnType("bit");
@@ -693,9 +697,6 @@ namespace Kpett.ChatApp.Migrations
                     b.Property<string>("Location")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Occupation")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("Password")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -716,8 +717,7 @@ namespace Kpett.ChatApp.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Username")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
@@ -740,8 +740,7 @@ namespace Kpett.ChatApp.Migrations
 
                     b.Property<string>("UserId")
                         .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
@@ -758,20 +757,17 @@ namespace Kpett.ChatApp.Migrations
 
                     b.Property<string>("PostId")
                         .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("SourceType")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("SourceUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("UserId")
                         .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 

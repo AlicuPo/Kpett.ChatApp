@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
 namespace Kpett.ChatApp.Models;
 
@@ -17,9 +18,11 @@ public partial class Group
 
     public DateTime? CreatedAt { get; set; }
 
+    [MaxLength(450)]
     public string? CreatedByUserId { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 
+    [MaxLength(450)]
     public string? UpdatedByUserId { get; set; }
 }
