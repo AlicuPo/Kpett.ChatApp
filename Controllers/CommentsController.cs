@@ -1,5 +1,7 @@
 using Kpett.ChatApp.DTOs.Request.Post;
+using Kpett.ChatApp.DTOs.Response.Auth;
 using Kpett.ChatApp.DTOs.Response.Post;
+using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -23,7 +25,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<ActionResult<CommentDTO>> UpdateComment(string commentId, [FromBody] UpdateCommentRequest request, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
-            var result = await _postFeedService.UpdateCommentAsync(commentId, userId, request?.Content ?? string.Empty, cancel);
+            var result = await _postFeedService.UpdateCommentAsync(commentId, userId, request?.Content ?? string.Empty, request?.Mentions, cancel);
             return Ok(result);
         }
 
@@ -32,7 +34,12 @@ namespace Kpett.ChatApp.Controllers
         {
             var userId = User.GetRequiredUserId();
             await _postFeedService.DeleteCommentAsync(commentId, userId, cancel);
-            return NoContent();
+            return Ok(new GeneralResponse
+            {
+                StatusCode = 200,
+                IsSuccess = true,
+                Message = "Delete Comment successfully."
+            });
         }
     }
 }

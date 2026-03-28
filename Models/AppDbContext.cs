@@ -19,6 +19,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<Comment> Comments { get; set; }
 
+    public virtual DbSet<CommentLike> CommentLikes { get; set; }
+
     public virtual DbSet<Conversation> Conversations { get; set; }
 
     public virtual DbSet<ConversationKey> ConversationKeys { get; set; }
@@ -38,6 +40,8 @@ public partial class AppDbContext : DbContext
     public virtual DbSet<Message> Messages { get; set; }
 
     public virtual DbSet<MessageDetail> MessageDetails { get; set; }
+
+    public virtual DbSet<MentionComment> MentionComments { get; set; }
 
     public virtual DbSet<Notification> Notifications { get; set; }
 
@@ -68,6 +72,7 @@ public partial class AppDbContext : DbContext
         modelBuilder.Entity<User>().HasKey(e => e.Id);
         modelBuilder.Entity<Block>().HasKey(e => e.Id);
         modelBuilder.Entity<Comment>().HasKey(e => e.Id);
+        modelBuilder.Entity<CommentLike>().HasKey(e => e.Id);
         modelBuilder.Entity<Conversation>().HasKey(e => e.Id);
         modelBuilder.Entity<ConversationParticipant>().HasKey(e => e.Id);
         modelBuilder.Entity<Follow>().HasKey(e => e.Id);
@@ -76,6 +81,7 @@ public partial class AppDbContext : DbContext
         modelBuilder.Entity<GroupMember>().HasKey(e => e.Id);
         modelBuilder.Entity<Message>().HasKey(e => e.Id);
         modelBuilder.Entity<Notification>().HasKey(e => e.Id);
+        modelBuilder.Entity<MentionComment>().HasKey(e => e.Id);
         modelBuilder.Entity<Post>().HasKey(e => e.Id);
         modelBuilder.Entity<PostMedia>().HasKey(e => e.Id);
         modelBuilder.Entity<PostReaction>().HasKey(e => e.Id);
@@ -90,6 +96,42 @@ public partial class AppDbContext : DbContext
         modelBuilder.Entity<Friendship>().HasKey(e => new { e.UserLowId, e.UserHighId });
 
         modelBuilder.Entity<ConversationKey>().HasKey(e => new { e.UserLowId, e.UserHighId });
+
+        modelBuilder.Entity<Comment>()
+            .Property(e => e.LikeCount)
+            .HasDefaultValue(0);
+
+        modelBuilder.Entity<Comment>()
+            .Property(e => e.ReplyCount)
+            .HasDefaultValue(0);
+
+        modelBuilder.Entity<Comment>()
+            .Property(e => e.IsEdited)
+            .HasDefaultValue(false);
+
+        modelBuilder.Entity<MentionComment>()
+            .Property(e => e.IsNotified)
+            .HasDefaultValue(false);
+
+        modelBuilder.Entity<MentionComment>()
+            .HasIndex(e => e.CommentId);
+
+        modelBuilder.Entity<MentionComment>()
+            .HasIndex(e => e.UserId);
+
+        modelBuilder.Entity<MentionComment>()
+            .HasIndex(e => new { e.CommentId, e.UserId })
+            .IsUnique();
+
+        modelBuilder.Entity<CommentLike>()
+            .HasIndex(e => e.CommentId);
+
+        modelBuilder.Entity<CommentLike>()
+            .HasIndex(e => e.UserId);
+
+        modelBuilder.Entity<CommentLike>()
+            .HasIndex(e => new { e.CommentId, e.UserId })
+            .IsUnique();
 
         // XÓA BỎ TẤT CẢ CÁC RÀNG BUỘC QUAN HỆ (FOREIGN KEYS) ---
         // Đoạn này đảm bảo dù Model có thuộc tính điều hướng cũng không tạo FK trong DB

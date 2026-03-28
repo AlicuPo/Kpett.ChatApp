@@ -74,6 +74,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        [HttpPost("refresh")]
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
         {

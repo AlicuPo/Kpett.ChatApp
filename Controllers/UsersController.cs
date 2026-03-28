@@ -1,4 +1,6 @@
 using Kpett.ChatApp.DTOs.Request.User;
+using Kpett.ChatApp.DTOs.Request.Shared;
+using Kpett.ChatApp.DTOs.Response.Post;
 using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
@@ -16,10 +18,12 @@ namespace Kpett.ChatApp.Controllers
     public class UsersController : ControllerBase
     {
         private readonly IUserService _userService;
+        private readonly IPostFeedService _postFeedService;
 
-        public UsersController(IUserService usersService)
+        public UsersController(IUserService usersService, IPostFeedService postFeedService)
         {
             _userService = usersService;
+            _postFeedService = postFeedService;
         }
 
         [HttpPost("inforUser")]
@@ -49,6 +53,14 @@ namespace Kpett.ChatApp.Controllers
                 IsSuccess = true,
                 Data = users
             });
+        }
+
+        [AllowAnonymous]
+        [HttpGet("{id}")]
+        public async Task<ActionResult<UserResponse>> GetUserById(string id, CancellationToken cancel = default)
+        {
+            var user = await _userService.inforUser(new UserRequest { Id = id }, cancel);
+            return Ok(user);
         }
 
         [HttpPut("UpdateUser/{id}")]
@@ -81,6 +93,21 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        [HttpGet("me/feed")]
+        public async Task<ActionResult<List<UserFeedDTO>>> GetMyFeed([FromQuery] SearchRequest request, CancellationToken cancel = default)
+        {
+            var result = await _postFeedService.GetUserFeedAsync(User.GetRequiredUserId(), request, cancel);
+            return Ok(result);
+        }
+
+        [AllowAnonymous]
+        [HttpGet("{userId}/posts")]
+        public async Task<ActionResult<List<PostResponseDTO>>> GetUserPosts(string userId, [FromQuery] SearchRequest request, CancellationToken cancel = default)
+        {
+            var result = await _postFeedService.GetUserPostsAsync(userId, request, cancel);
+            return Ok(result);
+        }
+
         [HttpGet("check-username")]
         public async Task<IActionResult> CheckUsername([FromQuery] string username, CancellationToken cancel = default)
         {
@@ -106,7 +133,7 @@ namespace Kpett.ChatApp.Controllers
                 StatusCode = StatusCodes.Status200OK,
                 Message = "Account setup successfully",
                 Data = result
-            });
+            }); 
         }
 
         [HttpGet("me/stats")]

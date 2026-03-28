@@ -6,18 +6,14 @@ namespace Kpett.ChatApp.Models;
 public partial class Comment
 {
     public string Id { get; set; } = null!;
-
     public long PostId { get; set; }
-
     public string UserId { get; set; } = null!;
-
     public string? Content { get; set; }
-
     public string? ParentCommentId { get; set; }
-
+    public int LikeCount { get; set; }
+    public int ReplyCount { get; set; }
+    public bool IsEdited { get; set; }
     public DateTime? CreatedAt { get; set; }
-
     public DateTime? UpdatedAt { get; set; }
-
     public DateTime? DeletedAt { get; set; }
 }

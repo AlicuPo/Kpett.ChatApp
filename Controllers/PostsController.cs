@@ -84,7 +84,13 @@ namespace Kpett.ChatApp.Controllers
         public async Task<ActionResult<CommentDTO>> AddComment(long postId, [FromBody] CreateCommentRequest request, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
-            var result = await _postFeedService.AddCommentAsync(postId, userId, request?.Content ?? string.Empty, request?.ParentCommentId, cancel);
+            var result = await _postFeedService.AddCommentAsync(
+                postId,
+                userId,
+                request?.Content ?? string.Empty,
+                request?.ParentCommentId,
+                request?.Mentions,
+                cancel);
             return Created($"/api/comments/{result.Id}", result);
         }
 

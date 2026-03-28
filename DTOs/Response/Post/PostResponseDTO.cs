@@ -40,9 +40,24 @@ namespace Kpett.ChatApp.DTOs.Response.Post
         public string? UserAvatar { get; set; }
         public string? Content { get; set; }
         public string? ParentCommentId { get; set; }
+        public int LikeCount { get; set; }
+        public int ReplyCount { get; set; }
+        public bool IsEdited { get; set; }
         public DateTime? CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
+        public List<CommentMentionDTO>? Mentions { get; set; }
         public List<CommentDTO>? RepliesComments { get; set; }
+    }
+
+    public class CommentMentionDTO
+    {
+        public string Id { get; set; } = null!;
+        public string UserId { get; set; } = null!;
+        public string Username { get; set; } = null!;
+        public string? DisplayName { get; set; }
+        public bool IsNotified { get; set; }
+        public DateTime? CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
     }
 
     public class UserFeedDTO

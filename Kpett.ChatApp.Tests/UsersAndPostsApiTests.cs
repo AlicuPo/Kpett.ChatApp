@@ -161,6 +161,8 @@ public class UsersAndPostsApiTests
         await factory.SeedAsync(db =>
         {
             db.Users.Add(TestData.CreateUser("author-1", "author@example.com"));
+            db.Users.Add(TestData.CreateUser("tagged-1", "tagged-1@example.com"));
+            db.Users.Add(TestData.CreateUser("tagged-2", "tagged-2@example.com"));
             db.Posts.Add(TestData.CreatePost(100, "author-1", "Seeded post"));
             db.UserFeeds.Add(new UserFeed
             {
@@ -193,7 +195,8 @@ public class UsersAndPostsApiTests
 
         var createCommentResponse = await client.PostAsJsonAsync("/api/posts/100/comments", new CreateCommentRequest
         {
-            Content = "Nice post"
+            Content = "Nice post",
+            Mentions = new List<string> { "tagged-1", "tagged-1" }
         });
 
         Assert.Equal(HttpStatusCode.Created, createCommentResponse.StatusCode);
@@ -201,25 +204,55 @@ public class UsersAndPostsApiTests
         var (commentRaw, comment) = await HttpTestHelpers.ReadJsonAsync<CommentDTO>(createCommentResponse);
         HttpTestHelpers.AssertRawSuccessPayload(commentRaw);
         Assert.Equal("Nice post", comment.Content);
+        Assert.Equal(0, comment.LikeCount);
+        Assert.Equal(0, comment.ReplyCount);
+        Assert.False(comment.IsEdited);
+        Assert.NotNull(comment.Mentions);
+        var createdMentions = Assert.Single(comment.Mentions!);
+        Assert.Equal("tagged-1", createdMentions.UserId);
+        Assert.Equal("tagged-1", createdMentions.Username);
         Assert.NotNull(createCommentResponse.Headers.Location);
         Assert.EndsWith($"/api/comments/{comment.Id}", createCommentResponse.Headers.Location!.ToString(), StringComparison.Ordinal);
+
+        var createReplyResponse = await client.PostAsJsonAsync("/api/posts/100/comments", new CreateCommentRequest
+        {
+            Content = "Reply comment",
+            ParentCommentId = comment.Id,
+            Mentions = new List<string> { "tagged-2" }
+        });
+
+        Assert.Equal(HttpStatusCode.Created, createReplyResponse.StatusCode);
+
+        var (_, reply) = await HttpTestHelpers.ReadJsonAsync<CommentDTO>(createReplyResponse);
+        Assert.Equal(comment.Id, reply.ParentCommentId);
+        Assert.NotNull(reply.Mentions);
+        Assert.Equal("tagged-2", Assert.Single(reply.Mentions!).UserId);
 
         var getCommentsResponse = await client.GetAsync("/api/posts/100/comments");
 
         Assert.Equal(HttpStatusCode.OK, getCommentsResponse.StatusCode);
 
         var (_, comments) = await HttpTestHelpers.ReadJsonAsync<List<CommentDTO>>(getCommentsResponse);
-        Assert.Single(comments);
+        var rootComment = Assert.Single(comments);
+        Assert.Equal(1, rootComment.ReplyCount);
+        Assert.NotNull(rootComment.Mentions);
+        Assert.Equal("tagged-1", Assert.Single(rootComment.Mentions!).UserId);
+        Assert.NotNull(rootComment.RepliesComments);
+        Assert.Equal(reply.Id, Assert.Single(rootComment.RepliesComments!).Id);
 
         var updateCommentResponse = await client.PatchAsJsonAsync($"/api/comments/{comment.Id}", new UpdateCommentRequest
         {
-            Content = "Edited comment"
+            Content = "Edited comment",
+            Mentions = new List<string> { "tagged-2" }
         });
 
         Assert.Equal(HttpStatusCode.OK, updateCommentResponse.StatusCode);
 
         var (_, updatedComment) = await HttpTestHelpers.ReadJsonAsync<CommentDTO>(updateCommentResponse);
         Assert.Equal("Edited comment", updatedComment.Content);
+        Assert.True(updatedComment.IsEdited);
+        Assert.NotNull(updatedComment.Mentions);
+        Assert.Equal("tagged-2", Assert.Single(updatedComment.Mentions!).UserId);
 
         var feedResponse = await client.GetAsync("/api/users/me/feed");
         Assert.Equal(HttpStatusCode.OK, feedResponse.StatusCode);
@@ -233,6 +266,20 @@ public class UsersAndPostsApiTests
         var (_, userPosts) = await HttpTestHelpers.ReadJsonAsync<List<PostResponseDTO>>(userPostsResponse);
         Assert.Single(userPosts);
 
+        var deleteReplyResponse = await client.DeleteAsync($"/api/comments/{reply.Id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, deleteReplyResponse.StatusCode);
+        await HttpTestHelpers.AssertNoContentAsync(deleteReplyResponse);
+
+        var getCommentsAfterDeleteResponse = await client.GetAsync("/api/posts/100/comments");
+
+        Assert.Equal(HttpStatusCode.OK, getCommentsAfterDeleteResponse.StatusCode);
+
+        var (_, commentsAfterDelete) = await HttpTestHelpers.ReadJsonAsync<List<CommentDTO>>(getCommentsAfterDeleteResponse);
+        var rootCommentAfterDelete = Assert.Single(commentsAfterDelete);
+        Assert.Equal(0, rootCommentAfterDelete.ReplyCount);
+        Assert.Empty(rootCommentAfterDelete.RepliesComments!);
+
         var deleteCommentResponse = await client.DeleteAsync($"/api/comments/{comment.Id}");
 
         Assert.Equal(HttpStatusCode.NoContent, deleteCommentResponse.StatusCode);
@@ -242,6 +289,30 @@ public class UsersAndPostsApiTests
 
         Assert.Equal(HttpStatusCode.NoContent, removeReactionResponse.StatusCode);
         await HttpTestHelpers.AssertNoContentAsync(removeReactionResponse);
+    }
+
+    [Fact]
+    public async Task CreateComment_ReturnsBadRequest_WhenMentionUserDoesNotExist()
+    {
+        using var factory = new TestWebApplicationFactory();
+        using var client = factory.CreateAuthenticatedClient("author-1", "author@example.com");
+
+        await factory.SeedAsync(db =>
+        {
+            db.Users.Add(TestData.CreateUser("author-1", "author@example.com"));
+            db.Posts.Add(TestData.CreatePost(200, "author-1", "Seeded post"));
+        });
+
+        var response = await client.PostAsJsonAsync("/api/posts/200/comments", new CreateCommentRequest
+        {
+            Content = "Tagging a missing user",
+            Mentions = new List<string> { "missing-user" }
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var error = await HttpTestHelpers.ReadErrorAsync(response);
+        Assert.Equal(ErrorCodes.VALIDATION.REQUIRED, error.ErrorCode);
     }
 
     [Fact]

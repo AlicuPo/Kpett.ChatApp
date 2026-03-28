@@ -1,38 +1,28 @@
-﻿using Azure.Core;
-using CloudinaryDotNet;
 using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Request.Shared;
 using Kpett.ChatApp.DTOs.Response.Post;
-using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
-using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
 using Microsoft.EntityFrameworkCore;
-using System.ComponentModel.DataAnnotations;
 
 namespace Kpett.ChatApp.Services.Interfaces
 {
     public interface IPostFeedService
     {
-        // Post operations
         Task<PostResponseDTO> CreatePostAsync(string userId, PostMediaRequest postRequest, CancellationToken cancel);
         Task<PostResponseDTO> GetPostAsync(long postId, string? currentUserId, CancellationToken cancel);
         Task<List<UserFeedDTO>> GetUserFeedAsync(string userId, SearchRequest request, CancellationToken cancel = default);
         Task<List<PostResponseDTO>> GetUserPostsAsync(string userId, SearchRequest request, CancellationToken cancel = default);
         Task<PostResponseDTO> UpdatePostAsync(long postId, string userId, string content, string privacy, CancellationToken cancel);
         Task DeletePostAsync(long postId, string userId, CancellationToken cancel);
-
-        // Reaction operations
         Task<PostReactionDTO> AddReactionAsync(long postId, string userId, byte reactionType, CancellationToken cancel);
         Task RemoveReactionAsync(long postId, string userId, CancellationToken cancel);
         Task<List<PostReactionDTO>> GetPostReactionsAsync(long postId, CancellationToken cancel);
-
-        // Comment operations
-        Task<CommentDTO> AddCommentAsync(long postId, string userId, string content, string? parentCommentId, CancellationToken cancel);
+        Task<CommentDTO> AddCommentAsync(long postId, string userId, string content, string? parentCommentId, IEnumerable<string>? mentions, CancellationToken cancel);
         Task<List<CommentDTO>> GetCommentsAsync(long postId, CancellationToken cancel);
-        Task<CommentDTO> UpdateCommentAsync(string commentId, string userId, string content, CancellationToken cancel);
+        Task<CommentDTO> UpdateCommentAsync(string commentId, string userId, string content, IEnumerable<string>? mentions, CancellationToken cancel);
         Task DeleteCommentAsync(string commentId, string userId, CancellationToken cancel);
     }
 
@@ -49,9 +39,6 @@ namespace Kpett.ChatApp.Services.Interfaces
             _notificationService = notificationService;
         }
 
-        /// <summary>
-        /// Create a new post with optional media
-        /// </summary>
         public async Task<PostResponseDTO> CreatePostAsync(string userId, PostMediaRequest postRequest, CancellationToken cancel)
         {
             if (postRequest == null)
@@ -65,12 +52,10 @@ namespace Kpett.ChatApp.Services.Interfaces
 
             cancel.ThrowIfCancellationRequested();
 
-            // Check if user exists
             var userExists = await _dbContext.Users.AnyAsync(u => u.Id == userId, cancel);
             if (!userExists)
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
 
-            // Create post
             var newPost = new Post
             {
                 CreatedByUserId = userId,
@@ -84,7 +69,6 @@ namespace Kpett.ChatApp.Services.Interfaces
             await _dbContext.Posts.AddAsync(newPost, cancel);
             await _dbContext.SaveChangesAsync(cancel);
 
-            // Add media if provided
             if (!string.IsNullOrEmpty(postRequest.MediaUrl))
             {
                 var postMedia = new PostMedia
@@ -102,7 +86,6 @@ namespace Kpett.ChatApp.Services.Interfaces
                 await _dbContext.SaveChangesAsync(cancel);
             }
 
-            // Create user feed entry
             var userFeed = new UserFeed
             {
                 Id = Guid.NewGuid().ToString(),
@@ -116,7 +99,6 @@ namespace Kpett.ChatApp.Services.Interfaces
             await _dbContext.UserFeeds.AddAsync(userFeed, cancel);
             await _dbContext.SaveChangesAsync(cancel);
 
-            // Notify friends
             try
             {
                 var user = await _dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, cancel);
@@ -124,7 +106,7 @@ namespace Kpett.ChatApp.Services.Interfaces
                 {
                     type = "NEW_POST",
                     postId = newPost.Id,
-                    userId = userId,
+                    userId,
                     userName = user?.DisplayName ?? user?.Username,
                     timestamp = DateTime.UtcNow
                 });
@@ -137,9 +119,6 @@ namespace Kpett.ChatApp.Services.Interfaces
             return await GetPostAsync(newPost.Id, userId, cancel);
         }
 
-        /// <summary>
-        /// Get a single post with details
-        /// </summary>
         public async Task<PostResponseDTO> GetPostAsync(long postId, string? currentUserId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
@@ -148,17 +127,15 @@ namespace Kpett.ChatApp.Services.Interfaces
                 .AsNoTracking()
                 .Where(p => p.Id == postId && (!p.IsDeleted.HasValue || !p.IsDeleted.Value))
                 .Join(
-                    _dbContext.Users,
+                    _dbContext.Users.AsNoTracking(),
                     p => p.CreatedByUserId,
                     u => u.Id,
-                    (p, u) => new { Post = p, User = u }
-                )
+                    (p, u) => new { Post = p, User = u })
                 .FirstOrDefaultAsync(cancel);
 
             if (post == null)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
-            // Get media
             var media = await _dbContext.PostMedia
                 .AsNoTracking()
                 .Where(m => m.PostId == postId)
@@ -176,7 +153,6 @@ namespace Kpett.ChatApp.Services.Interfaces
                 })
                 .ToListAsync(cancel);
 
-            // Get reaction counts
             var likeCount = await _dbContext.PostReactions
                 .AsNoTracking()
                 .CountAsync(r => r.PostId == postId, cancel);
@@ -189,7 +165,6 @@ namespace Kpett.ChatApp.Services.Interfaces
                     .AnyAsync(r => r.PostId == postId && r.UserId == currentUserId, cancel);
             }
 
-            // Get comment count
             var commentCount = await _dbContext.Comments
                 .AsNoTracking()
                 .CountAsync(c => c.PostId == postId && c.DeletedAt == null && string.IsNullOrEmpty(c.ParentCommentId), cancel);
@@ -198,7 +173,7 @@ namespace Kpett.ChatApp.Services.Interfaces
             {
                 Id = post.Post.Id,
                 CreatedByUserId = post.Post.CreatedByUserId,
-                CreatedByName = post.User.DisplayName ?? post.User.Username,
+                CreatedByName = post.User.DisplayName ?? post.User.Username ?? "Anonymous",
                 CreatedByAvatar = post.User.AvatarUrl,
                 Content = post.Post.Content,
                 Privacy = post.Post.Privacy,
@@ -212,9 +187,6 @@ namespace Kpett.ChatApp.Services.Interfaces
             };
         }
 
-        /// <summary>
-        /// Get user feed with pagination
-        /// </summary>
         public async Task<List<UserFeedDTO>> GetUserFeedAsync(string userId, SearchRequest request, CancellationToken cancel = default)
         {
             if (string.IsNullOrWhiteSpace(userId))
@@ -235,11 +207,10 @@ namespace Kpett.ChatApp.Services.Interfaces
                 .Skip(skip)
                 .Take(request.PageSize)
                 .Join(
-                    _dbContext.Users,
+                    _dbContext.Users.AsNoTracking(),
                     f => f.SourceUserId,
                     u => u.Id,
-                    (f, u) => new { Feed = f, SourceUser = u }
-                )
+                    (f, u) => new { Feed = f, SourceUser = u })
                 .ToListAsync(cancel);
 
             var result = new List<UserFeedDTO>();
@@ -264,9 +235,6 @@ namespace Kpett.ChatApp.Services.Interfaces
             return result;
         }
 
-        /// <summary>
-        /// Get all posts from a user
-        /// </summary>
         public async Task<List<PostResponseDTO>> GetUserPostsAsync(string userId, SearchRequest request, CancellationToken cancel = default)
         {
             if (string.IsNullOrWhiteSpace(userId))
@@ -293,16 +261,12 @@ namespace Kpett.ChatApp.Services.Interfaces
 
             foreach (var postId in posts)
             {
-                var post = await GetPostAsync(postId, userId, cancel);
-                result.Add(post);
+                result.Add(await GetPostAsync(postId, userId, cancel));
             }
 
             return result;
         }
 
-        /// <summary>
-        /// Update a post
-        /// </summary>
         public async Task<PostResponseDTO> UpdatePostAsync(long postId, string userId, string content, string privacy, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(content))
@@ -322,15 +286,11 @@ namespace Kpett.ChatApp.Services.Interfaces
             post.Privacy = privacy ?? "Public";
             post.UpdatedAt = DateTime.UtcNow;
 
-            _dbContext.Posts.Update(post);
             await _dbContext.SaveChangesAsync(cancel);
 
             return await GetPostAsync(postId, userId, cancel);
         }
 
-        /// <summary>
-        /// Delete a post (soft delete)
-        /// </summary>
         public async Task DeletePostAsync(long postId, string userId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
@@ -341,18 +301,14 @@ namespace Kpett.ChatApp.Services.Interfaces
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
             if (post.CreatedByUserId != userId)
-                throw new ForbiddenException(ErrorCodes.POST.USER_NOT_AUTHORIZED , "Not authorized to delete this post");
+                throw new ForbiddenException(ErrorCodes.POST.USER_NOT_AUTHORIZED, "Not authorized to delete this post");
 
             post.IsDeleted = true;
             post.UpdatedAt = DateTime.UtcNow;
 
-            _dbContext.Posts.Update(post);
             await _dbContext.SaveChangesAsync(cancel);
         }
 
-        /// <summary>
-        /// Add a reaction to a post
-        /// </summary>
         public async Task<PostReactionDTO> AddReactionAsync(long postId, string userId, byte reactionType, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
@@ -364,20 +320,16 @@ namespace Kpett.ChatApp.Services.Interfaces
             if (post == null)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
-            // Check if already reacted
             var existingReaction = await _dbContext.PostReactions
                 .FirstOrDefaultAsync(r => r.PostId == postId && r.UserId == userId, cancel);
 
             if (existingReaction != null)
             {
-                // Update existing reaction
                 existingReaction.Type = reactionType;
                 existingReaction.CreatedAt = DateTime.UtcNow;
-                _dbContext.PostReactions.Update(existingReaction);
             }
             else
             {
-                // Create new reaction
                 var reaction = new PostReaction
                 {
                     PostId = postId,
@@ -390,7 +342,6 @@ namespace Kpett.ChatApp.Services.Interfaces
 
             await _dbContext.SaveChangesAsync(cancel);
 
-            // Notify post owner
             if (post.CreatedByUserId != userId)
             {
                 try
@@ -399,10 +350,10 @@ namespace Kpett.ChatApp.Services.Interfaces
                     await _realtimeService.PublishAsync($"user:{post.CreatedByUserId}:notifications", new
                     {
                         type = "POST_REACTION",
-                        postId = postId,
-                        userId = userId,
+                        postId,
+                        userId,
                         userName = user?.DisplayName ?? user?.Username,
-                        reactionType = reactionType,
+                        reactionType,
                         timestamp = DateTime.UtcNow
                     });
                 }
@@ -426,9 +377,6 @@ namespace Kpett.ChatApp.Services.Interfaces
             };
         }
 
-        /// <summary>
-        /// Remove a reaction from a post
-        /// </summary>
         public async Task RemoveReactionAsync(long postId, string userId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
@@ -448,9 +396,6 @@ namespace Kpett.ChatApp.Services.Interfaces
             }
         }
 
-        /// <summary>
-        /// Get all reactions on a post
-        /// </summary>
         public async Task<List<PostReactionDTO>> GetPostReactionsAsync(long postId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
@@ -460,7 +405,7 @@ namespace Kpett.ChatApp.Services.Interfaces
             if (!postExists)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
-            var reactions = await _dbContext.PostReactions
+            return await _dbContext.PostReactions
                 .AsNoTracking()
                 .Where(r => r.PostId == postId)
                 .Select(r => new PostReactionDTO
@@ -472,32 +417,34 @@ namespace Kpett.ChatApp.Services.Interfaces
                     CreatedAt = r.CreatedAt
                 })
                 .ToListAsync(cancel);
-
-            return reactions;
         }
 
-        /// <summary>
-        /// Add a comment to a post
-        /// </summary>
-        public async Task<CommentDTO> AddCommentAsync(long postId, string userId, string content, string? parentCommentId, CancellationToken cancel)
+        public async Task<CommentDTO> AddCommentAsync(
+            long postId,
+            string userId,
+            string content,
+            string? parentCommentId,
+            IEnumerable<string>? mentions,
+            CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(content))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Comment content cannot be empty");
 
             cancel.ThrowIfCancellationRequested();
 
+            var utcNow = DateTime.UtcNow;
             var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
             if (post == null)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
-            // Validate parent comment if provided
+            Comment? parentComment = null;
             if (!string.IsNullOrEmpty(parentCommentId))
             {
-                var parentComment = await _dbContext.Comments
+                parentComment = await _dbContext.Comments
                     .FirstOrDefaultAsync(c => c.Id == parentCommentId && c.PostId == postId && c.DeletedAt == null, cancel);
 
                 if (parentComment == null)
-                    throw new NotFoundException(ErrorCodes.POST.PARENT_POST_NOT_FOUND, "Parent comment not found");
+                    throw new NotFoundException(ErrorCodes.COMMENT.PARENT_COMMENT_NOT_FOUND, "Parent comment not found");
             }
 
             var comment = new Comment
@@ -507,13 +454,22 @@ namespace Kpett.ChatApp.Services.Interfaces
                 UserId = userId,
                 Content = content,
                 ParentCommentId = parentCommentId,
-                CreatedAt = DateTime.UtcNow
+                LikeCount = 0,
+                ReplyCount = 0,
+                IsEdited = false,
+                CreatedAt = utcNow
             };
 
             await _dbContext.Comments.AddAsync(comment, cancel);
+
+            if (parentComment != null)
+            {
+                parentComment.ReplyCount += 1;
+            }
+
+            await SyncCommentMentionsAsync(comment.Id, NormalizeMentionUserIds(mentions), utcNow, cancel);
             await _dbContext.SaveChangesAsync(cancel);
 
-            // Notify post owner
             if (post.CreatedByUserId != userId)
             {
                 try
@@ -522,9 +478,9 @@ namespace Kpett.ChatApp.Services.Interfaces
                     await _realtimeService.PublishAsync($"user:{post.CreatedByUserId}:notifications", new
                     {
                         type = "POST_COMMENT",
-                        postId = postId,
+                        postId,
                         commentId = comment.Id,
-                        userId = userId,
+                        userId,
                         userName = user?.DisplayName ?? user?.Username,
                         timestamp = DateTime.UtcNow
                     });
@@ -535,24 +491,9 @@ namespace Kpett.ChatApp.Services.Interfaces
                 }
             }
 
-            var user_info = await _dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, cancel);
-
-            return new CommentDTO
-            {
-                Id = comment.Id,
-                PostId = comment.PostId,
-                UserId = comment.UserId,
-                UserName = user_info?.DisplayName ?? user_info?.Username ?? "Anonymous",
-                UserAvatar = user_info?.AvatarUrl,
-                Content = comment.Content,
-                ParentCommentId = comment.ParentCommentId,
-                CreatedAt = comment.CreatedAt
-            };
+            return await MapCommentAsync(comment, cancel);
         }
 
-        /// <summary>
-        /// Get comments on a post with replies
-        /// </summary>
         public async Task<List<CommentDTO>> GetCommentsAsync(long postId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
@@ -562,75 +503,62 @@ namespace Kpett.ChatApp.Services.Interfaces
             if (!postExists)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
-            var comments = await _dbContext.Comments
+            var commentRows = await _dbContext.Comments
                 .AsNoTracking()
-                .Where(c => c.PostId == postId && c.DeletedAt == null && string.IsNullOrEmpty(c.ParentCommentId))
+                .Where(c => c.PostId == postId && c.DeletedAt == null)
                 .Join(
-                    _dbContext.Users,
+                    _dbContext.Users.AsNoTracking(),
                     c => c.UserId,
                     u => u.Id,
-                    (c, u) => new { Comment = c, User = u }
-                )
-                .OrderByDescending(x => x.Comment.CreatedAt)
+                    (c, u) => new CommentRow(c, u))
                 .ToListAsync(cancel);
 
-            var result = new List<CommentDTO>();
+            var mentionLookup = await GetCommentMentionsLookupAsync(
+                commentRows.Select(x => x.Comment.Id).ToList(),
+                cancel);
 
-            foreach (var item in comments)
-            {
-                var replies = await _dbContext.Comments
-                    .AsNoTracking()
-                    .Where(c => c.ParentCommentId == item.Comment.Id && c.DeletedAt == null)
-                    .Join(
-                        _dbContext.Users,
-                        c => c.UserId,
-                        u => u.Id,
-                        (c, u) => new { Comment = c, User = u }
-                    )
-                    .OrderBy(x => x.Comment.CreatedAt)
-                    .Select(x => new CommentDTO
-                    {
-                        Id = x.Comment.Id,
-                        PostId = x.Comment.PostId,
-                        UserId = x.Comment.UserId,
-                        UserName = x.User.DisplayName ?? x.User.Username,
-                        UserAvatar = x.User.AvatarUrl,
-                        Content = x.Comment.Content,
-                        ParentCommentId = x.Comment.ParentCommentId,
-                        CreatedAt = x.Comment.CreatedAt,
-                        UpdatedAt = x.Comment.UpdatedAt
-                    })
-                    .ToListAsync(cancel);
+            var repliesByParentId = commentRows
+                .Where(x => !string.IsNullOrEmpty(x.Comment.ParentCommentId))
+                .GroupBy(x => x.Comment.ParentCommentId!, StringComparer.Ordinal)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group
+                        .OrderBy(x => x.Comment.CreatedAt)
+                        .Select(x => MapComment(
+                            x.Comment,
+                            x.User,
+                            GetMentions(mentionLookup, x.Comment.Id),
+                            new List<CommentDTO>()))
+                        .ToList(),
+                    StringComparer.Ordinal);
 
-                result.Add(new CommentDTO
-                {
-                    Id = item.Comment.Id,
-                    PostId = item.Comment.PostId,
-                    UserId = item.Comment.UserId,
-                    UserName = item.User.DisplayName ?? item.User.Username,
-                    UserAvatar = item.User.AvatarUrl,
-                    Content = item.Comment.Content,
-                    ParentCommentId = item.Comment.ParentCommentId,
-                    CreatedAt = item.Comment.CreatedAt,
-                    UpdatedAt = item.Comment.UpdatedAt,
-                    RepliesComments = replies
-                });
-            }
-
-            return result;
+            return commentRows
+                .Where(x => string.IsNullOrEmpty(x.Comment.ParentCommentId))
+                .OrderByDescending(x => x.Comment.CreatedAt)
+                .Select(x => MapComment(
+                    x.Comment,
+                    x.User,
+                    GetMentions(mentionLookup, x.Comment.Id),
+                    repliesByParentId.TryGetValue(x.Comment.Id, out var replies)
+                        ? replies
+                        : new List<CommentDTO>()))
+                .ToList();
         }
 
-        /// <summary>
-        /// Update a comment
-        /// </summary>
-        public async Task<CommentDTO> UpdateCommentAsync(string commentId, string userId, string content, CancellationToken cancel)
+        public async Task<CommentDTO> UpdateCommentAsync(
+            string commentId,
+            string userId,
+            string content,
+            IEnumerable<string>? mentions,
+            CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(content))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Comment content cannot be empty");
 
             cancel.ThrowIfCancellationRequested();
 
-            var comment = await _dbContext.Comments.FirstOrDefaultAsync(c => c.Id == commentId, cancel);
+            var comment = await _dbContext.Comments
+                .FirstOrDefaultAsync(c => c.Id == commentId && c.DeletedAt == null, cancel);
 
             if (comment == null)
                 throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");
@@ -638,23 +566,23 @@ namespace Kpett.ChatApp.Services.Interfaces
             if (comment.UserId != userId)
                 throw new ForbiddenException(ErrorCodes.COMMENT.USER_NOT_AUTHORIZED, "Not authorized to update this comment");
 
+            var utcNow = DateTime.UtcNow;
             comment.Content = content;
-            comment.UpdatedAt = DateTime.UtcNow;
+            comment.IsEdited = true;
+            comment.UpdatedAt = utcNow;
 
-            _dbContext.Comments.Update(comment);
+            await SyncCommentMentionsAsync(comment.Id, NormalizeMentionUserIds(mentions), utcNow, cancel);
             await _dbContext.SaveChangesAsync(cancel);
 
             return await MapCommentAsync(comment, cancel);
         }
 
-        /// <summary>
-        /// Delete a comment (soft delete)
-        /// </summary>
         public async Task DeleteCommentAsync(string commentId, string userId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
 
-            var comment = await _dbContext.Comments.FirstOrDefaultAsync(c => c.Id == commentId, cancel);
+            var comment = await _dbContext.Comments
+                .FirstOrDefaultAsync(c => c.Id == commentId && c.DeletedAt == null, cancel);
 
             if (comment == null)
                 throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");
@@ -662,9 +590,18 @@ namespace Kpett.ChatApp.Services.Interfaces
             if (comment.UserId != userId)
                 throw new ForbiddenException(ErrorCodes.COMMENT.USER_NOT_AUTHORIZED, "Not authorized to delete this comment");
 
-            comment.DeletedAt = DateTime.UtcNow;
+            if (!string.IsNullOrEmpty(comment.ParentCommentId))
+            {
+                var parentComment = await _dbContext.Comments
+                    .FirstOrDefaultAsync(c => c.Id == comment.ParentCommentId, cancel);
 
-            _dbContext.Comments.Update(comment);
+                if (parentComment != null)
+                {
+                    parentComment.ReplyCount = Math.Max(0, parentComment.ReplyCount - 1);
+                }
+            }
+
+            comment.DeletedAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync(cancel);
         }
 
@@ -674,6 +611,176 @@ namespace Kpett.ChatApp.Services.Interfaces
                 .AsNoTracking()
                 .FirstOrDefaultAsync(u => u.Id == comment.UserId, cancel);
 
+            var mentionLookup = await GetCommentMentionsLookupAsync(new[] { comment.Id }, cancel);
+
+            return MapComment(
+                comment,
+                userInfo,
+                GetMentions(mentionLookup, comment.Id),
+                new List<CommentDTO>());
+        }
+
+        private async Task<Dictionary<string, List<CommentMentionDTO>>> GetCommentMentionsLookupAsync(
+            IReadOnlyCollection<string> commentIds,
+            CancellationToken cancel)
+        {
+            if (commentIds.Count == 0)
+            {
+                return new Dictionary<string, List<CommentMentionDTO>>(StringComparer.Ordinal);
+            }
+
+            var mentions = await _dbContext.MentionComments
+                .AsNoTracking()
+                .Where(m => commentIds.Contains(m.CommentId))
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => new
+                {
+                    m.CommentId,
+                    Mention = new CommentMentionDTO
+                    {
+                        Id = m.Id,
+                        UserId = m.UserId,
+                        Username = m.Username,
+                        DisplayName = m.DisplayName,
+                        IsNotified = m.IsNotified,
+                        CreatedAt = m.CreatedAt,
+                        UpdatedAt = m.UpdatedAt
+                    }
+                })
+                .ToListAsync(cancel);
+
+            return mentions
+                .GroupBy(x => x.CommentId, StringComparer.Ordinal)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Select(x => x.Mention).ToList(),
+                    StringComparer.Ordinal);
+        }
+
+        private async Task SyncCommentMentionsAsync(
+            string commentId,
+            IReadOnlyCollection<string> mentionUserIds,
+            DateTime utcNow,
+            CancellationToken cancel)
+        {
+            var existingMentions = await _dbContext.MentionComments
+                .Where(m => m.CommentId == commentId)
+                .ToListAsync(cancel);
+
+            var mentionSnapshots = await LoadMentionUserSnapshotsAsync(mentionUserIds, cancel);
+            var requestedUserIds = new HashSet<string>(mentionUserIds, StringComparer.Ordinal);
+            var existingByUserId = existingMentions.ToDictionary(m => m.UserId, StringComparer.Ordinal);
+
+            var mentionsToRemove = existingMentions
+                .Where(m => !requestedUserIds.Contains(m.UserId))
+                .ToList();
+
+            if (mentionsToRemove.Count > 0)
+            {
+                _dbContext.MentionComments.RemoveRange(mentionsToRemove);
+            }
+
+            foreach (var mentionUserId in mentionUserIds)
+            {
+                var snapshot = mentionSnapshots[mentionUserId];
+
+                if (existingByUserId.TryGetValue(mentionUserId, out var existingMention))
+                {
+                    existingMention.Username = snapshot.Username;
+                    existingMention.DisplayName = snapshot.DisplayName;
+                    existingMention.UpdatedAt = utcNow;
+                    continue;
+                }
+
+                await _dbContext.MentionComments.AddAsync(new MentionComment
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    CommentId = commentId,
+                    UserId = mentionUserId,
+                    Username = snapshot.Username,
+                    DisplayName = snapshot.DisplayName,
+                    IsNotified = false,
+                    CreatedAt = utcNow,
+                    UpdatedAt = utcNow
+                }, cancel);
+            }
+        }
+
+        private async Task<Dictionary<string, MentionUserSnapshot>> LoadMentionUserSnapshotsAsync(
+            IReadOnlyCollection<string> mentionUserIds,
+            CancellationToken cancel)
+        {
+            if (mentionUserIds.Count == 0)
+            {
+                return new Dictionary<string, MentionUserSnapshot>(StringComparer.Ordinal);
+            }
+
+            var users = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => mentionUserIds.Contains(u.Id))
+                .Select(u => new MentionUserSnapshot(
+                    u.Id,
+                    u.Username ?? u.DisplayName ?? u.Id,
+                    u.DisplayName))
+                .ToListAsync(cancel);
+
+            if (users.Count != mentionUserIds.Count)
+            {
+                var foundUserIds = users.Select(u => u.UserId).ToHashSet(StringComparer.Ordinal);
+                var missingUserIds = mentionUserIds
+                    .Where(id => !foundUserIds.Contains(id))
+                    .ToList();
+
+                throw new BadRequestException(
+                    ErrorCodes.VALIDATION.REQUIRED,
+                    $"Mentioned users not found: {string.Join(", ", missingUserIds)}");
+            }
+
+            return users.ToDictionary(u => u.UserId, StringComparer.Ordinal);
+        }
+
+        private static List<string> NormalizeMentionUserIds(IEnumerable<string>? mentions)
+        {
+            if (mentions == null)
+            {
+                return new List<string>();
+            }
+
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var mention in mentions)
+            {
+                if (string.IsNullOrWhiteSpace(mention))
+                {
+                    continue;
+                }
+
+                var normalizedMention = mention.Trim();
+                if (seen.Add(normalizedMention))
+                {
+                    result.Add(normalizedMention);
+                }
+            }
+
+            return result;
+        }
+
+        private static List<CommentMentionDTO> GetMentions(
+            IReadOnlyDictionary<string, List<CommentMentionDTO>> mentionLookup,
+            string commentId)
+        {
+            return mentionLookup.TryGetValue(commentId, out var mentions)
+                ? mentions
+                : new List<CommentMentionDTO>();
+        }
+
+        private static CommentDTO MapComment(
+            Comment comment,
+            User? userInfo,
+            List<CommentMentionDTO> mentions,
+            List<CommentDTO> replies)
+        {
             return new CommentDTO
             {
                 Id = comment.Id,
@@ -683,9 +790,18 @@ namespace Kpett.ChatApp.Services.Interfaces
                 UserAvatar = userInfo?.AvatarUrl,
                 Content = comment.Content,
                 ParentCommentId = comment.ParentCommentId,
+                LikeCount = comment.LikeCount,
+                ReplyCount = comment.ReplyCount,
+                IsEdited = comment.IsEdited,
                 CreatedAt = comment.CreatedAt,
-                UpdatedAt = comment.UpdatedAt
+                UpdatedAt = comment.UpdatedAt,
+                Mentions = mentions,
+                RepliesComments = replies
             };
         }
+
+        private sealed record MentionUserSnapshot(string UserId, string Username, string? DisplayName);
+
+        private sealed record CommentRow(Comment Comment, User User);
     }
 }

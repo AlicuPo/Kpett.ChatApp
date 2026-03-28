@@ -126,7 +126,10 @@ public class AuthApiTests
             db.Users.Add(TestData.CreateUser("logout-user", "logout@example.com"));
         });
 
-        var response = await client.PostAsync("/api/auth/logout", content: null);
+        var response = await client.PostAsJsonAsync("/api/auth/logout", new LogoutRequest
+        {
+            RefreshToken = "refresh-token"
+        });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
