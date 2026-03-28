@@ -1,4 +1,5 @@
 using CloudinaryDotNet;
+using Kpett.ChatApp.Configs;
 using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Helper;
@@ -176,6 +177,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+
+builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("JwtSection"));
 
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IAuthService, AuthService>();

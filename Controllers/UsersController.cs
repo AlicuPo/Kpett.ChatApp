@@ -122,5 +122,19 @@ namespace Kpett.ChatApp.Controllers
                 Data = result
             });
         }
+
+        [HttpGet("profile/{username}")]
+        public async Task<IActionResult> GetUserProfile(string username, CancellationToken cancel = default)
+        {
+            var result = await _userService.GetUserProfileAsync(username, User.GetRequiredUserId() ,cancel);
+
+            return Ok(new GeneralResponse<UserProfileResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Get user profile successfully",
+                Data = result
+            });
+        }
     }
 }

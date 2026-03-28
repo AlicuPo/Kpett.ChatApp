@@ -1,6 +1,7 @@
 using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Request.User;
 using Kpett.ChatApp.DTOs.Response.User;
+using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
@@ -197,7 +198,7 @@ namespace Kpett.ChatApp.Services.Impls
 
                     CreatedAt = u.CreatedAt,
                 })
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(cancel);
 
             if (userStats == null)
             {
@@ -205,6 +206,88 @@ namespace Kpett.ChatApp.Services.Impls
             }
 
             return userStats;
+        }
+
+        public async Task<UserProfileResponse> GetUserProfileAsync(string targetUsername, string currentUserId, CancellationToken cancel)
+        {
+            var profile = await _dbcontext.Users
+                .AsNoTracking()
+                .Where(u => u.Username == targetUsername && u.Email != null && u.Username != null)
+                .Select(u => new UserProfileResponse
+                {
+                    Id = u.Id,
+                    Username = u.Username,
+                    DisplayName = u.DisplayName,
+                    AvatarUrl = u.AvatarUrl,
+                    IsVerified = u.IsVerified,
+                    IsProfileCompleted = true,
+
+                    Biography = u.Biography,
+                    Cocupation = u.Cocupation,
+                    Location = u.Location,
+                    CoverUrl = u.CoverUrl,
+
+                    CreatedAt = u.CreatedAt,
+
+                    Stats = new UserStatsResponse
+                    {
+                        TotalPosts = _dbcontext.UserFeeds.Count(p => p.UserId == u.Id),
+                        Followers = _dbcontext.Follows.Count(f => f.FolloweeId == u.Id),
+                        Following = _dbcontext.Follows.Count(f => f.FollowerId == u.Id),
+                        Friends = _dbcontext.Friendships.Count(f =>
+                            (f.UserLowId == currentUserId || f.UserHighId == u.Id) || 
+                            (f.UserLowId == u.Id || f.UserHighId == currentUserId))
+                    },
+
+                    ViewerContext = currentUserId == null ? new ProfileViewerContext
+                    {
+                        IsOwner = false,
+                        IsFriend = false,
+                        IsFollowing = false,
+                        HasSentFriendRequest = false,
+                        HasReceivedFriendRequest = false,
+                        IsBlocked = false,
+                        CanMessage = false
+                    }
+                    : new ProfileViewerContext
+                    {
+                        IsOwner = u.Id == currentUserId,
+
+                        IsFriend = _dbcontext.Friendships.Any(f =>
+                            (f.UserLowId == currentUserId && f.UserHighId == u.Id) ||
+                            (f.UserLowId == u.Id && f.UserHighId == currentUserId)),
+
+                        IsFollowing = _dbcontext.Follows.Any(f =>
+                            f.FollowerId == currentUserId && f.FolloweeId == u.Id),
+
+                        HasSentFriendRequest = _dbcontext.FriendRequests.Any(fr =>
+                            fr.SenderId == currentUserId && fr.ReceiverId == u.Id && fr.Status == FriendshipsEnums.Pending.ToString()),
+
+                        HasReceivedFriendRequest = _dbcontext.FriendRequests.Any(fr =>
+                            fr.SenderId == u.Id && fr.ReceiverId == currentUserId && fr.Status == FriendshipsEnums.Pending.ToString()),
+
+                        IsBlocked = _dbcontext.Blocks.Any(b =>
+                            (b.BlockerId == currentUserId && b.BlockedId == u.Id) ||
+                            (b.BlockerId == u.Id && b.BlockedId == currentUserId)),
+
+                        // Logic CanMessage: Là bạn bè và không ai block ai
+                        CanMessage = _dbcontext.Friendships.Any(f =>
+                            (f.UserLowId == currentUserId && f.UserHighId == u.Id) ||
+                            (f.UserLowId == u.Id && f.UserHighId == currentUserId))
+                            &&
+                            !_dbcontext.Blocks.Any(b =>
+                            (b.BlockerId == currentUserId && b.BlockedId == u.Id) ||
+                            (b.BlockerId == u.Id && b.BlockedId == currentUserId))
+                    }
+                })
+                .FirstOrDefaultAsync(cancel);
+
+            if(profile == null)
+            {
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
+            }
+
+            return profile;
         }
     }
 }
