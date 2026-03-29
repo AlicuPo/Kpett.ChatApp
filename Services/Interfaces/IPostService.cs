@@ -10,6 +10,7 @@ using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
 
@@ -24,6 +25,9 @@ namespace Kpett.ChatApp.Services.Interfaces
         Task<List<PostResponseDTO>> GetUserPostsAsync(string userId, SearchRequest request, CancellationToken cancel = default);
         Task<PostResponseDTO> UpdatePostAsync(string postId, string userId, string content, string privacy, CancellationToken cancel);
         Task DeletePostAsync(string postId, string userId, CancellationToken cancel);
+
+        // Media operations
+        Task DeleteMedia(string publicId, [FromQuery] string resourceType);
 
         // Reaction operations
         Task<PostReactionDTO> AddReactionAsync(string postId, string userId, byte reactionType, CancellationToken cancel);

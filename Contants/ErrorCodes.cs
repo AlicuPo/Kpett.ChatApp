@@ -79,5 +79,11 @@
         {
             public const string REQUIRED = "VAL.REQUIRED";
         }
+
+        public static class CLOUDINARY
+        {
+            public const string MISSING_HEADER = "CLOUDINARY.MISSING_HEADER";
+            public const string INVALID_SIGNATURE = "CLOUDINARY.INVALID_SIGNATURE";
+        }
     }
 }

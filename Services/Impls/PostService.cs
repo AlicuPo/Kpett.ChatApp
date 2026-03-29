@@ -9,6 +9,7 @@ using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Services.Interfaces;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
 
@@ -19,15 +20,17 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly AppDbContext _dbContext;
         private readonly IRealtimeService _realtimeService;
         private readonly INotificationService _notificationService;
-        public PostService(AppDbContext dbContext, IRealtimeService realtimeService, INotificationService notificationService)
+        private readonly IMediaService _mediaService;
+        public PostService(AppDbContext dbContext, IRealtimeService realtimeService, INotificationService notificationService, IMediaService mediaService)
         {
             _dbContext = dbContext;
             _realtimeService = realtimeService;
             _notificationService = notificationService;
+            _mediaService = mediaService;
         }
 
         /// <summary>
-        /// Create a new post with optional media
+        /// Create a new post
         /// </summary>
         public async Task<string> CreatePostAsync(string userId, PostRequest postRequest, CancellationToken cancel)
         {
@@ -393,6 +396,29 @@ namespace Kpett.ChatApp.Services.Impls
 
             _dbContext.Posts.Update(post);
             await _dbContext.SaveChangesAsync(cancel);
+        }
+
+        public async Task DeleteMedia(string publicId, [FromQuery] string resourceType)
+        {
+            // Tìm ảnh trong DB và kiểm tra quyền sở hữu
+            var mediaRecord = await _dbContext.PostMedia.FirstOrDefaultAsync(m => m.Id == publicId);
+
+            if (mediaRecord == null)
+            {
+                throw new NotFoundException(ErrorCodes.MEDIA.NOT_FOUND, "File not found");
+            }
+
+            // Gọi Cloudinary SDK để xóa file thực tế trên mây
+            bool isDeletedFromCloud = await _mediaService.DeleteFileAsync(publicId, resourceType);
+
+            if (!isDeletedFromCloud)
+            {
+                throw new Exception("Không thể xóa file trên Cloudinary.");
+            }
+
+            // Xóa record trong Database
+            _dbContext.PostMedia.Remove(mediaRecord);
+            await _dbContext.SaveChangesAsync();
         }
 
         /// <summary>

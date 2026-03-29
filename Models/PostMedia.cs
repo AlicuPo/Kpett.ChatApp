@@ -24,4 +24,8 @@ public partial class PostMedia
     public int? Duration { get; set; }
 
     public int? SortOrder { get; set; }
+
+    public bool IsTemporary { get; set; } = true;
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

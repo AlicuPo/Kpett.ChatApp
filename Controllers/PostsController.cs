@@ -7,6 +7,7 @@ using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Net;
 
 namespace Kpett.ChatApp.Controllers
 {
@@ -87,6 +88,19 @@ namespace Kpett.ChatApp.Controllers
             var userId = User.GetRequiredUserId();
             await _postFeedService.DeletePostAsync(postId, userId, cancel);
             return NoContent();
+        }
+
+        [HttpDelete("media/{publicId}")]
+        public async Task<IActionResult> DeleteMedia(string publicId, [FromQuery] string resourceType)
+        {
+            await _postFeedService.DeleteMedia(publicId, resourceType);
+
+            return Ok(new GeneralResponse
+            {
+                IsSuccess = true,
+                Message = "Delete media successfully",
+                StatusCode = StatusCodes.Status200OK
+            });
         }
 
         [HttpPut("{postId:long}/reactions/me")]
