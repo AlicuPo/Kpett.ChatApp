@@ -122,19 +122,24 @@ public class UsersAndPostsApiTests
             Privacy = "Public"
         });
 
-        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, createResponse.StatusCode);
 
-        var (createRaw, createdPost) = await HttpTestHelpers.ReadJsonAsync<PostResponseDTO>(createResponse);
-        HttpTestHelpers.AssertRawSuccessPayload(createRaw);
-        Assert.Equal("My first post", createdPost.Content);
-        Assert.NotNull(createResponse.Headers.Location);
-        Assert.EndsWith($"/api/posts/{createdPost.Id}", createResponse.Headers.Location!.ToString(), StringComparison.Ordinal);
+        var (_, createBody) = await HttpTestHelpers.ReadJsonAsync<GeneralResponse<string>>(createResponse);
+        Assert.True(createBody.IsSuccess);
+        Assert.Equal(201, createBody.StatusCode);
+        Assert.False(string.IsNullOrWhiteSpace(createBody.Data));
 
-        var getResponse = await client.GetAsync($"/api/posts/{createdPost.Id}");
+        var createdPostId = createBody.Data;
+
+        var getResponse = await client.GetAsync($"/api/posts/{createdPostId}");
 
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
 
-        var updateResponse = await client.PatchAsJsonAsync($"/api/posts/{createdPost.Id}", new PostMediaRequest
+        var (_, createdPost) = await HttpTestHelpers.ReadJsonAsync<PostResponseDTO>(getResponse);
+        Assert.Equal("My first post", createdPost.Content);
+        Assert.Equal(createdPostId, createdPost.Id);
+
+        var updateResponse = await client.PatchAsJsonAsync($"/api/posts/{createdPostId}", new PostMediaRequest
         {
             Content = "Updated post",
             Privacy = "Friends"
@@ -146,7 +151,7 @@ public class UsersAndPostsApiTests
         Assert.Equal("Updated post", updatedPost.Content);
         Assert.Equal("Friends", updatedPost.Privacy);
 
-        var deleteResponse = await client.DeleteAsync($"/api/posts/{createdPost.Id}");
+        var deleteResponse = await client.DeleteAsync($"/api/posts/{createdPostId}");
 
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
         await HttpTestHelpers.AssertNoContentAsync(deleteResponse);
@@ -157,25 +162,26 @@ public class UsersAndPostsApiTests
     {
         using var factory = new TestWebApplicationFactory();
         using var client = factory.CreateAuthenticatedClient("author-1", "author@example.com");
+        const string postId = "11111111-1111-1111-1111-111111111111";
 
         await factory.SeedAsync(db =>
         {
             db.Users.Add(TestData.CreateUser("author-1", "author@example.com"));
             db.Users.Add(TestData.CreateUser("tagged-1", "tagged-1@example.com"));
             db.Users.Add(TestData.CreateUser("tagged-2", "tagged-2@example.com"));
-            db.Posts.Add(TestData.CreatePost(100, "author-1", "Seeded post"));
+            db.Posts.Add(TestData.CreatePost(postId, "author-1", "Seeded post"));
             db.UserFeeds.Add(new UserFeed
             {
                 Id = "feed-1",
                 UserId = "author-1",
-                PostId = 100,
+                PostId = postId,
                 SourceUserId = "author-1",
                 SourceType = "Post",
                 CreatedAt = DateTime.UtcNow
             });
         });
 
-        var reactionResponse = await client.PutAsJsonAsync("/api/posts/100/reactions/me", new UpsertReactionRequest
+        var reactionResponse = await client.PutAsJsonAsync($"/api/posts/{postId}/reactions/me", new UpsertReactionRequest
         {
             ReactionType = 1
         });
@@ -184,16 +190,17 @@ public class UsersAndPostsApiTests
 
         var (reactionRaw, reaction) = await HttpTestHelpers.ReadJsonAsync<PostReactionDTO>(reactionResponse);
         HttpTestHelpers.AssertRawSuccessPayload(reactionRaw);
+        Assert.False(string.IsNullOrWhiteSpace(reaction.Id));
         Assert.Equal((byte)1, reaction.Type);
 
-        var getReactionsResponse = await client.GetAsync("/api/posts/100/reactions");
+        var getReactionsResponse = await client.GetAsync($"/api/posts/{postId}/reactions");
 
         Assert.Equal(HttpStatusCode.OK, getReactionsResponse.StatusCode);
 
         var (_, reactions) = await HttpTestHelpers.ReadJsonAsync<List<PostReactionDTO>>(getReactionsResponse);
         Assert.Single(reactions);
 
-        var createCommentResponse = await client.PostAsJsonAsync("/api/posts/100/comments", new CreateCommentRequest
+        var createCommentResponse = await client.PostAsJsonAsync($"/api/posts/{postId}/comments", new CreateCommentRequest
         {
             Content = "Nice post",
             Mentions = new List<string> { "tagged-1", "tagged-1" }
@@ -214,7 +221,7 @@ public class UsersAndPostsApiTests
         Assert.NotNull(createCommentResponse.Headers.Location);
         Assert.EndsWith($"/api/comments/{comment.Id}", createCommentResponse.Headers.Location!.ToString(), StringComparison.Ordinal);
 
-        var createReplyResponse = await client.PostAsJsonAsync("/api/posts/100/comments", new CreateCommentRequest
+        var createReplyResponse = await client.PostAsJsonAsync($"/api/posts/{postId}/comments", new CreateCommentRequest
         {
             Content = "Reply comment",
             ParentCommentId = comment.Id,
@@ -228,7 +235,7 @@ public class UsersAndPostsApiTests
         Assert.NotNull(reply.Mentions);
         Assert.Equal("tagged-2", Assert.Single(reply.Mentions!).UserId);
 
-        var getCommentsResponse = await client.GetAsync("/api/posts/100/comments");
+        var getCommentsResponse = await client.GetAsync($"/api/posts/{postId}/comments");
 
         Assert.Equal(HttpStatusCode.OK, getCommentsResponse.StatusCode);
 
@@ -291,10 +298,12 @@ public class UsersAndPostsApiTests
 
         var deleteReplyResponse = await client.DeleteAsync($"/api/comments/{reply.Id}");
 
-        Assert.Equal(HttpStatusCode.NoContent, deleteReplyResponse.StatusCode);
-        await HttpTestHelpers.AssertNoContentAsync(deleteReplyResponse);
+        Assert.Equal(HttpStatusCode.OK, deleteReplyResponse.StatusCode);
+        var (_, deleteReplyBody) = await HttpTestHelpers.ReadJsonAsync<GeneralResponse>(deleteReplyResponse);
+        Assert.True(deleteReplyBody.IsSuccess);
+        Assert.Equal(StatusCodes.Status200OK, deleteReplyBody.StatusCode);
 
-        var getCommentsAfterDeleteResponse = await client.GetAsync("/api/posts/100/comments");
+        var getCommentsAfterDeleteResponse = await client.GetAsync($"/api/posts/{postId}/comments");
 
         Assert.Equal(HttpStatusCode.OK, getCommentsAfterDeleteResponse.StatusCode);
 
@@ -304,10 +313,12 @@ public class UsersAndPostsApiTests
 
         var deleteCommentResponse = await client.DeleteAsync($"/api/comments/{comment.Id}");
 
-        Assert.Equal(HttpStatusCode.NoContent, deleteCommentResponse.StatusCode);
-        await HttpTestHelpers.AssertNoContentAsync(deleteCommentResponse);
+        Assert.Equal(HttpStatusCode.OK, deleteCommentResponse.StatusCode);
+        var (_, deleteCommentBody) = await HttpTestHelpers.ReadJsonAsync<GeneralResponse>(deleteCommentResponse);
+        Assert.True(deleteCommentBody.IsSuccess);
+        Assert.Equal(StatusCodes.Status200OK, deleteCommentBody.StatusCode);
 
-        var removeReactionResponse = await client.DeleteAsync("/api/posts/100/reactions/me");
+        var removeReactionResponse = await client.DeleteAsync($"/api/posts/{postId}/reactions/me");
 
         Assert.Equal(HttpStatusCode.NoContent, removeReactionResponse.StatusCode);
         await HttpTestHelpers.AssertNoContentAsync(removeReactionResponse);
@@ -318,14 +329,15 @@ public class UsersAndPostsApiTests
     {
         using var factory = new TestWebApplicationFactory();
         using var client = factory.CreateAuthenticatedClient("author-1", "author@example.com");
+        const string postId = "22222222-2222-2222-2222-222222222222";
 
         await factory.SeedAsync(db =>
         {
             db.Users.Add(TestData.CreateUser("author-1", "author@example.com"));
-            db.Posts.Add(TestData.CreatePost(200, "author-1", "Seeded post"));
+            db.Posts.Add(TestData.CreatePost(postId, "author-1", "Seeded post"));
         });
 
-        var response = await client.PostAsJsonAsync("/api/posts/200/comments", new CreateCommentRequest
+        var response = await client.PostAsJsonAsync($"/api/posts/{postId}/comments", new CreateCommentRequest
         {
             Content = "Tagging a missing user",
             Mentions = new List<string> { "missing-user" }
@@ -348,7 +360,7 @@ public class UsersAndPostsApiTests
             db.Users.Add(TestData.CreateUser("user-1", "user-1@example.com"));
         });
 
-        var response = await client.GetAsync("/api/posts/99999");
+        var response = await client.GetAsync("/api/posts/99999999-9999-9999-9999-999999999999");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 

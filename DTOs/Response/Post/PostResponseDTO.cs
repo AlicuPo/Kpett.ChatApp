@@ -141,7 +141,7 @@ namespace Kpett.ChatApp.DTOs.Response.Post
 
     public class PostReactionDTO
     {
-        public long Id { get; set; }
+        public string Id { get; set; } = null!;
         public string PostId { get; set; } = null!;
         public string UserId { get; set; } = null!;
         public byte? Type { get; set; }

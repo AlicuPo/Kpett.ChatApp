@@ -79,7 +79,7 @@ namespace Kpett.ChatApp.Controllers
             return Ok(result);
         }
 
-        [HttpDelete("{postId:long}")]
+        [HttpDelete("{postId}")]
         public async Task<IActionResult> DeletePost(string postId, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
@@ -100,7 +100,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        [HttpPut("{postId:long}/reactions/me")]
+        [HttpPut("{postId}/reactions/me")]
         public async Task<ActionResult<PostReactionDTO>> UpsertReaction(string postId, [FromBody] UpsertReactionRequest request, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
@@ -108,7 +108,7 @@ namespace Kpett.ChatApp.Controllers
             return Ok(result);
         }
 
-        [HttpDelete("{postId:long}/reactions/me")]
+        [HttpDelete("{postId}/reactions/me")]
         public async Task<IActionResult> RemoveReaction(string postId, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
@@ -116,7 +116,7 @@ namespace Kpett.ChatApp.Controllers
             return NoContent();
         }
 
-        [HttpGet("{postId:long}/reactions")]
+        [HttpGet("{postId}/reactions")]
         public async Task<ActionResult<List<PostReactionDTO>>> GetReactions(string postId, CancellationToken cancel)
         {
             var result = await _postFeedService.GetPostReactionsAsync(postId, cancel);
@@ -137,7 +137,7 @@ namespace Kpett.ChatApp.Controllers
             return Created($"/api/comments/{result.Id}", result);
         }
 
-        [HttpGet("{postId:long}/comments")]
+        [HttpGet("{postId}/comments")]
         public async Task<ActionResult<GeneralResponse<CommentsPageDTO>>> GetComments(
             string postId,
             [FromQuery] DateTime? cursor,
