@@ -18,9 +18,15 @@ public partial class Post
     [MaxLength(450)]
     public string? GroupId { get; set; }
 
-    public DateTime? CreatedAt { get; set; }
+    public string? Type { get; set; }
+
+    public bool IsPinned { get; set; } = false;
+
+    public DateTime PinnedAt { get; set; } = DateTime.Now;
+
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     public DateTime? UpdatedAt { get; set; }
 
-    public bool? IsDeleted { get; set; }
+    public bool IsDeleted { get; set; } = false;
 }

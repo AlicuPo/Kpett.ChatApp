@@ -40,17 +40,14 @@ namespace Kpett.ChatApp.Controllers
 
         [HttpGet]
         public async Task<ActionResult<GeneralResponse<PaginatedData<PostFeedResponse>>>> GetPostFeed(
-            [FromQuery] string? cursor,
+            [FromQuery] string? cursor = null,
             [FromQuery] int limit = 10,
             CancellationToken cancel = default)
         {
-            // Lấy ID của user đang đăng nhập từ Token
             var userId = User.GetRequiredUserId();
 
-            // Gọi Service và truyền các tham số phân trang từ Client vào
-            var result = await _postFeedService.GetFeedAsync(userId, cursor, limit);
+            var result = await _postFeedService.GetFeedAsync(userId, cursor, limit, cancel);
 
-            // Trả về kết quả với cấu trúc bọc (Wrapper) GeneralResponse chuẩn
             return Ok(new GeneralResponse<PaginatedData<PostFeedResponse>>
             {
                 IsSuccess = true,
@@ -60,15 +57,15 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        [HttpGet("{postId:long}")]
+        [HttpGet("{postId}")]
         public async Task<ActionResult<PostResponseDTO>> GetPost(string postId, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
-            var result = await _postFeedService.GetPostAsync(postId, userId, cancel);
+            var result = await _postFeedService.GetPostByIdAsync(postId, userId, cancel);
             return Ok(result);
         }
 
-        [HttpPatch("{postId:long}")]
+        [HttpPatch("{postId}")]
         public async Task<ActionResult<PostResponseDTO>> UpdatePost(string postId, [FromBody] PostRequest request, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
@@ -126,7 +123,7 @@ namespace Kpett.ChatApp.Controllers
             return Ok(result);
         }
 
-        [HttpPost("{postId:long}/comments")]
+        [HttpPost("{postId}/comments")]
         public async Task<ActionResult<CommentDTO>> AddComment(string postId, [FromBody] CreateCommentRequest request, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();

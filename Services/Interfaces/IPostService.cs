@@ -20,9 +20,9 @@ namespace Kpett.ChatApp.Services.Interfaces
     {
         // Post operations
         Task<string> CreatePostAsync(string userId, PostRequest postRequest, CancellationToken cancel);
-        Task<PostResponseDTO> GetPostAsync(string postId, string? currentUserId, CancellationToken cancel);
-        Task<PaginatedData<PostFeedResponse>> GetFeedAsync(string currentUserId, string? cursor, int limit = 10);
-        Task<List<PostResponseDTO>> GetUserPostsAsync(string userId, SearchRequest request, CancellationToken cancel = default);
+        Task<PostFeedResponse> GetPostByIdAsync(string postId, string? currentUserId, CancellationToken cancel);
+        Task<PaginatedData<PostFeedResponse>> GetFeedAsync(string currentUserId, string? cursor = null, int limit = 10, CancellationToken cancel = default);
+        Task<PaginatedData<PostThumbnailResponse>> GetUserPostsAsync(string userId, SearchRequest request, CursorPaginationRequest cursorPagination, CancellationToken cancel = default);
         Task<PostResponseDTO> UpdatePostAsync(string postId, string userId, string content, string privacy, CancellationToken cancel);
         Task DeletePostAsync(string postId, string userId, CancellationToken cancel);
 

@@ -203,16 +203,21 @@ namespace Kpett.ChatApp.Services.Impls
                 _ => MediaType.Unknown
             };
 
-            var entity = new PostMedia
-            {
-                Id = payload.public_id,
-                MediaUrl = payload.secure_url,
-                MediaType = mediaType.GetDescription(),
+            var existingMedia = await _context.PostMedia.AnyAsync(m => m.Id == payload.public_id);
 
-                IsTemporary = true,
-                CreatedAt = DateTime.Now,
-            };
-            _context.PostMedia.Add(entity);
+            if(!existingMedia)
+            {
+                var entity = new PostMedia
+                {
+                    Id = payload.public_id,
+                    MediaUrl = payload.secure_url,
+                    MediaType = mediaType.GetDescription(),
+                    IsTemporary = true,
+                    CreatedAt = DateTime.Now,
+                };
+                _context.PostMedia.Add(entity);
+            }
+
             await _context.SaveChangesAsync();
         }
 

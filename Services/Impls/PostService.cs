@@ -1,11 +1,14 @@
 using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Request.Shared;
 using Kpett.ChatApp.DTOs.Response.Media;
 using Kpett.ChatApp.DTOs.Response.Post;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
+using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
+using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Services.Interfaces;
@@ -50,7 +53,7 @@ namespace Kpett.ChatApp.Services.Impls
                 Id = Guid.NewGuid().ToString(),
                 CreatedByUserId = userId,
                 Content = postRequest.Content,
-                Privacy = postRequest.Privacy ?? "Public",
+                Privacy = postRequest.Privacy ?? PostPrivacy.Public.GetDescription(),
                 GroupId = postRequest.GroupId,
                 CreatedAt = DateTime.UtcNow,
                 IsDeleted = false
@@ -60,16 +63,41 @@ namespace Kpett.ChatApp.Services.Impls
 
             var media = postRequest.Media;
 
-            foreach (var mediaItem in media ?? [])
+            if (media?.Any() == true)
             {
-                var postMedia = new PostMedia
+                var mediaIds = media.Select(m => m.PublicId).ToList();
+
+                var existingMedias = await _dbContext.PostMedia
+                    .Where(m => mediaIds.Contains(m.Id))
+                    .ToDictionaryAsync(m => m.Id, cancel);
+
+                var mediaToUpdate = new List<PostMedia>();
+                var mediaToAdd = new List<PostMedia>();
+
+                foreach (var m in media)
                 {
-                    Id = mediaItem.PublicId,
-                    PostId = newPost.Id,
-                    MediaUrl = mediaItem.SecureUrl,
-                    MediaType = mediaItem.Type,
-                };
-                await _dbContext.PostMedia.AddAsync(postMedia, cancel);
+                    if (existingMedias.TryGetValue(m.PublicId, out var existingMedia))
+                    {
+                        existingMedia.PostId = newPost.Id;
+                        existingMedia.MediaUrl = m.Url;
+                        existingMedia.IsTemporary = false;
+                        mediaToUpdate.Add(existingMedia);
+                    }
+                    else
+                    {
+                        mediaToAdd.Add(new PostMedia
+                        {
+                            Id = m.PublicId,
+                            PostId = newPost.Id,
+                            MediaUrl = m.Url,
+                            MediaType = m.Type,
+                            IsTemporary = false
+                        });
+                    }
+                }
+
+                if (mediaToUpdate.Any()) _dbContext.PostMedia.UpdateRange(mediaToUpdate);
+                if (mediaToAdd.Any()) await _dbContext.PostMedia.AddRangeAsync(mediaToAdd);
             }
 
             await _dbContext.SaveChangesAsync();
@@ -80,95 +108,108 @@ namespace Kpett.ChatApp.Services.Impls
         /// <summary>
         /// Get a single post with details
         /// </summary>
-        public async Task<PostResponseDTO> GetPostAsync(string postId, string? currentUserId, CancellationToken cancel)
+        public async Task<PostFeedResponse> GetPostByIdAsync(string postId, string? currentUserId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
 
             var post = await _dbContext.Posts
                 .AsNoTracking()
-                .Where(p => p.Id == postId && (!p.IsDeleted.HasValue || !p.IsDeleted.Value))
-                .Join(
-                    _dbContext.Users,
-                    p => p.CreatedByUserId,
-                    u => u.Id,
-                    (p, u) => new { Post = p, User = u }
-                )
+                .Where(p => p.Id == postId && p.IsDeleted == false)
+                .Select(p => new
+                {
+                    Post = p,
+
+                    User = _dbContext.Users.Where(u => u.Id == p.CreatedByUserId)
+                                           .Select(u => new
+                                           {
+                                               Id = u.Id,
+                                               Email = u.Email,
+                                               Username = u.Username,
+                                               DisplayName = u.DisplayName,
+                                               IsVerified = u.IsVerified,
+                                               AvatarUrl = u.AvatarUrl,
+                                           })
+                                           .FirstOrDefault(),
+
+                    Media = _dbContext.PostMedia.Where(m => m.PostId == p.Id)
+                                         .Select(m => new { m.Id, m.MediaUrl, m.MediaType })
+                                         .ToList(),
+
+                    LikeCount = _dbContext.PostReactions.Count(r => r.PostId == p.Id),
+                    CommentCount = _dbContext.Comments.Count(c => c.PostId == p.Id),
+                    IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == currentUserId)
+                })
                 .FirstOrDefaultAsync(cancel);
 
             if (post == null)
-                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
-
-            // Get media
-            var media = await _dbContext.PostMedia
-                .AsNoTracking()
-                .Where(m => m.PostId == postId)
-                .Select(m => new PostMediaDTO
-                {
-                    Id = m.Id,
-                    PostId = m.PostId,
-                    MediaUrl = m.MediaUrl,
-                    MediaType = m.MediaType,
-                    ThumbnailUrl = m.ThumbnailUrl,
-                    Width = m.Width,
-                    Height = m.Height,
-                    Duration = m.Duration,
-                    SortOrder = m.SortOrder
-                })
-                .ToListAsync(cancel);
-
-            // Get reaction counts
-            var likeCount = await _dbContext.PostReactions
-                .AsNoTracking()
-                .CountAsync(r => r.PostId == postId, cancel);
-
-            var isLiked = false;
-            if (!string.IsNullOrEmpty(currentUserId))
             {
-                isLiked = await _dbContext.PostReactions
-                    .AsNoTracking()
-                    .AnyAsync(r => r.PostId == postId && r.UserId == currentUserId, cancel);
+                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
             }
 
-            // Get comment count
-            var commentCount = await _dbContext.Comments
-                .AsNoTracking()
-                .CountAsync(c => c.PostId == postId && c.DeletedAt == null && string.IsNullOrEmpty(c.ParentCommentId), cancel);
-
-            return new PostResponseDTO
+            return new PostFeedResponse
             {
                 Id = post.Post.Id,
-                CreatedByUserId = post.Post.CreatedByUserId,
-                CreatedByName = post.User.DisplayName ?? post.User.Username,
-                CreatedByAvatar = post.User.AvatarUrl,
                 Content = post.Post.Content,
                 Privacy = post.Post.Privacy,
-                GroupId = post.Post.GroupId,
+                Author = new UserResponse
+                {
+                    Id = post.User.Id,
+                    Username = post.User.Username,
+                    AvatarUrl = post.User.AvatarUrl,
+                    DisplayName = post.User.DisplayName,
+                    Email = post.User.Email,
+                    IsVerified = post.User.IsVerified,
+                },
+                Media = post.Media.Select(m => new MediaPostResponse
+                {
+                    PublicId = m.Id,
+                    Url = m.MediaUrl,
+                    Type = m.MediaType
+                }).ToList(),
+
+                ViewerContext = new PostViewerContextResponse
+                {
+                    IsOwner = post.Post.CreatedByUserId == currentUserId,
+                    IsLiked = post.IsLiked,
+                    IsSaved = false,
+                    IsPinned = false,
+                    CanEdit = post.Post.CreatedByUserId == currentUserId,
+                    CanDelete = post.Post.CreatedByUserId == currentUserId,
+                    CanLike = true,
+                    CanComment = true,
+                    CanPin = post.Post.CreatedByUserId == currentUserId
+                },
+
+                Metrics = new PostMetricsResponse
+                {
+                    LikeCount = post.LikeCount,
+                    CommentCount = post.CommentCount
+                },
+
                 CreatedAt = post.Post.CreatedAt,
                 UpdatedAt = post.Post.UpdatedAt,
-                Media = media,
-                LikeCount = likeCount,
-                CommentCount = commentCount,
-                IsLikedByCurrentUser = isLiked
             };
         }
 
         /// <summary>
         /// Get user feed with pagination
         /// </summary>
-        public async Task<PaginatedData<PostFeedResponse>> GetFeedAsync(string currentUserId, string? cursor, int limit = 10)
+        public async Task<PaginatedData<PostFeedResponse>> GetFeedAsync(string currentUserId, string? cursor = null, int limit = 10, CancellationToken cancel = default)
         {
             // Giải mã Cursor
             DateTime? cursorDate = null;
             string? cursorId = null;
 
-            if (!string.IsNullOrWhiteSpace(cursor))
+            if(!string.IsNullOrWhiteSpace(cursor))
             {
-                var decoded = DecodeCursor(cursor);
+                var decoded = CursorHelper.Decode<PostFeedCursorPayload>(cursor);
+
                 if (decoded != null)
                 {
-                    cursorDate = decoded.Value.Date;
-                    cursorId = decoded.Value.Id;
+                    cursorDate = decoded.CreatedAt;
+                    cursorId = decoded.Id;
                 }
+
             }
 
             var query = _dbContext.Posts.AsNoTracking();
@@ -207,7 +248,7 @@ namespace Kpett.ChatApp.Services.Impls
                     CommentCount = _dbContext.Comments.Count(c => c.PostId == p.Id),
                     IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == currentUserId)
                 })
-                .ToListAsync();
+                .ToListAsync(cancel);
 
             if (!rawData.Any())
             {
@@ -224,7 +265,11 @@ namespace Kpett.ChatApp.Services.Impls
             if (rawData.Count > limit)
             {
                 var lastItemInPage = rawData[limit - 1].Post;
-                nextCursor = EncodeCursor(lastItemInPage.CreatedAt ?? DateTime.Now, lastItemInPage.Id);
+                nextCursor = CursorHelper.Encode(new PostFeedCursorPayload
+                {
+                    Id = lastItemInPage.Id,
+                    CreatedAt = lastItemInPage.CreatedAt
+                });
                 itemsToProcess = rawData.Take(limit).ToList();
             }
 
@@ -232,7 +277,7 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 Id = data.Post.Id,
                 Content = data.Post.Content,
-                CreatedAt = data.Post.CreatedAt ?? DateTime.Now,
+                CreatedAt = data.Post.CreatedAt,
                 UpdatedAt = data.Post.UpdatedAt,
                 Privacy = data.Post.Privacy,
 
@@ -250,7 +295,7 @@ namespace Kpett.ChatApp.Services.Impls
 
                 Media = data.Medias.Select(m => new MediaPostResponse
                 {
-                    Id = m.Id,
+                    PublicId = m.Id,
                     Url = m.MediaUrl,
                     Type = m.MediaType
                 }).ToList(),
@@ -272,7 +317,7 @@ namespace Kpett.ChatApp.Services.Impls
                     CanLike = true,
                     CanComment = true,
                     CanPin = data.Post.CreatedByUserId == currentUserId
-                }
+                },
             }).ToList();
 
             return new PaginatedData<PostFeedResponse>
@@ -286,66 +331,152 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
-        private string EncodeCursor(DateTime createdAt, string id)
-        {
-            var plainText = $"{createdAt.Ticks}_{id}";
-            var plainTextBytes = Encoding.UTF8.GetBytes(plainText);
-            return Convert.ToBase64String(plainTextBytes);
-        }
-
-        private (DateTime Date, string Id)? DecodeCursor(string cursor)
-        {
-            try
-            {
-                var base64EncodedBytes = Convert.FromBase64String(cursor);
-                var plainText = Encoding.UTF8.GetString(base64EncodedBytes);
-                var parts = plainText.Split('_', 2);
-
-                if (parts.Length == 2 && long.TryParse(parts[0], out long ticks))
-                {
-                    var date = new DateTime(ticks);
-                    var id = parts[1];
-                    return (date, id);
-                }
-            }
-            catch { }
-            return null;
-        }
-
         /// <summary>
         /// Get all posts from a user
         /// </summary>
-        public async Task<List<PostResponseDTO>> GetUserPostsAsync(string userId, SearchRequest request, CancellationToken cancel = default)
+        public async Task<PaginatedData<PostThumbnailResponse>> GetUserPostsAsync(string userId, SearchRequest request, CursorPaginationRequest cursorPagination, CancellationToken cancel = default)
         {
             if (string.IsNullOrWhiteSpace(userId))
+            {
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
+            }
 
             var userExists = await _dbContext.Users.AnyAsync(u => u.Id == userId, cancel);
             if (!userExists)
-                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
-
-            cancel.ThrowIfCancellationRequested();
-
-            var skip = (request.Page - 1) * request.PageSize;
-
-            var posts = await _dbContext.Posts
-                .AsNoTracking()
-                .Where(p => p.CreatedByUserId == userId && (!p.IsDeleted.HasValue || !p.IsDeleted.Value))
-                .OrderByDescending(p => p.CreatedAt)
-                .Skip(skip)
-                .Take(request.PageSize)
-                .Select(p => p.Id)
-                .ToListAsync(cancel);
-
-            var result = new List<PostResponseDTO>();
-
-            foreach (var postId in posts)
             {
-                var post = await GetPostAsync(postId, userId, cancel);
-                result.Add(post);
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
-            return result;
+            DateTime? cursorDate = null;
+            DateTime? cursorPinnedAt = null;
+            string? cursorId = null;
+            if (!string.IsNullOrWhiteSpace(cursorPagination.Cursor))
+            {
+                var decoded = CursorHelper.Decode<PostThumbnailCursorPayload>(cursorPagination.Cursor);
+                if (decoded != null)
+                {
+                    cursorDate = decoded.CreatedAt;
+                    cursorPinnedAt = decoded.PinnedAt;
+                    cursorId = decoded.Id;
+                }
+            }
+
+            var query = _dbContext.Posts.AsNoTracking();
+
+            if (cursorDate.HasValue && !string.IsNullOrEmpty(cursorId))
+            {
+                query = query
+                    .Where(p => p.CreatedByUserId == userId && !p.IsDeleted)
+                    .Where(p =>
+                        p.CreatedAt < cursorDate.Value ||
+                        (p.CreatedAt == cursorDate.Value && p.Id.CompareTo(cursorId) < 0));
+            }
+
+            var rawData = await query
+                .OrderByDescending(p => p.PinnedAt)
+                .ThenByDescending(p => p.CreatedAt)
+                .ThenByDescending(p => p.Id)
+                .Take(cursorPagination.Limit + 1)
+                .Select(p => new
+                {
+                    Post = p,
+                    Author = _dbContext.Users.Where(u => u.Id == p.CreatedByUserId)
+                                               .Select(u => new
+                                               {
+                                                   Id = u.Id,
+                                                   Email = u.Email,
+                                                   Username = u.Username,
+                                                   DisplayName = u.DisplayName,
+                                                   IsVerified = u.IsVerified,
+                                                   AvatarUrl = u.AvatarUrl,
+                                               })
+                                               .FirstOrDefault(),
+
+                    Thumbnail = _dbContext.PostMedia.Where(m => m.PostId == p.Id)
+                                         .Select(m => m.MediaUrl)
+                                         .FirstOrDefault(),
+
+                    LikeCount = _dbContext.PostReactions.Count(r => r.PostId == p.Id),
+                    CommentCount = _dbContext.Comments.Count(c => c.PostId == p.Id),
+                    IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == userId)
+                })
+                .ToListAsync(cancel);
+
+            if (!rawData.Any())
+            {
+                return new PaginatedData<PostThumbnailResponse>
+                {
+                    Items = new List<PostThumbnailResponse>(),
+                    Pagination = new CursorPaginationMeta { Limit = cursorPagination.Limit }
+                };
+            }
+
+            string? nextCursor = null;
+            var itemsToProcess = rawData;
+
+            if (rawData.Count > cursorPagination.Limit)
+            {
+                var lastItemInPage = rawData[cursorPagination.Limit - 1].Post;
+                nextCursor = CursorHelper.Encode(new PostThumbnailCursorPayload
+                {
+                    Id = lastItemInPage.Id,
+                    CreatedAt = lastItemInPage.CreatedAt,
+                    PinnedAt = lastItemInPage.PinnedAt
+                });
+                itemsToProcess = rawData.Take(cursorPagination.Limit).ToList();
+            }
+
+            var mappedPosts = itemsToProcess.Select(data => new PostThumbnailResponse
+            {
+                Id = data.Post.Id,
+                Content = data.Post.Content,
+                CreatedAt = data.Post.CreatedAt,
+                UpdatedAt = data.Post.UpdatedAt,
+                Privacy = data.Post.Privacy,
+
+                Author = data.Author != null
+                        ? new UserResponse
+                        {
+                            Id = data.Author.Id,
+                            Username = data.Author.Username,
+                            AvatarUrl = data.Author.AvatarUrl,
+                            DisplayName = data.Author.DisplayName,
+                            Email = data.Author.Email,
+                            IsVerified = data.Author.IsVerified,
+                        }
+                        : new UserResponse { Id = data.Post.CreatedByUserId, Username = "Unknown User" },
+
+                ThumbnailUrl = data.Thumbnail,
+
+                Metrics = new PostMetricsResponse
+                {
+                    LikeCount = data.LikeCount,
+                    CommentCount = data.CommentCount
+                },
+
+                ViewerContext = new PostViewerContextResponse
+                {
+                    IsOwner = data.Post.CreatedByUserId == userId,
+                    IsLiked = data.IsLiked,
+                    IsSaved = false,
+                    IsPinned = false,
+                    CanEdit = data.Post.CreatedByUserId == userId,
+                    CanDelete = data.Post.CreatedByUserId == userId,
+                    CanLike = true,
+                    CanComment = true,
+                    CanPin = data.Post.CreatedByUserId == userId
+                },
+            }).ToList();
+
+            return new PaginatedData<PostThumbnailResponse>
+            {
+                Items = mappedPosts,
+                Pagination = new CursorPaginationMeta
+                {
+                    NextCursor = nextCursor,
+                    Limit = cursorPagination.Limit
+                }
+            };
         }
 
         /// <summary>
@@ -373,7 +504,7 @@ namespace Kpett.ChatApp.Services.Impls
             _dbContext.Posts.Update(post);
             await _dbContext.SaveChangesAsync(cancel);
 
-            return await GetPostAsync(postId, userId, cancel);
+            return null;
         }
 
         /// <summary>
@@ -505,7 +636,7 @@ namespace Kpett.ChatApp.Services.Impls
             cancel.ThrowIfCancellationRequested();
 
             var postExists = await _dbContext.Posts
-                .AnyAsync(p => p.Id == postId && (!p.IsDeleted.HasValue || !p.IsDeleted.Value), cancel);
+                .AnyAsync(p => p.Id == postId && !p.IsDeleted, cancel);
             if (!postExists)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
@@ -527,7 +658,7 @@ namespace Kpett.ChatApp.Services.Impls
             cancel.ThrowIfCancellationRequested();
 
             var postExists = await _dbContext.Posts
-                .AnyAsync(p => p.Id == postId && (!p.IsDeleted.HasValue || !p.IsDeleted.Value), cancel);
+                .AnyAsync(p => p.Id == postId && !p.IsDeleted, cancel);
             if (!postExists)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
@@ -632,7 +763,7 @@ namespace Kpett.ChatApp.Services.Impls
             cancel.ThrowIfCancellationRequested();
 
             var postExists = await _dbContext.Posts
-                .AnyAsync(p => p.Id == postId && (!p.IsDeleted.HasValue || !p.IsDeleted.Value), cancel);
+                .AnyAsync(p => p.Id == postId && !p.IsDeleted, cancel);
             if (!postExists)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
@@ -695,6 +826,36 @@ namespace Kpett.ChatApp.Services.Impls
                 }
             };
         }
+
+        // Method help post
+        private string EncodeCursor(DateTime createdAt, string id)
+        {
+            var plainText = $"{createdAt.Ticks}_{id}";
+            var plainTextBytes = Encoding.UTF8.GetBytes(plainText);
+            return Convert.ToBase64String(plainTextBytes);
+        }
+
+        private (DateTime Date, string Id)? DecodeCursor(string cursor)
+        {
+            try
+            {
+                var base64EncodedBytes = Convert.FromBase64String(cursor);
+                var plainText = Encoding.UTF8.GetString(base64EncodedBytes);
+                var parts = plainText.Split('_', 2);
+
+                if (parts.Length == 2 && long.TryParse(parts[0], out long ticks))
+                {
+                    var date = new DateTime(ticks);
+                    var id = parts[1];
+                    return (date, id);
+                }
+            }
+            catch { }
+            return null;
+        }
+
+
+        // Method help comment
 
         public async Task<CommentDTO> UpdateCommentAsync(
             string commentId,

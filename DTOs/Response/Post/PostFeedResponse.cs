@@ -11,7 +11,7 @@ namespace Kpett.ChatApp.DTOs.Response.Post
 
         public string? Title { get; set; }
 
-        public string? Content { get; set; } = string.Empty;
+        public string? Content { get; set; }
 
         public List<string> Hashtags { get; set; } = new List<string>();
 
@@ -21,7 +21,7 @@ namespace Kpett.ChatApp.DTOs.Response.Post
 
         public PostViewerContextResponse ViewerContext { get; set; } = null!;
 
-        public string Privacy { get; set; } = string.Empty;
+        public string? Privacy { get; set; } = string.Empty;
 
         public DateTime CreatedAt { get; set; }
 
