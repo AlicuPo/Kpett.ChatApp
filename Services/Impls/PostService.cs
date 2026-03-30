@@ -451,6 +451,7 @@ namespace Kpett.ChatApp.Services.Impls
                 // Create new reaction
                 var reaction = new PostReaction
                 {
+                    Id = Guid.NewGuid().ToString(),
                     PostId = postId,
                     UserId = userId,
                     Type = reactionType,

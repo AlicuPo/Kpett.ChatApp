@@ -12,9 +12,9 @@ namespace Kpett.ChatApp.DTOs.Request.Post
 
     public class UserFeedRequest
     {
-        public long Id { get; set; }
+        public string Id { get; set; } = null!;
         public string? UserId { get; set; }
-        public long PostId { get; set; }
+        public string PostId { get; set; } = null!;
         public string? SourceUserId { get; set; }
         public string? SourceType { get; set; }
         public DateTime CreatedAt { get; set; }

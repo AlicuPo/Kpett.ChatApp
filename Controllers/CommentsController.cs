@@ -1,5 +1,6 @@
 using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Response.Post;
+using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -32,7 +33,12 @@ namespace Kpett.ChatApp.Controllers
         {
             var userId = User.GetRequiredUserId();
             await _postFeedService.DeleteCommentAsync(commentId, userId, cancel);
-            return NoContent();
+            return Ok(new GeneralResponse
+            {
+                IsSuccess = true,
+                Message = "Comment deleted successfully",
+                StatusCode = 200
+            });
         }
     }
 }

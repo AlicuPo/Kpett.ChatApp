@@ -46,7 +46,7 @@ public static class TestData
         };
     }
 
-    public static Post CreatePost(long id, string userId, string content = "hello post")
+    public static Post CreatePost(string id, string userId, string content = "hello post")
     {
         return new Post
         {

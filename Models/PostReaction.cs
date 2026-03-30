@@ -6,7 +6,8 @@ namespace Kpett.ChatApp.Models;
 
 public partial class PostReaction
 {
-    public long Id { get; set; }
+    [MaxLength(450)]
+    public string Id { get; set; } = null!;
 
     [MaxLength(450)]
     public string PostId { get; set; } = null!;
