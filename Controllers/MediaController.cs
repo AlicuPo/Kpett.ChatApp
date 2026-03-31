@@ -17,9 +17,9 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpGet("generate-signature")]
-        public IActionResult GetUploadSignature([FromQuery] string folder = "posts")
+        public async Task<IActionResult> GetUploadSignature([FromQuery] string folder = "posts")
         {
-            var result = _mediaService.GenerateUploadSignature(folder);
+            var result = await _mediaService.GenerateUploadSignature(folder);
             return Ok(new GeneralResponse<CloudinarySignatureResponse>
             {
                 IsSuccess = true,

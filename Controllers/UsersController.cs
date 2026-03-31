@@ -93,14 +93,6 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        [AllowAnonymous]
-        [HttpGet("{userId}/posts")]
-        public async Task<ActionResult<List<PostResponseDTO>>> GetUserPosts(string userId, [FromQuery] SearchRequest request , [FromQuery] CursorPaginationRequest cursorPagination, CancellationToken cancel = default)
-        {
-            var result = await _postFeedService.GetUserPostsAsync(userId, request, cursorPagination, cancel);
-            return Ok(result);
-        }
-
         [HttpGet("check-username")]
         public async Task<IActionResult> CheckUsername([FromQuery] string username, CancellationToken cancel = default)
         {

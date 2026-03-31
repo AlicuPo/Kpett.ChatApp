@@ -44,27 +44,44 @@ namespace Kpett.ChatApp.Services.Impls
         /// <summary>
         /// Tạo chữ ký cho phép Client tự upload trực tiếp lên Cloudinary
         /// </summary>
-        public CloudinarySignatureResponse GenerateUploadSignature(string folder = "general")
+        public async Task<CloudinarySignatureResponse> GenerateUploadSignature(string folder = "general")
         {
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            string publicId = $"{Guid.NewGuid():N}";
+            string cloudName = _cloudinary.Api.Account.Cloud;
 
-            var parametersToSign = new SortedDictionary<string, object>
+            var parametersToSign = new Dictionary<string, object>
             {
-                { "timestamp", timestamp },
                 { "asset_folder", folder },
-                { "notification_url", _cloudinarySettings.NotificationUrl }
+                { "public_id", publicId },
+                { "timestamp", timestamp },
             };
 
             string signature = _cloudinary.Api.SignParameters(parametersToSign);
 
+            string uploadUrl = $"https://api.cloudinary.com/v1_1/{cloudName}/auto/upload";
+
+            var media = new PostMedia
+            {
+                Id = publicId,
+                MediaUrl = null,
+                MediaType = null,
+                IsTemporary = true,
+                CreatedAt = DateTime.Now,
+            };
+
+            await _context.PostMedia.AddAsync(media);
+            await _context.SaveChangesAsync();
+
             return new CloudinarySignatureResponse
             {
+                PublicId = publicId,
                 Signature = signature,
                 Timestamp = timestamp,
                 Folder = folder,
                 CloudName = _cloudinary.Api.Account.Cloud,
                 ApiKey = _cloudinary.Api.Account.ApiKey,
-                NotificationUrl = _cloudinarySettings.NotificationUrl
+                UploadUrl = uploadUrl,
             };
         }
 
@@ -205,7 +222,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             var existingMedia = await _context.PostMedia.AnyAsync(m => m.Id == payload.public_id);
 
-            if(!existingMedia)
+            if (!existingMedia)
             {
                 var entity = new PostMedia
                 {

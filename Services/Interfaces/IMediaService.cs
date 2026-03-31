@@ -4,7 +4,7 @@ namespace Kpett.ChatApp.Services.Interfaces
 {
     public interface IMediaService
     {
-        CloudinarySignatureResponse GenerateUploadSignature(string folder = "general");
+        Task<CloudinarySignatureResponse> GenerateUploadSignature(string folder = "general");
         Task<MediaUploadResponse> UploadImageAsync(IFormFile file, string folder = "general");
 
         Task<MediaUploadResponse> UploadVideoAsync(IFormFile file, string folder = "videos");

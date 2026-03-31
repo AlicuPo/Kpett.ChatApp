@@ -1,7 +1,9 @@
-﻿namespace Kpett.ChatApp.DTOs.Response.Post
+﻿using Kpett.ChatApp.DTOs.Response.Media;
+
+namespace Kpett.ChatApp.DTOs.Response.Post
 {
     public class PostThumbnailResponse: PostFeedResponse
     {
-        public string? ThumbnailUrl { get; set; }
+        public MediaPostResponse? MediaThumbnail { get; set; }
     }
 }
