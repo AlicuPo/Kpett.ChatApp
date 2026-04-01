@@ -15,11 +15,16 @@ using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Kpett.ChatApp.Services.Impls
 {
     public class PostService : IPostService
     {
+        private static readonly Regex MentionTokenRegex = new(
+            "<@(?<userId>[^<>\\s]+)>",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
         private readonly AppDbContext _dbContext;
         private readonly IRealtimeService _realtimeService;
         private readonly INotificationService _notificationService;
@@ -847,7 +852,6 @@ namespace Kpett.ChatApp.Services.Impls
             string userId,
             string content,
             string? parentCommentId,
-            IEnumerable<string>? mentions,
             CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(content))
@@ -856,15 +860,16 @@ namespace Kpett.ChatApp.Services.Impls
             cancel.ThrowIfCancellationRequested();
 
             var utcNow = DateTime.UtcNow;
+            var normalizedParentCommentId = NormalizeOptionalString(parentCommentId);
             var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
             if (post == null)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
             Comment? parentComment = null;
-            if (!string.IsNullOrEmpty(parentCommentId))
+            if (!string.IsNullOrEmpty(normalizedParentCommentId))
             {
                 parentComment = await _dbContext.Comments
-                    .FirstOrDefaultAsync(c => c.Id == parentCommentId && c.PostId == postId && c.DeletedAt == null, cancel);
+                    .FirstOrDefaultAsync(c => c.Id == normalizedParentCommentId && c.PostId == postId && c.DeletedAt == null, cancel);
 
                 if (parentComment == null)
                     throw new NotFoundException(ErrorCodes.COMMENT.PARENT_COMMENT_NOT_FOUND, "Parent comment not found");
@@ -876,7 +881,7 @@ namespace Kpett.ChatApp.Services.Impls
                 PostId = postId,
                 UserId = userId,
                 Content = content,
-                ParentCommentId = parentCommentId,
+                ParentCommentId = normalizedParentCommentId,
                 LikeCount = 0,
                 ReplyCount = 0,
                 IsEdited = false,
@@ -890,7 +895,7 @@ namespace Kpett.ChatApp.Services.Impls
                 parentComment.ReplyCount += 1;
             }
 
-            await SyncCommentMentionsAsync(comment.Id, NormalizeMentionUserIds(mentions), utcNow, cancel);
+            await SyncCommentMentionsAsync(comment.Id, ExtractMentionUserIds(content), utcNow, cancel);
             await _dbContext.SaveChangesAsync(cancel);
 
             if (post.CreatedByUserId != userId)
@@ -1025,7 +1030,6 @@ namespace Kpett.ChatApp.Services.Impls
             string commentId,
             string userId,
             string content,
-            IEnumerable<string>? mentions,
             CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(content))
@@ -1047,7 +1051,7 @@ namespace Kpett.ChatApp.Services.Impls
             comment.IsEdited = true;
             comment.UpdatedAt = utcNow;
 
-            await SyncCommentMentionsAsync(comment.Id, NormalizeMentionUserIds(mentions), utcNow, cancel);
+            await SyncCommentMentionsAsync(comment.Id, ExtractMentionUserIds(content), utcNow, cancel);
             await _dbContext.SaveChangesAsync(cancel);
 
             return await MapCommentAsync(comment, cancel);
@@ -1298,9 +1302,9 @@ namespace Kpett.ChatApp.Services.Impls
             return users.ToDictionary(u => u.UserId, StringComparer.Ordinal);
         }
 
-        private static List<string> NormalizeMentionUserIds(IEnumerable<string>? mentions)
+        private static List<string> ExtractMentionUserIds(string? content)
         {
-            if (mentions == null)
+            if (string.IsNullOrWhiteSpace(content))
             {
                 return new List<string>();
             }
@@ -1308,21 +1312,31 @@ namespace Kpett.ChatApp.Services.Impls
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
 
-            foreach (var mention in mentions)
+            foreach (Match match in MentionTokenRegex.Matches(content))
             {
-                if (string.IsNullOrWhiteSpace(mention))
+                var mentionUserId = match.Groups["userId"].Value.Trim();
+                if (string.IsNullOrWhiteSpace(mentionUserId))
                 {
                     continue;
                 }
 
-                var normalizedMention = mention.Trim();
-                if (seen.Add(normalizedMention))
+                if (seen.Add(mentionUserId))
                 {
-                    result.Add(normalizedMention);
+                    result.Add(mentionUserId);
                 }
             }
 
             return result;
+        }
+
+        private static string? NormalizeOptionalString(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            return value.Trim();
         }
 
         private static List<CommentMentionDTO> GetMentions(

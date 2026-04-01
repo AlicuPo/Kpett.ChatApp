@@ -159,7 +159,6 @@ namespace Kpett.ChatApp.Controllers
                 userId,
                 request?.Content ?? string.Empty,
                 request?.ParentCommentId,
-                request?.Mentions,
                 cancel);
             return Created($"/api/comments/{result.Id}", result);
         }

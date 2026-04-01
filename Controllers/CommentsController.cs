@@ -24,7 +24,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<ActionResult<CommentDTO>> UpdateComment(string commentId, [FromBody] UpdateCommentRequest request, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
-            var result = await _postFeedService.UpdateCommentAsync(commentId, userId, request?.Content ?? string.Empty, request?.Mentions, cancel);
+            var result = await _postFeedService.UpdateCommentAsync(commentId, userId, request?.Content ?? string.Empty, cancel);
             return Ok(result);
         }
 

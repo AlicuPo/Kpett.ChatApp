@@ -46,7 +46,7 @@ namespace Kpett.ChatApp.Services.Impls
         }
         public async Task<bool> IsAccessTokenBlacklistedAsync(string jti)
         {
-            var value = await _redis.StringGetAsync(AccessBlacklistKey(jti));
+                var value = await _redis.StringGetAsync(AccessBlacklistKey(jti));
             return value.HasValue;
         }
         public async Task BlacklistRefreshTokenAsync(string refreshToken, TimeSpan ttl)
