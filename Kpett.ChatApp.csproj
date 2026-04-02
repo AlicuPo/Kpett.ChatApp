@@ -38,4 +38,8 @@
     <PackageReference Include="UUIDNext" Version="4.2.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="DTOs\Response\Comment\" />
+  </ItemGroup>
+
 </Project>

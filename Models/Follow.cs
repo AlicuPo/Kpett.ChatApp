@@ -16,6 +16,6 @@ public partial class Follow
 
     public bool? IsMuted { get; set; }
 
-    public DateTime? CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 
 }

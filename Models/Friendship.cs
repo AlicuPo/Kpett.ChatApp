@@ -12,7 +12,7 @@ public partial class Friendship
     [MaxLength(450)]
     public string UserHighId { get; set; } = null!;
 
-    public DateTime? CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 

@@ -55,7 +55,7 @@ namespace Kpett.ChatApp.DTOs.Response.Post
         public string Username { get; set; } = null!;
         public string? DisplayName { get; set; }
         public bool IsNotified { get; set; }
-        public DateTime? CreatedAt { get; set; }
+        public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
     }
 
@@ -78,7 +78,7 @@ namespace Kpett.ChatApp.DTOs.Response.Post
         public CommentViewerContextDTO ViewerContext { get; set; } = new();
         public bool IsEdited { get; set; }
         public bool IsDeleted { get; set; }
-        public DateTime? CreatedAt { get; set; }
+        public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
     }
 

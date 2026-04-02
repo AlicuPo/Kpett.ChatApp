@@ -17,5 +17,5 @@ public partial class PostReaction
 
     public byte? Type { get; set; }
 
-    public DateTime? CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 }

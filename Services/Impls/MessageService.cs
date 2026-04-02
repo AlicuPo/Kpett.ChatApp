@@ -101,7 +101,7 @@ namespace Kpett.ChatApp.Services.Impls
                 Content = request.Content,
                 Type = message.Type,
                 Metadata = request.Metadata,
-                CreatedAt = message.CreatedAt ?? DateTime.UtcNow
+                CreatedAt = message.CreatedAt
             };
 
             try
