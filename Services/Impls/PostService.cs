@@ -496,11 +496,31 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
             }
 
-            var userExists = await _dbContext.Users.AnyAsync(u => u.Id == userId, cancel);
-            if (!userExists)
+            var author = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => new UserResponse
+                {
+                    Id = u.Id,
+                    Email = u.Email,
+                    Username = u.Username,
+                    DisplayName = u.DisplayName,
+                    IsVerified = u.IsVerified,
+                    AvatarUrl = u.AvatarUrl,
+                })
+                .FirstOrDefaultAsync(cancel);
+
+            if (author == null)
             {
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
+
+            var normalizedType = string.IsNullOrWhiteSpace(searchRequest?.Type)
+                ? PostType.Post.GetDescription()
+                : searchRequest.Type;
+            var normalizedLimit = cursorPagination.Limit <= 0
+                ? 10
+                : Math.Min(cursorPagination.Limit, 50);
 
             DateTime? cursorDate = null;
             DateTime? cursorPinnedAt = null;
@@ -519,8 +539,7 @@ namespace Kpett.ChatApp.Services.Impls
             var query = _dbContext.Posts
                 .AsNoTracking()
                 .Where(p => p.CreatedByUserId == userId && !p.IsDeleted)
-                .Where(p => p.Type == searchRequest.Type)
-;
+                .Where(p => p.Type == normalizedType);
 
             if (cursorDate.HasValue && !string.IsNullOrEmpty(cursorId))
             {
@@ -538,30 +557,16 @@ namespace Kpett.ChatApp.Services.Impls
                 .OrderByDescending(p => p.PinnedAt)
                 .ThenByDescending(p => p.CreatedAt)
                 .ThenByDescending(p => p.Id)
-                .Take(cursorPagination.Limit + 1)
+                .Take(normalizedLimit + 1)
                 .Select(p => new
                 {
-                    Post = p,
-                    Author = _dbContext.Users.Where(u => u.Id == p.CreatedByUserId)
-                                               .Select(u => new
-                                               {
-                                                   Id = u.Id,
-                                                   Email = u.Email,
-                                                   Username = u.Username,
-                                                   DisplayName = u.DisplayName,
-                                                   IsVerified = u.IsVerified,
-                                                   AvatarUrl = u.AvatarUrl,
-                                               })
-                                               .FirstOrDefault(),
-
-                    Media = _dbContext.PostMedia.Where(m => m.PostId == p.Id)
-                                         .OrderBy(m => m.CreatedAt)
-                                         .Select(m => new { m.Id, m.MediaUrl, m.MediaType, m.CreatedAt })
-                                         .FirstOrDefault(),
-
-                    LikeCount = _dbContext.PostReactions.Count(r => r.PostId == p.Id),
-                    CommentCount = _dbContext.Comments.Count(c => c.PostId == p.Id),
-                    IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == userId)
+                    p.Id,
+                    p.Content,
+                    p.CreatedAt,
+                    p.UpdatedAt,
+                    p.Privacy,
+                    p.CreatedByUserId,
+                    p.PinnedAt
                 })
                 .ToListAsync(cancel);
 
@@ -570,69 +575,119 @@ namespace Kpett.ChatApp.Services.Impls
                 return new PaginatedData<PostThumbnailResponse>
                 {
                     Items = new List<PostThumbnailResponse>(),
-                    Pagination = new CursorPaginationMeta { Limit = cursorPagination.Limit }
+                    Pagination = new CursorPaginationMeta { Limit = normalizedLimit }
                 };
             }
 
             string? nextCursor = null;
             var itemsToProcess = rawData;
 
-            if (rawData.Count > cursorPagination.Limit)
+            if (rawData.Count > normalizedLimit)
             {
-                var lastItemInPage = rawData[cursorPagination.Limit - 1].Post;
+                var lastItemInPage = rawData[normalizedLimit - 1];
                 nextCursor = CursorHelper.Encode(new PostThumbnailCursorPayload
                 {
                     Id = lastItemInPage.Id,
                     CreatedAt = lastItemInPage.CreatedAt,
                     PinnedAt = lastItemInPage.PinnedAt
                 });
-                itemsToProcess = rawData.Take(cursorPagination.Limit).ToList();
+                itemsToProcess = rawData.Take(normalizedLimit).ToList();
             }
+
+            var postIds = itemsToProcess.Select(data => data.Id).ToList();
+
+            var mediaRows = await _dbContext.PostMedia
+                .AsNoTracking()
+                .Where(m => m.PostId != null && postIds.Contains(m.PostId))
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => new
+                {
+                    PostId = m.PostId!,
+                    m.Id,
+                    m.MediaUrl,
+                    m.MediaType,
+                    m.CreatedAt
+                })
+                .ToListAsync(cancel);
+
+            var mediaByPostId = mediaRows
+                .GroupBy(m => m.PostId, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
+            var likeCounts = await _dbContext.PostReactions
+                .AsNoTracking()
+                .Where(r => postIds.Contains(r.PostId))
+                .GroupBy(r => r.PostId)
+                .Select(group => new
+                {
+                    PostId = group.Key,
+                    Count = group.Count()
+                })
+                .ToDictionaryAsync(x => x.PostId, x => x.Count, cancel);
+
+            var commentCounts = await _dbContext.Comments
+                .AsNoTracking()
+                .Where(c => postIds.Contains(c.PostId))
+                .GroupBy(c => c.PostId)
+                .Select(group => new
+                {
+                    PostId = group.Key,
+                    Count = group.Count()
+                })
+                .ToDictionaryAsync(x => x.PostId, x => x.Count, cancel);
+
+            var likedPostIds = string.IsNullOrWhiteSpace(currentUserId)
+                ? new HashSet<string>(StringComparer.Ordinal)
+                : (await _dbContext.PostReactions
+                    .AsNoTracking()
+                    .Where(r => r.UserId == currentUserId && postIds.Contains(r.PostId))
+                    .Select(r => r.PostId)
+                    .Distinct()
+                    .ToListAsync(cancel))
+                .ToHashSet(StringComparer.Ordinal);
 
             var mappedPosts = itemsToProcess.Select(data => new PostThumbnailResponse
             {
-                Id = data.Post.Id,
-                Content = data.Post.Content,
-                CreatedAt = data.Post.CreatedAt,
-                UpdatedAt = data.Post.UpdatedAt,
-                Privacy = data.Post.Privacy,
+                Id = data.Id,
+                Content = data.Content,
+                CreatedAt = data.CreatedAt,
+                UpdatedAt = data.UpdatedAt,
+                Privacy = data.Privacy,
 
-                Author = data.Author != null
-                        ? new UserResponse
-                        {
-                            Id = data.Author.Id,
-                            Username = data.Author.Username,
-                            AvatarUrl = data.Author.AvatarUrl,
-                            DisplayName = data.Author.DisplayName,
-                            Email = data.Author.Email,
-                            IsVerified = data.Author.IsVerified,
-                        }
-                        : new UserResponse { Id = data.Post.CreatedByUserId, Username = "Unknown User" },
-
-                MediaThumbnail = data.Media != null ? new MediaPostResponse
+                Author = new UserResponse
                 {
-                    PublicId = data.Media.Id,
-                    Url = data.Media.MediaUrl,
-                    Type = data.Media.MediaType
+                    Id = author.Id,
+                    Username = author.Username,
+                    AvatarUrl = author.AvatarUrl,
+                    DisplayName = author.DisplayName,
+                    Email = author.Email,
+                    IsVerified = author.IsVerified,
+                },
+
+                MediaThumbnail = mediaByPostId.TryGetValue(data.Id, out var media) ? new MediaPostResponse
+                {
+                    PublicId = media.Id,
+                    Url = media.MediaUrl,
+                    Type = media.MediaType
                 } : null,
 
                 Metrics = new PostMetricsResponse
                 {
-                    LikeCount = data.LikeCount,
-                    CommentCount = data.CommentCount
+                    LikeCount = likeCounts.GetValueOrDefault(data.Id, 0),
+                    CommentCount = commentCounts.GetValueOrDefault(data.Id, 0)
                 },
 
                 ViewerContext = new PostViewerContextResponse
                 {
-                    IsOwner = data.Post.CreatedByUserId == currentUserId,
-                    IsLiked = data.IsLiked,
+                    IsOwner = data.CreatedByUserId == currentUserId,
+                    IsLiked = likedPostIds.Contains(data.Id),
                     IsSaved = false,
                     IsPinned = false,
-                    CanEdit = data.Post.CreatedByUserId == currentUserId,
-                    CanDelete = data.Post.CreatedByUserId == currentUserId,
+                    CanEdit = data.CreatedByUserId == currentUserId,
+                    CanDelete = data.CreatedByUserId == currentUserId,
                     CanLike = true,
                     CanComment = true,
-                    CanPin = data.Post.CreatedByUserId == currentUserId
+                    CanPin = data.CreatedByUserId == currentUserId
                 },
             }).ToList();
 
@@ -642,7 +697,7 @@ namespace Kpett.ChatApp.Services.Impls
                 Pagination = new CursorPaginationMeta
                 {
                     NextCursor = nextCursor,
-                    Limit = cursorPagination.Limit
+                    Limit = normalizedLimit
                 }
             };
         }

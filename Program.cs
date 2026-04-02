@@ -212,7 +212,6 @@ app.UseRouting();
 app.UseCors("ClientCors");
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseTokenBlacklistMiddleware();
 
 if (app.Environment.IsDevelopment())
 {

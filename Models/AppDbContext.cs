@@ -133,6 +133,22 @@ public partial class AppDbContext : DbContext
             .HasIndex(e => new { e.CommentId, e.UserId })
             .IsUnique();
 
+        modelBuilder.Entity<Post>()
+            .HasIndex(e => new { e.CreatedByUserId, e.IsDeleted, e.PinnedAt, e.CreatedAt, e.Id })
+            .HasDatabaseName("IX_Posts_User_Deleted_PinnedAt_CreatedAt_Id");
+
+        modelBuilder.Entity<Comment>()
+            .HasIndex(e => e.PostId)
+            .HasDatabaseName("IX_Comments_PostId");
+
+        modelBuilder.Entity<PostReaction>()
+            .HasIndex(e => e.PostId)
+            .HasDatabaseName("IX_PostReactions_PostId");
+
+        modelBuilder.Entity<PostReaction>()
+            .HasIndex(e => new { e.PostId, e.UserId })
+            .HasDatabaseName("IX_PostReactions_PostId_UserId");
+
         // XÓA BỎ TẤT CẢ CÁC RÀNG BUỘC QUAN HỆ (FOREIGN KEYS) ---
         // Đoạn này đảm bảo dù Model có thuộc tính điều hướng cũng không tạo FK trong DB
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
