@@ -9,6 +9,12 @@ public partial class FriendRequest
     public string Id { get; set; } = null!;
 
     [MaxLength(450)]
+    public string UserLowId { get; set; } = null!;
+
+    [MaxLength(450)]
+    public string UserHighId { get; set; } = null!;
+
+    [MaxLength(450)]
     public string SenderId { get; set; } = null!;
 
     [MaxLength(450)]
@@ -16,6 +22,7 @@ public partial class FriendRequest
 
     public string? Message { get; set; }
 
+    [MaxLength(450)]
     public string? Status { get; set; }
 
     public DateTime CreatedAt { get; set; }
