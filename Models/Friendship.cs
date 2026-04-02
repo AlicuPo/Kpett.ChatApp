@@ -16,6 +16,7 @@ public partial class Friendship
 
     public DateTime? UpdatedAt { get; set; }
 
+    [MaxLength(450)]
     public string? Status { get; set; }
 
     public string? ActionUserId { get; set; }

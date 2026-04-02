@@ -149,6 +149,27 @@ public partial class AppDbContext : DbContext
             .HasIndex(e => new { e.PostId, e.UserId })
             .HasDatabaseName("IX_PostReactions_PostId_UserId");
 
+        modelBuilder.Entity<FriendRequest>()
+            .HasIndex(e => new { e.UserLowId, e.UserHighId })
+            .IsUnique()
+            .HasDatabaseName("IX_FriendRequests_UserPair");
+
+        modelBuilder.Entity<FriendRequest>()
+            .HasIndex(e => new { e.ReceiverId, e.Status, e.CreatedAt })
+            .HasDatabaseName("IX_FriendRequests_Receiver_Status_CreatedAt");
+
+        modelBuilder.Entity<FriendRequest>()
+            .HasIndex(e => new { e.SenderId, e.Status, e.CreatedAt })
+            .HasDatabaseName("IX_FriendRequests_Sender_Status_CreatedAt");
+
+        modelBuilder.Entity<Friendship>()
+            .HasIndex(e => new { e.UserLowId, e.Status, e.CreatedAt, e.UserHighId })
+            .HasDatabaseName("IX_Friendships_UserLow_Status_CreatedAt_UserHigh");
+
+        modelBuilder.Entity<Friendship>()
+            .HasIndex(e => new { e.UserHighId, e.Status, e.CreatedAt, e.UserLowId })
+            .HasDatabaseName("IX_Friendships_UserHigh_Status_CreatedAt_UserLow");
+
         // XÓA BỎ TẤT CẢ CÁC RÀNG BUỘC QUAN HỆ (FOREIGN KEYS) ---
         // Đoạn này đảm bảo dù Model có thuộc tính điều hướng cũng không tạo FK trong DB
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())

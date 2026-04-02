@@ -1,6 +1,7 @@
 using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Request.Friend;
 using Kpett.ChatApp.DTOs.Response.Friend;
+using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
@@ -26,7 +27,12 @@ namespace Kpett.ChatApp.Controllers
         {
             var senderId = User.GetRequiredUserId();
             var result = await _friendshipsServices.CreateFriendRequestAsync(senderId, request?.ReceiverId ?? string.Empty, cancel);
-            return Created($"/api/friend-requests/{result.FriendRequestId}", result);
+            if (result.IsCreated)
+            {
+                return Created($"/api/friend-requests/{result.FriendRequest.FriendRequestId}", result.FriendRequest);
+            }
+
+            return Ok(result.FriendRequest);
         }
 
         [HttpGet]
@@ -40,6 +46,23 @@ namespace Kpett.ChatApp.Controllers
             var userId = User.GetRequiredUserId();
             var requests = await _friendshipsServices.GetPendingFriendRequestsAsync(userId, cancel);
             return Ok(requests);
+        }
+
+        [HttpGet("~/api/friends")]
+        public async Task<ActionResult<GeneralResponse<PaginatedData<FriendListItemDTO>>>> GetFriends(
+            [FromQuery] FriendListRequest request,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var friends = await _friendshipsServices.GetFriendsAsync(userId, request, cancel);
+
+            return Ok(new GeneralResponse<PaginatedData<FriendListItemDTO>>
+            {
+                IsSuccess = true,
+                Message = "Get friends successfully",
+                StatusCode = StatusCodes.Status200OK,
+                Data = friends
+            });
         }
 
         [HttpPatch("{friendRequestId}")]
