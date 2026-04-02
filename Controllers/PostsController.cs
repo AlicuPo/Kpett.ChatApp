@@ -172,7 +172,7 @@ namespace Kpett.ChatApp.Controllers
         {
             var userId = User.GetRequiredUserId();
             var result = await _postService.GetCommentsAsync(postId, userId, cursor, limit, cancel);
-            return Ok(new GeneralResponse<CommentsPageDTO>
+            return Ok(new GeneralResponse<PaginatedData<CommentListItemDTO>>
             {
                 IsSuccess = true,
                 Message = "Get comments successfully",
