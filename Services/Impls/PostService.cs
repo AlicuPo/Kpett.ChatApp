@@ -223,7 +223,7 @@ namespace Kpett.ChatApp.Services.Impls
             var metrics = new PostMetricsResponse
             {
                 LikeCount = await _dbContext.PostReactions.CountAsync(pr => pr.PostId == postId, cancel),
-                CommentCount = await _dbContext.Comments.CountAsync(pr => pr.PostId == postId, cancel)
+                CommentCount = await _dbContext.Comments.CountAsync(pr => pr.PostId == postId && pr.DeletedAt == null, cancel)
             };
 
             // Since the creator is viewing their own post immediately after creation, we can set the viewer context accordingly
@@ -288,7 +288,7 @@ namespace Kpett.ChatApp.Services.Impls
                                          .ToList(),
 
                     LikeCount = _dbContext.PostReactions.Count(r => r.PostId == p.Id),
-                    CommentCount = _dbContext.Comments.Count(c => c.PostId == p.Id),
+                    CommentCount = _dbContext.Comments.Count(c => c.PostId == p.Id && c.DeletedAt == null),
                     IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == currentUserId)
                 })
                 .FirstOrDefaultAsync(cancel);
@@ -399,7 +399,7 @@ namespace Kpett.ChatApp.Services.Impls
                                          .ToList(),
 
                     LikeCount = _dbContext.PostReactions.Count(r => r.PostId == p.Id),
-                    CommentCount = _dbContext.Comments.Count(c => c.PostId == p.Id),
+                    CommentCount = _dbContext.Comments.Count(c => c.PostId == p.Id && c.DeletedAt == null),
                     IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == currentUserId)
                 })
                 .ToListAsync(cancel);
@@ -628,7 +628,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             var commentCounts = await _dbContext.Comments
                 .AsNoTracking()
-                .Where(c => postIds.Contains(c.PostId))
+                .Where(c => postIds.Contains(c.PostId) && c.DeletedAt == null)
                 .GroupBy(c => c.PostId)
                 .Select(group => new
                 {
@@ -903,7 +903,7 @@ namespace Kpett.ChatApp.Services.Impls
             return reactions;
         }
 
-        public async Task<CommentListItemDTO> AddCommentAsync(
+        public async Task<CommentDTO> AddCommentAsync(
             string postId,
             string userId,
             string content,
@@ -917,7 +917,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             var utcNow = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
             var normalizedParentCommentId = NormalizeOptionalString(parentCommentId);
-            var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
+            var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId && !p.IsDeleted, cancel);
             if (post == null)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
@@ -931,13 +931,13 @@ namespace Kpett.ChatApp.Services.Impls
                     throw new NotFoundException(ErrorCodes.COMMENT.PARENT_COMMENT_NOT_FOUND, "Parent comment not found");
             }
 
-            var user = _dbContext.Users
+            var user = await _dbContext.Users
                 .AsNoTracking()
                 .Where(u => u.Id == userId)
-                .FirstOrDefault();
+                .FirstOrDefaultAsync(cancel);
 
-            if(user == null)
-                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");   
+            if (user == null)
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
 
             var comment = new Comment
             {
@@ -959,20 +959,15 @@ namespace Kpett.ChatApp.Services.Impls
                 parentComment.ReplyCount += 1;
             }
 
-            var mentions = await SyncCommentMentionsAsync(comment.Id, ExtractMentionUserIds(content), utcNow, cancel);
+            await SyncCommentMentionsAsync(comment.Id, ExtractMentionUserIds(content), utcNow, cancel);
             await _dbContext.SaveChangesAsync(cancel);
 
-            return MapCommentListItem(
-                    comment,
-                    user,
-                    mentions,
-                    false,
-                    user.Id);
+            return await MapCommentAsync(comment, cancel);
         }
 
-        public async Task<PaginatedData<CommentListItemDTO>> GetCommentsAsync(
+        public async Task<CommentsPageDTO> GetCommentsAsync(
             string postId,
-            string parentCommentId,
+            string? parentCommentId,
             string currentUserId,
             string? cursor,
             int limit,
@@ -1000,13 +995,14 @@ namespace Kpett.ChatApp.Services.Impls
             }
 
             var normalizedLimit = limit <= 0 ? 20 : Math.Min(limit, 100);
+            var normalizedParentCommentId = NormalizeOptionalString(parentCommentId);
             var totalCount = await _dbContext.Comments
                 .AsNoTracking()
-                .CountAsync(c => c.PostId == postId && c.DeletedAt == null && c.ParentCommentId == parentCommentId, cancel);
+                .CountAsync(c => c.PostId == postId && c.DeletedAt == null && c.ParentCommentId == normalizedParentCommentId, cancel);
 
             var query = _dbContext.Comments
                 .AsNoTracking()
-                .Where(c => c.PostId == postId && c.DeletedAt == null && c.ParentCommentId == parentCommentId);
+                .Where(c => c.PostId == postId && c.DeletedAt == null && c.ParentCommentId == normalizedParentCommentId);
 
             // Áp dụng điều kiện lọc Compound (Date + Id)
             if (cursorDate.HasValue && !string.IsNullOrEmpty(cursorId))
@@ -1063,12 +1059,13 @@ namespace Kpett.ChatApp.Services.Impls
                     currentUserId))
                 .ToList();
 
-            return new PaginatedData<CommentListItemDTO>
+            return new CommentsPageDTO
             {
                 Items = items,
-                Pagination = new CursorPaginationMeta
+                Pagination = new CommentPaginationDTO
                 {
                     NextCursor = nextCursor,
+                    HasMore = hasMore,
                     Limit = normalizedLimit,
                     TotalCount = totalCount
                 }
