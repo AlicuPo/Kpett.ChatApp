@@ -170,14 +170,6 @@ public partial class AppDbContext : DbContext
             .HasIndex(e => new { e.UserHighId, e.Status, e.CreatedAt, e.UserLowId })
             .HasDatabaseName("IX_Friendships_UserHigh_Status_CreatedAt_UserLow");
 
-        modelBuilder.Entity<ConversationParticipant>()
-            .HasIndex(e => new { e.UserId, e.IsArchived, e.ConversationId })
-            .HasDatabaseName("IX_ConversationParticipants_User_Archived_Conversation");
-
-        modelBuilder.Entity<Message>()
-            .HasIndex(e => new { e.ConversationId, e.Id })
-            .HasDatabaseName("IX_Messages_ConversationId_Id");
-
         // XÓA BỎ TẤT CẢ CÁC RÀNG BUỘC QUAN HỆ (FOREIGN KEYS) ---
         // Đoạn này đảm bảo dù Model có thuộc tính điều hướng cũng không tạo FK trong DB
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
