@@ -14,7 +14,7 @@ public partial class GroupMember
     [MaxLength(450)]
     public string GroupId { get; set; } = null!;
 
-    public DateTime? CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 
     [MaxLength(450)]
     public string? CreatedByUserId { get; set; }

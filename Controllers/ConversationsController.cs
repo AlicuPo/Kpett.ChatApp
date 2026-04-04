@@ -24,14 +24,8 @@ namespace Kpett.ChatApp.Controllers
         public async Task<ActionResult<ConversationResponse>> CreateConversation([FromBody] ConversationKeysRequest request, CancellationToken cancel)
         {
             var currentUserId = User.GetRequiredUserId();
-            var result = await _conversation.CreateConversationAsync(currentUserId, request, cancel);
-
-            if (result.IsCreated)
-            {
-                return Created($"/api/conversations/{result.Conversation.Id}", result.Conversation);
-            }
-
-            return Ok(result.Conversation);
+            var conversation = await _conversation.CreateConversationAsync(currentUserId, request, cancel);
+            return Created($"/api/conversations/{conversation.Id}", conversation);
         }
 
         [HttpGet]

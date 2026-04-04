@@ -20,7 +20,7 @@ public partial class Comment
     public int LikeCount { get; set; }
     public int ReplyCount { get; set; }
     public bool IsEdited { get; set; }
-    public DateTime? CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public DateTime? DeletedAt { get; set; }
 }

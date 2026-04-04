@@ -16,7 +16,7 @@ public partial class Group
 
     public string? Type { get; set; }
 
-    public DateTime? CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 
     [MaxLength(450)]
     public string? CreatedByUserId { get; set; }

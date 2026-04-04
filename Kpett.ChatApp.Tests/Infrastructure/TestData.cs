@@ -46,6 +46,19 @@ public static class TestData
         };
     }
 
+    public static ConversationKey CreateConversationKey(string conversationId, string userAId, string userBId)
+    {
+        var (userLowId, userHighId) = NormalizePair(userAId, userBId);
+
+        return new ConversationKey
+        {
+            Id = Guid.NewGuid().ToString(),
+            ConversationId = conversationId,
+            UserLowId = userLowId,
+            UserHighId = userHighId
+        };
+    }
+
     public static Post CreatePost(string id, string userId, string content = "hello post")
     {
         return new Post
@@ -59,15 +72,59 @@ public static class TestData
         };
     }
 
-    public static FriendRequest CreatePendingFriendRequest(string id, string senderId, string receiverId)
+    public static FriendRequest CreateFriendRequest(
+        string id,
+        string senderId,
+        string receiverId,
+        string status,
+        DateTime? createdAt = null,
+        DateTime? updatedAt = null)
     {
+        var (userLowId, userHighId) = NormalizePair(senderId, receiverId);
+
         return new FriendRequest
         {
             Id = id,
+            UserLowId = userLowId,
+            UserHighId = userHighId,
             SenderId = senderId,
             ReceiverId = receiverId,
-            Status = FriendshipsEnums.Pending.GetDescription(),
-            CreatedAt = DateTime.UtcNow
+            Status = status,
+            CreatedAt = createdAt ?? DateTime.UtcNow,
+            UpdatedAt = updatedAt
         };
+    }
+
+    public static FriendRequest CreatePendingFriendRequest(string id, string senderId, string receiverId, DateTime? createdAt = null, DateTime? updatedAt = null)
+    {
+        return CreateFriendRequest(
+            id,
+            senderId,
+            receiverId,
+            FriendshipsEnums.Pending.GetDescription(),
+            createdAt,
+            updatedAt);
+    }
+
+    public static Friendship CreateAcceptedFriendship(string userAId, string userBId, DateTime? createdAt = null)
+    {
+        var userLowId = string.CompareOrdinal(userAId, userBId) < 0 ? userAId : userBId;
+        var userHighId = string.CompareOrdinal(userAId, userBId) < 0 ? userBId : userAId;
+
+        return new Friendship
+        {
+            UserLowId = userLowId,
+            UserHighId = userHighId,
+            Status = FriendshipsEnums.Accepted.GetDescription(),
+            ActionUserId = userAId,
+            CreatedAt = createdAt ?? DateTime.UtcNow
+        };
+    }
+
+    private static (string LowId, string HighId) NormalizePair(string firstUserId, string secondUserId)
+    {
+        return string.CompareOrdinal(firstUserId, secondUserId) < 0
+            ? (firstUserId, secondUserId)
+            : (secondUserId, firstUserId);
     }
 }

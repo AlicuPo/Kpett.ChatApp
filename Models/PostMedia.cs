@@ -27,5 +27,5 @@ public partial class PostMedia
 
     public bool IsTemporary { get; set; } = true;
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
 }

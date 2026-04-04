@@ -14,7 +14,7 @@ public partial class Block
     [MaxLength(450)]
     public string? BlockedId { get; set; }
 
-    public DateTime? CreatedAt { get; set; }
-
     public string? Reason { get; set; }
+    public DateTime CreatedAt { get; set; }
+
 }

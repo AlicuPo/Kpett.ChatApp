@@ -20,7 +20,7 @@ public partial class MentionComment
 
     public bool IsNotified { get; set; }
 
-    public DateTime? CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 }

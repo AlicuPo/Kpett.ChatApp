@@ -261,10 +261,10 @@ namespace Kpett.ChatApp.Services.Impls
                             f.FollowerId == currentUserId && f.FolloweeId == u.Id),
 
                         HasSentFriendRequest = _dbcontext.FriendRequests.Any(fr =>
-                            fr.SenderId == currentUserId && fr.ReceiverId == u.Id && fr.Status == FriendshipsEnums.Pending.ToString()),
+                            fr.SenderId == currentUserId && fr.ReceiverId == u.Id && fr.Status == FriendRequestStatus.Pending.ToString()),
 
                         HasReceivedFriendRequest = _dbcontext.FriendRequests.Any(fr =>
-                            fr.SenderId == u.Id && fr.ReceiverId == currentUserId && fr.Status == FriendshipsEnums.Pending.ToString()),
+                            fr.SenderId == u.Id && fr.ReceiverId == currentUserId && fr.Status == FriendRequestStatus.Pending.ToString()),
 
                         IsBlocked = _dbcontext.Blocks.Any(b =>
                             (b.BlockerId == currentUserId && b.BlockedId == u.Id) ||

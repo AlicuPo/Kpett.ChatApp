@@ -12,7 +12,7 @@ public partial class UserRole
     [MaxLength(450)]
     public int RoleId { get; set; }
 
-    public DateTime? CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 
     public virtual Role Role { get; set; } = null!;
 
