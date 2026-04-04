@@ -30,6 +30,15 @@
             public const string FRIEND_REQUEST_PENDING = "FRIEND.FRIEND_REQUEST_PENDING";
             public const string REQUEST_NOT_FOUND_OR_PROCESSED = "FRIEND.REQUEST_NOT_FOUND_OR_PROCESSED";
             public const string FRIEND_REQUEST_NOT_FOUND = "FRIEND.FRIEND_REQUEST_NOT_FOUND";
+            public const string REQUEST_ALREADY_SENT = "FRIEND.REQUEST_ALREADY_SENT";
+            public const string FRIENDSHIP_NOT_FOUND = "FRIEND.FRIENDSHIP_NOT_FOUND";
+        }
+
+        public static class FOLLOW
+        {
+            public const string SELF_REFERENCE = "FOLLOW.SELF_REFERENCE";
+            public const string ALREADY_FOLLOWING = "FOLLOW.ALREADY_FOLLOWING";
+            public const string FOLLOW_NOT_FOUND = "FOLLOW.FOLLOW_NOT_FOUND";
         }
 
         public static class CONVERSATION

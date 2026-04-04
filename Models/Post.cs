@@ -22,9 +22,9 @@ public partial class Post
 
     public bool IsPinned { get; set; } = false;
 
-    public DateTime PinnedAt { get; set; } = DateTime.Now;
+    public DateTime PinnedAt { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 

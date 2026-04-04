@@ -32,7 +32,7 @@ public partial class User
     public bool IsAccountPrivate { get; set; }
     public string? Status { get; set; }
     public bool IsActive { get; set; }
-    public DateTime? CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 

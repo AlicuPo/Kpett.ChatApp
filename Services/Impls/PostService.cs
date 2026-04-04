@@ -8,6 +8,7 @@ using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
+using Kpett.ChatApp.Extentions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
@@ -74,7 +75,7 @@ namespace Kpett.ChatApp.Services.Impls
                 Privacy = postRequest.Privacy ?? PostPrivacy.Public.GetDescription(),
                 Type = PostType.Post.GetDescription(),
                 GroupId = postRequest.GroupId,
-                CreatedAt = DateTime.Now,
+                CreatedAt = DateTime.UtcNow,
                 IsDeleted = false
             };
 
@@ -355,7 +356,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             if (!string.IsNullOrWhiteSpace(cursor))
             {
-                var decoded = CursorHelper.Decode<PostFeedCursorPayload>(cursor);
+                var decoded = CursorHelper.Decode<BaseCursorPayload>(cursor);
 
                 if (decoded != null)
                 {
@@ -418,7 +419,7 @@ namespace Kpett.ChatApp.Services.Impls
             if (rawData.Count > limit)
             {
                 var lastItemInPage = rawData[limit - 1].Post;
-                nextCursor = CursorHelper.Encode(new PostFeedCursorPayload
+                nextCursor = CursorHelper.Encode(new BaseCursorPayload
                 {
                     Id = lastItemInPage.Id,
                     CreatedAt = lastItemInPage.CreatedAt
@@ -902,7 +903,7 @@ namespace Kpett.ChatApp.Services.Impls
             return reactions;
         }
 
-        public async Task<CommentDTO> AddCommentAsync(
+        public async Task<CommentListItemDTO> AddCommentAsync(
             string postId,
             string userId,
             string content,
@@ -914,7 +915,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             cancel.ThrowIfCancellationRequested();
 
-            var utcNow = DateTime.UtcNow;
+            var utcNow = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
             var normalizedParentCommentId = NormalizeOptionalString(parentCommentId);
             var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
             if (post == null)
@@ -929,6 +930,14 @@ namespace Kpett.ChatApp.Services.Impls
                 if (parentComment == null)
                     throw new NotFoundException(ErrorCodes.COMMENT.PARENT_COMMENT_NOT_FOUND, "Parent comment not found");
             }
+
+            var user = _dbContext.Users
+                .AsNoTracking()
+                .Where(u => u.Id == userId)
+                .FirstOrDefault();
+
+            if(user == null)
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");   
 
             var comment = new Comment
             {
@@ -950,37 +959,22 @@ namespace Kpett.ChatApp.Services.Impls
                 parentComment.ReplyCount += 1;
             }
 
-            await SyncCommentMentionsAsync(comment.Id, ExtractMentionUserIds(content), utcNow, cancel);
+            var mentions = await SyncCommentMentionsAsync(comment.Id, ExtractMentionUserIds(content), utcNow, cancel);
             await _dbContext.SaveChangesAsync(cancel);
 
-            if (post.CreatedByUserId != userId)
-            {
-                try
-                {
-                    var user = await _dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, cancel);
-                    await _realtimeService.PublishAsync($"user:{post.CreatedByUserId}:notifications", new
-                    {
-                        type = "POST_COMMENT",
-                        postId,
-                        commentId = comment.Id,
-                        userId,
-                        userName = user?.DisplayName ?? user?.Username,
-                        timestamp = DateTime.UtcNow
-                    });
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Real-time notification failed: {ex.Message}");
-                }
-            }
-
-            return await MapCommentAsync(comment, cancel);
+            return MapCommentListItem(
+                    comment,
+                    user,
+                    mentions,
+                    false,
+                    user.Id);
         }
 
-        public async Task<CommentsPageDTO> GetCommentsAsync(
+        public async Task<PaginatedData<CommentListItemDTO>> GetCommentsAsync(
             string postId,
+            string parentCommentId,
             string currentUserId,
-            DateTime? cursor,
+            string? cursor,
             int limit,
             CancellationToken cancel)
         {
@@ -991,22 +985,40 @@ namespace Kpett.ChatApp.Services.Impls
             if (!postExists)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
+            // Giải mã Cursor
+            DateTime? cursorDate = null;
+            string? cursorId = null;
+
+            if (!string.IsNullOrWhiteSpace(cursor))
+            {
+                var decoded = CursorHelper.Decode<BaseCursorPayload>(cursor);
+                if (decoded != null)
+                {
+                    cursorDate = decoded.CreatedAt;
+                    cursorId = decoded.Id;
+                }
+            }
+
             var normalizedLimit = limit <= 0 ? 20 : Math.Min(limit, 100);
             var totalCount = await _dbContext.Comments
                 .AsNoTracking()
-                .CountAsync(c => c.PostId == postId && c.DeletedAt == null && string.IsNullOrEmpty(c.ParentCommentId), cancel);
+                .CountAsync(c => c.PostId == postId && c.DeletedAt == null && c.ParentCommentId == parentCommentId, cancel);
 
             var query = _dbContext.Comments
                 .AsNoTracking()
-                .Where(c => c.PostId == postId && c.DeletedAt == null && string.IsNullOrEmpty(c.ParentCommentId));
+                .Where(c => c.PostId == postId && c.DeletedAt == null && c.ParentCommentId == parentCommentId);
 
-            if (cursor.HasValue)
+            // Áp dụng điều kiện lọc Compound (Date + Id)
+            if (cursorDate.HasValue && !string.IsNullOrEmpty(cursorId))
             {
-                query = query.Where(c => c.CreatedAt.HasValue && c.CreatedAt.Value < cursor.Value);
+                query = query.Where(c =>
+                    c.CreatedAt > cursorDate.Value ||
+                    (c.CreatedAt == cursorDate.Value && c.Id.CompareTo(cursorId) < 0));
             }
 
             var commentRows = await query
-                .OrderByDescending(c => c.CreatedAt)
+                .OrderBy(c => c.CreatedAt)
+                .ThenByDescending(c => c.Id)
                 .Take(normalizedLimit + 1)
                 .Join(
                     _dbContext.Users.AsNoTracking(),
@@ -1020,6 +1032,19 @@ namespace Kpett.ChatApp.Services.Impls
                 ? commentRows.Take(normalizedLimit).ToList()
                 : commentRows;
 
+            // Encode Next Cursor
+            string? nextCursor = null;
+            if (hasMore)
+            {
+                var lastItemInPage = pagedCommentRows.Last().Comment;
+                nextCursor = CursorHelper.Encode(new BaseCursorPayload
+                {
+                    Id = lastItemInPage.Id,
+                    CreatedAt = lastItemInPage.CreatedAt
+                });
+            }
+
+            // Các logic lookup giữ nguyên
             var mentionLookup = await GetCommentMentionsLookupAsync(
                 pagedCommentRows.Select(x => x.Comment.Id).ToList(),
                 cancel);
@@ -1038,13 +1063,12 @@ namespace Kpett.ChatApp.Services.Impls
                     currentUserId))
                 .ToList();
 
-            return new CommentsPageDTO
+            return new PaginatedData<CommentListItemDTO>
             {
                 Items = items,
-                Pagination = new CommentPaginationDTO
+                Pagination = new CursorPaginationMeta
                 {
-                    NextCursor = hasMore ? items.Last().CreatedAt?.ToString("O") : null,
-                    HasMore = hasMore,
+                    NextCursor = nextCursor,
                     Limit = normalizedLimit,
                     TotalCount = totalCount
                 }
@@ -1052,32 +1076,6 @@ namespace Kpett.ChatApp.Services.Impls
         }
 
         // Method help post
-        private string EncodeCursor(DateTime createdAt, string id)
-        {
-            var plainText = $"{createdAt.Ticks}_{id}";
-            var plainTextBytes = Encoding.UTF8.GetBytes(plainText);
-            return Convert.ToBase64String(plainTextBytes);
-        }
-
-        private (DateTime Date, string Id)? DecodeCursor(string cursor)
-        {
-            try
-            {
-                var base64EncodedBytes = Convert.FromBase64String(cursor);
-                var plainText = Encoding.UTF8.GetString(base64EncodedBytes);
-                var parts = plainText.Split('_', 2);
-
-                if (parts.Length == 2 && long.TryParse(parts[0], out long ticks))
-                {
-                    var date = new DateTime(ticks);
-                    var id = parts[1];
-                    return (date, id);
-                }
-            }
-            catch { }
-            return null;
-        }
-
 
         // Method help comment
 
@@ -1270,12 +1268,12 @@ namespace Kpett.ChatApp.Services.Impls
                 },
                 IsEdited = comment.IsEdited,
                 IsDeleted = isDeleted,
-                CreatedAt = comment.CreatedAt,
-                UpdatedAt = comment.UpdatedAt
+                CreatedAt = comment.CreatedAt.ToUtc(),
+                UpdatedAt = comment.UpdatedAt  == null ? null : comment.UpdatedAt.Value.ToUtc()
             };
         }
 
-        private async Task SyncCommentMentionsAsync(
+        private async Task<List<CommentMentionSummaryDTO>> SyncCommentMentionsAsync(
             string commentId,
             IReadOnlyCollection<string> mentionUserIds,
             DateTime utcNow,
@@ -1298,6 +1296,8 @@ namespace Kpett.ChatApp.Services.Impls
                 _dbContext.MentionComments.RemoveRange(mentionsToRemove);
             }
 
+            var commentMetions = new List<CommentMentionSummaryDTO>();
+
             foreach (var mentionUserId in mentionUserIds)
             {
                 var snapshot = mentionSnapshots[mentionUserId];
@@ -1309,6 +1309,13 @@ namespace Kpett.ChatApp.Services.Impls
                     existingMention.UpdatedAt = utcNow;
                     continue;
                 }
+
+                commentMetions.Add(new CommentMentionSummaryDTO
+                {
+                    UserId = mentionUserId,
+                    Username = snapshot.Username,
+                    DisplayName = snapshot.DisplayName,
+                });
 
                 await _dbContext.MentionComments.AddAsync(new MentionComment
                 {
@@ -1322,6 +1329,8 @@ namespace Kpett.ChatApp.Services.Impls
                     UpdatedAt = utcNow
                 }, cancel);
             }
+
+            return commentMetions;
         }
 
         private async Task<Dictionary<string, MentionUserSnapshot>> LoadMentionUserSnapshotsAsync(

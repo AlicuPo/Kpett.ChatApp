@@ -195,7 +195,7 @@ builder.Services.AddScoped<IConversationPresenceService, ConversationPresenceSer
 builder.Services.AddScoped<IRealtimeService, RealtimeService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddScoped<IFriendshipService, FriendshipServices>();
+builder.Services.AddScoped<IRelationshipService, RelationshipService>();
 builder.Services.AddScoped<IPostService, PostService>();
 builder.Services.AddScoped<IMediaService, MediaService>();
 

@@ -19,5 +19,5 @@ public partial class UserFeed
 
     public string? SourceType { get; set; }
 
-    public DateTime? CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 }

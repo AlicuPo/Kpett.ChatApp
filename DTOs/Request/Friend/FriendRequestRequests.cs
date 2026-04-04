@@ -1,6 +1,6 @@
 namespace Kpett.ChatApp.DTOs.Request.Friend
 {
-    public class CreateFriendRequestRequest
+    public class SendFriendRequestRequest
     {
         public string ReceiverId { get; set; } = null!;
     }

@@ -4,6 +4,7 @@ using Kpett.ChatApp.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Kpett.ChatApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260402033852_ChangeDatimeNotNullInTables")]
+    partial class ChangeDatimeNotNullInTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -36,8 +39,8 @@ namespace Kpett.ChatApp.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("datetimeoffset");
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("Reason")
                         .HasColumnType("nvarchar(max)");
@@ -223,9 +226,6 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId", "IsArchived", "ConversationId")
-                        .HasDatabaseName("IX_ConversationParticipants_User_Archived_Conversation");
-
                     b.ToTable("ConversationParticipants", "KpettChatApp");
                 });
 
@@ -277,33 +277,12 @@ namespace Kpett.ChatApp.Migrations
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("Status")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("UserHighId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("UserLowId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
                     b.HasKey("Id");
-
-                    b.HasIndex("UserLowId", "UserHighId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_FriendRequests_UserPair");
-
-                    b.HasIndex("ReceiverId", "Status", "CreatedAt")
-                        .HasDatabaseName("IX_FriendRequests_Receiver_Status_CreatedAt");
-
-                    b.HasIndex("SenderId", "Status", "CreatedAt")
-                        .HasDatabaseName("IX_FriendRequests_Sender_Status_CreatedAt");
 
                     b.ToTable("FriendRequests", "KpettChatApp");
                 });
@@ -325,19 +304,12 @@ namespace Kpett.ChatApp.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Status")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
                     b.HasKey("UserLowId", "UserHighId");
-
-                    b.HasIndex("UserHighId", "Status", "CreatedAt", "UserLowId")
-                        .HasDatabaseName("IX_Friendships_UserHigh_Status_CreatedAt_UserLow");
-
-                    b.HasIndex("UserLowId", "Status", "CreatedAt", "UserHighId")
-                        .HasDatabaseName("IX_Friendships_UserLow_Status_CreatedAt_UserHigh");
 
                     b.ToTable("Friendships", "KpettChatApp");
                 });
@@ -501,9 +473,6 @@ namespace Kpett.ChatApp.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ConversationId", "Id")
-                        .HasDatabaseName("IX_Messages_ConversationId_Id");
 
                     b.ToTable("Messages", "KpettChatApp");
                 });

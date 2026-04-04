@@ -14,5 +14,5 @@ public partial class CommentLike
     [MaxLength(450)]
     public string UserId { get; set; } = null!;
 
-    public DateTime? CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 }

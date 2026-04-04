@@ -17,7 +17,7 @@ public partial class Conversation
     [MaxLength(450)]
     public string? CreatedByUserId { get; set; }
 
-    public DateTime? CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 
