@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Request.User;
@@ -9,6 +10,7 @@ using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Tests.Infrastructure;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Kpett.ChatApp.Tests;
 
@@ -116,7 +118,7 @@ public class UsersAndPostsApiTests
             db.Users.Add(TestData.CreateUser("author-1", "author@example.com"));
         });
 
-        var createResponse = await client.PostAsJsonAsync("/api/posts", new PostMediaRequest
+        var createResponse = await client.PostAsJsonAsync("/api/posts", new PostRequest
         {
             Content = "My first post",
             Privacy = "Public"
@@ -139,7 +141,7 @@ public class UsersAndPostsApiTests
         Assert.Equal("My first post", createdPost.Content);
         Assert.Equal(createdPostId, createdPost.Id);
 
-        var updateResponse = await client.PatchAsJsonAsync($"/api/posts/{createdPostId}", new PostMediaRequest
+        var updateResponse = await client.PatchAsJsonAsync($"/api/posts/{createdPostId}", new PostRequest
         {
             Content = "Updated post",
             Privacy = "Friends"
@@ -202,15 +204,14 @@ public class UsersAndPostsApiTests
 
         var createCommentResponse = await client.PostAsJsonAsync($"/api/posts/{postId}/comments", new CreateCommentRequest
         {
-            Content = "Nice post",
-            Mentions = new List<string> { "tagged-1", "tagged-1" }
+            Content = "<@tagged-1> Nice post <@tagged-1>"
         });
 
         Assert.Equal(HttpStatusCode.Created, createCommentResponse.StatusCode);
 
         var (commentRaw, comment) = await HttpTestHelpers.ReadJsonAsync<CommentDTO>(createCommentResponse);
         HttpTestHelpers.AssertRawSuccessPayload(commentRaw);
-        Assert.Equal("Nice post", comment.Content);
+        Assert.Equal("<@tagged-1> Nice post <@tagged-1>", comment.Content);
         Assert.Equal(0, comment.LikeCount);
         Assert.Equal(0, comment.ReplyCount);
         Assert.False(comment.IsEdited);
@@ -223,9 +224,8 @@ public class UsersAndPostsApiTests
 
         var createReplyResponse = await client.PostAsJsonAsync($"/api/posts/{postId}/comments", new CreateCommentRequest
         {
-            Content = "Reply comment",
-            ParentCommentId = comment.Id,
-            Mentions = new List<string> { "tagged-2" }
+            Content = "<@tagged-2> Reply comment",
+            ParentCommentId = $" {comment.Id} "
         });
 
         Assert.Equal(HttpStatusCode.Created, createReplyResponse.StatusCode);
@@ -272,14 +272,13 @@ public class UsersAndPostsApiTests
 
         var updateCommentResponse = await client.PatchAsJsonAsync($"/api/comments/{comment.Id}", new UpdateCommentRequest
         {
-            Content = "Edited comment",
-            Mentions = new List<string> { "tagged-2" }
+            Content = "<@tagged-2> Edited comment"
         });
 
         Assert.Equal(HttpStatusCode.OK, updateCommentResponse.StatusCode);
 
         var (_, updatedComment) = await HttpTestHelpers.ReadJsonAsync<CommentDTO>(updateCommentResponse);
-        Assert.Equal("Edited comment", updatedComment.Content);
+        Assert.Equal("<@tagged-2> Edited comment", updatedComment.Content);
         Assert.True(updatedComment.IsEdited);
         Assert.NotNull(updatedComment.Mentions);
         Assert.Equal("tagged-2", Assert.Single(updatedComment.Mentions!).UserId);
@@ -339,8 +338,7 @@ public class UsersAndPostsApiTests
 
         var response = await client.PostAsJsonAsync($"/api/posts/{postId}/comments", new CreateCommentRequest
         {
-            Content = "Tagging a missing user",
-            Mentions = new List<string> { "missing-user" }
+            Content = "Tagging a missing user <@missing-user>"
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -366,5 +364,51 @@ public class UsersAndPostsApiTests
 
         var error = await HttpTestHelpers.ReadErrorAsync(response);
         Assert.Equal(ErrorCodes.POST.NOT_FOUND, error.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GenerateCommentsMockData_CreatesCommentsRepliesMentionsAndLikes()
+    {
+        using var factory = new TestWebApplicationFactory();
+        using var client = factory.CreateApiClient();
+
+        await factory.SeedAsync(db =>
+        {
+            db.Users.Add(TestData.CreateUser("user-1", "user-1@example.com"));
+            db.Users.Add(TestData.CreateUser("user-2", "user-2@example.com"));
+            db.Users.Add(TestData.CreateUser("user-3", "user-3@example.com"));
+            db.Posts.Add(TestData.CreatePost("post-1", "user-1", "Seeded post 1"));
+            db.Posts.Add(TestData.CreatePost("post-2", "user-2", "Seeded post 2"));
+        });
+
+        var response = await client.PostAsync(
+            "/api/MockData/generate-comments?numberOfPosts=1&minCommentsPerPost=2&maxCommentsPerPost=2&minRepliesPerComment=1&maxRepliesPerComment=1&minMentionsPerComment=1&maxMentionsPerComment=1&minLikesPerComment=1&maxLikesPerComment=1",
+            content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var summaryJson = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var summary = summaryJson.RootElement;
+        Assert.Equal(1, summary.GetProperty("postsProcessed").GetInt32());
+        Assert.Equal(2, summary.GetProperty("rootComments").GetInt32());
+        Assert.Equal(2, summary.GetProperty("replies").GetInt32());
+        Assert.Equal(4, summary.GetProperty("totalComments").GetInt32());
+        Assert.Equal(4, summary.GetProperty("mentions").GetInt32());
+        Assert.Equal(4, summary.GetProperty("commentLikes").GetInt32());
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var comments = dbContext.Comments.ToList();
+        var rootComments = comments.Where(c => string.IsNullOrEmpty(c.ParentCommentId)).ToList();
+        var replies = comments.Where(c => !string.IsNullOrEmpty(c.ParentCommentId)).ToList();
+
+        Assert.Equal(4, comments.Count);
+        Assert.Equal(2, rootComments.Count);
+        Assert.Equal(2, replies.Count);
+        Assert.All(rootComments, comment => Assert.Equal(1, comment.ReplyCount));
+        Assert.All(comments, comment => Assert.Equal(1, comment.LikeCount));
+        Assert.Equal(4, dbContext.MentionComments.Count());
+        Assert.Equal(4, dbContext.CommentLikes.Count());
     }
 }

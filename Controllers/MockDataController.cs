@@ -70,6 +70,153 @@ namespace Kpett.ChatApp.Controllers
             "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
         };
 
+        private readonly List<string> _commentContents = new List<string>
+        {
+            "Bài này ổn đấy",
+            "Nhìn cuốn thật",
+            "Ý tưởng hay",
+            "Nội dung này hợp gu mình",
+            "Ảnh đẹp quá",
+            "Video này xem mượt",
+            "Comment để lưu lại",
+            "Mình thích chi tiết này",
+            "Chỗ này làm tốt",
+            "Cần thêm phần 2"
+        };
+
+        [HttpPost("generate-comments")]
+        public async Task<IActionResult> GenerateComments(
+            [FromQuery] int numberOfPosts = 100,
+            [FromQuery] int minCommentsPerPost = 2,
+            [FromQuery] int maxCommentsPerPost = 5,
+            [FromQuery] int minRepliesPerComment = 0,
+            [FromQuery] int maxRepliesPerComment = 2,
+            [FromQuery] int minMentionsPerComment = 0,
+            [FromQuery] int maxMentionsPerComment = 2,
+            [FromQuery] int minLikesPerComment = 0,
+            [FromQuery] int maxLikesPerComment = 4)
+        {
+            if (numberOfPosts <= 0)
+            {
+                return BadRequest("numberOfPosts phải lớn hơn 0.");
+            }
+
+            if (!IsValidRange(minCommentsPerPost, maxCommentsPerPost)
+                || !IsValidRange(minRepliesPerComment, maxRepliesPerComment)
+                || !IsValidRange(minMentionsPerComment, maxMentionsPerComment)
+                || !IsValidRange(minLikesPerComment, maxLikesPerComment))
+            {
+                return BadRequest("Các tham số min/max không hợp lệ.");
+            }
+
+            var users = await _context.Users
+                .AsNoTracking()
+                .Select(u => new MockUserSnapshot(
+                    u.Id,
+                    u.Username ?? u.DisplayName ?? u.Id,
+                    u.DisplayName))
+                .ToListAsync();
+
+            if (users.Count < 2)
+            {
+                return BadRequest("Cần ít nhất 2 user để generate comment mock data.");
+            }
+
+            var postIds = await _context.Posts
+                .AsNoTracking()
+                .Where(p => p.IsDeleted != true)
+                .OrderBy(_ => Guid.NewGuid())
+                .Select(p => p.Id)
+                .Take(numberOfPosts)
+                .ToListAsync();
+
+            if (!postIds.Any())
+            {
+                return BadRequest("Không tìm thấy post nào trong Database. Vui lòng tạo post trước.");
+            }
+
+            var random = new Random();
+            var utcNow = DateTime.UtcNow;
+            var comments = new List<Comment>();
+            var mentions = new List<MentionComment>();
+            var commentLikes = new List<CommentLike>();
+            var rootComments = 0;
+            var replies = 0;
+
+            foreach (var postId in postIds)
+            {
+                var rootCommentCount = NextCount(random, minCommentsPerPost, maxCommentsPerPost);
+
+                for (var i = 0; i < rootCommentCount; i++)
+                {
+                    var author = users[random.Next(users.Count)];
+                    var createdAt = utcNow.AddMinutes(-random.Next(5, 60 * 24 * 30));
+                    var rootComment = CreateMockComment(postId, author.Id, null, createdAt, random);
+
+                    ApplyMentions(rootComment, author.Id, users, mentions, random, minMentionsPerComment, maxMentionsPerComment, createdAt);
+                    ApplyLikes(rootComment, author.Id, users, commentLikes, random, minLikesPerComment, maxLikesPerComment, createdAt);
+
+                    comments.Add(rootComment);
+                    rootComments += 1;
+
+                    var replyCount = NextCount(random, minRepliesPerComment, maxRepliesPerComment);
+                    rootComment.ReplyCount = replyCount;
+
+                    for (var replyIndex = 0; replyIndex < replyCount; replyIndex++)
+                    {
+                        var replyAuthor = users[random.Next(users.Count)];
+                        var replyCreatedAt = createdAt.AddMinutes(replyIndex + 1);
+                        var reply = CreateMockComment(postId, replyAuthor.Id, rootComment.Id, replyCreatedAt, random);
+
+                        ApplyMentions(reply, replyAuthor.Id, users, mentions, random, minMentionsPerComment, maxMentionsPerComment, replyCreatedAt);
+                        ApplyLikes(reply, replyAuthor.Id, users, commentLikes, random, minLikesPerComment, maxLikesPerComment, replyCreatedAt);
+
+                        comments.Add(reply);
+                        replies += 1;
+                    }
+                }
+            }
+
+            if (comments.Count == 0)
+            {
+                return Ok(new
+                {
+                    Message = "Không tạo thêm comment nào.",
+                    PostsProcessed = postIds.Count,
+                    RootComments = 0,
+                    Replies = 0,
+                    TotalComments = 0,
+                    Mentions = 0,
+                    CommentLikes = 0
+                });
+            }
+
+            await _context.Comments.AddRangeAsync(comments);
+
+            if (mentions.Count > 0)
+            {
+                await _context.MentionComments.AddRangeAsync(mentions);
+            }
+
+            if (commentLikes.Count > 0)
+            {
+                await _context.CommentLikes.AddRangeAsync(commentLikes);
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                Message = $"Đã tạo comment mock data cho {postIds.Count} posts.",
+                PostsProcessed = postIds.Count,
+                RootComments = rootComments,
+                Replies = replies,
+                TotalComments = comments.Count,
+                Mentions = mentions.Count,
+                CommentLikes = commentLikes.Count
+            });
+        }
+
 
         [HttpPost("generate-real-post-media")]
         public async Task<IActionResult> GenerateRealPostMedia([FromQuery] int numberOfPosts = 30000)
@@ -155,5 +302,120 @@ namespace Kpett.ChatApp.Controllers
                 return StatusCode(500, $"Lỗi ghi dữ liệu: {ex.Message}");
             }
         }
+
+        private Comment CreateMockComment(string postId, string userId, string? parentCommentId, DateTime createdAt, Random random)
+        {
+            var isEdited = random.Next(0, 10) < 2;
+            var content = _commentContents[random.Next(_commentContents.Count)];
+
+            return new Comment
+            {
+                Id = Guid.NewGuid().ToString(),
+                PostId = postId,
+                UserId = userId,
+                ParentCommentId = parentCommentId,
+                Content = content,
+                LikeCount = 0,
+                ReplyCount = 0,
+                IsEdited = isEdited,
+                CreatedAt = createdAt,
+                UpdatedAt = isEdited ? createdAt.AddMinutes(random.Next(1, 30)) : null
+            };
+        }
+
+        private void ApplyMentions(
+            Comment comment,
+            string authorId,
+            IReadOnlyList<MockUserSnapshot> users,
+            ICollection<MentionComment> mentions,
+            Random random,
+            int minMentionsPerComment,
+            int maxMentionsPerComment,
+            DateTime createdAt)
+        {
+            var availableUsers = users.Where(u => u.Id != authorId).ToList();
+            var mentionCount = GetBoundedCount(random, minMentionsPerComment, maxMentionsPerComment, availableUsers.Count);
+
+            foreach (var mentionedUser in PickDistinctUsers(availableUsers, mentionCount, random))
+            {
+                comment.Content = $"{comment.Content} @{mentionedUser.Username}";
+                mentions.Add(new MentionComment
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    CommentId = comment.Id,
+                    UserId = mentionedUser.Id,
+                    Username = mentionedUser.Username,
+                    DisplayName = mentionedUser.DisplayName,
+                    IsNotified = false,
+                    CreatedAt = createdAt,
+                    UpdatedAt = createdAt
+                });
+            }
+        }
+
+        private void ApplyLikes(
+            Comment comment,
+            string authorId,
+            IReadOnlyList<MockUserSnapshot> users,
+            ICollection<CommentLike> commentLikes,
+            Random random,
+            int minLikesPerComment,
+            int maxLikesPerComment,
+            DateTime createdAt)
+        {
+            var availableUsers = users.Where(u => u.Id != authorId).ToList();
+            var likeCount = GetBoundedCount(random, minLikesPerComment, maxLikesPerComment, availableUsers.Count);
+            var likedUsers = PickDistinctUsers(availableUsers, likeCount, random);
+
+            comment.LikeCount = likedUsers.Count;
+
+            foreach (var likedUser in likedUsers)
+            {
+                commentLikes.Add(new CommentLike
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    CommentId = comment.Id,
+                    UserId = likedUser.Id,
+                    CreatedAt = createdAt
+                });
+            }
+        }
+
+        private static bool IsValidRange(int min, int max)
+        {
+            return min >= 0 && max >= min;
+        }
+
+        private static int NextCount(Random random, int min, int max)
+        {
+            return min == max ? min : random.Next(min, max + 1);
+        }
+
+        private static int GetBoundedCount(Random random, int min, int max, int upperBound)
+        {
+            if (upperBound <= 0)
+            {
+                return 0;
+            }
+
+            var safeMin = Math.Min(min, upperBound);
+            var safeMax = Math.Min(max, upperBound);
+            return NextCount(random, safeMin, safeMax);
+        }
+
+        private static List<MockUserSnapshot> PickDistinctUsers(List<MockUserSnapshot> users, int count, Random random)
+        {
+            if (count <= 0 || users.Count == 0)
+            {
+                return new List<MockUserSnapshot>();
+            }
+
+            return users
+                .OrderBy(_ => random.Next())
+                .Take(count)
+                .ToList();
+        }
+
+        private sealed record MockUserSnapshot(string Id, string Username, string? DisplayName);
     }
 }
