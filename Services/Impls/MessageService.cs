@@ -6,6 +6,7 @@ using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Kpett.ChatApp.Services.Impls
 {
@@ -72,6 +73,7 @@ namespace Kpett.ChatApp.Services.Impls
             if (string.IsNullOrWhiteSpace(request?.Content))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Message content cannot be empty.");
 
+            var createdAt = DateTime.UtcNow;
             var message = new Message
             {
                 ConversationId = conversationId,
@@ -79,20 +81,44 @@ namespace Kpett.ChatApp.Services.Impls
                 ClientMessageId = request.ClientMessageId,
                 Metadata = request.Metadata,
                 Type = request.Type ?? "text",
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = createdAt,
                 IsDeleted = false
             };
 
-            _dbcontext.Messages.Add(message);
-            await _dbcontext.SaveChangesAsync(cancel);
-
-            _dbcontext.MessageDetails.Add(new MessageDetail
+            await using var transaction = await BeginTransactionAsync(cancel);
+            try
             {
-                MessageId = message.Id,
-                Content = request.Content,
-                Color = request.Color
-            });
-            await _dbcontext.SaveChangesAsync(cancel);
+                var conversation = await _dbcontext.Conversations
+                    .FirstOrDefaultAsync(c => c.Id == conversationId, cancel);
+
+                if (conversation == null)
+                    throw new NotFoundException(ErrorCodes.CONVERSATION.NOT_FOUND, "Conversation not found.");
+
+                _dbcontext.Messages.Add(message);
+                await _dbcontext.SaveChangesAsync(cancel);
+
+                _dbcontext.MessageDetails.Add(new MessageDetail
+                {
+                    MessageId = message.Id,
+                    Content = request.Content,
+                    Color = request.Color
+                });
+
+                conversation.LastMessageAt = createdAt;
+                conversation.UpdatedAt = createdAt;
+
+                await _dbcontext.SaveChangesAsync(cancel);
+
+                if (transaction != null)
+                {
+                    await transaction.CommitAsync(cancel);
+                }
+            }
+            catch
+            {
+                await RollbackQuietlyAsync(transaction, cancel);
+                throw;
+            }
 
             var messageDto = new MessageDTO
             {
@@ -162,6 +188,28 @@ namespace Kpett.ChatApp.Services.Impls
             participant.LastReadMessageId = request.LastReadMessageId;
             participant.LastReadAt = request.ReadAt ?? DateTime.UtcNow;
             await _dbcontext.SaveChangesAsync(cancel);
+        }
+
+        private async Task<IDbContextTransaction?> BeginTransactionAsync(CancellationToken cancel)
+        {
+            if (string.Equals(_dbcontext.Database.ProviderName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal))
+                return null;
+
+            return await _dbcontext.Database.BeginTransactionAsync(cancel);
+        }
+
+        private static async Task RollbackQuietlyAsync(IDbContextTransaction? transaction, CancellationToken cancel)
+        {
+            if (transaction == null)
+                return;
+
+            try
+            {
+                await transaction.RollbackAsync(cancel);
+            }
+            catch
+            {
+            }
         }
     }
 }
