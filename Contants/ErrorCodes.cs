@@ -9,6 +9,7 @@
             public const string ALREADY_EXISTS_BY_EMAIL = "USER.ALREADY_EXISTS_BY_EMAIL";
             public const string ALREADY_EXISTS_BY_USERNAME = "USER.ALREADY_EXISTS_BY_USERNAME";
             public const string INACTIVE = "USER.INACTIVE";
+            public const string USERNAME_TAKEN = "USER.USERNAME_TAKEN";
         }
 
         public static class AUTH

@@ -40,12 +40,12 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        [HttpPost("friend-requests/accept")]
-        public async Task<IActionResult> AcceptFriendRequest([FromBody] FriendRequestRequest friendAcceptRequest)
+        [HttpPost("friend-requests/{requestId}/accept")]
+        public async Task<IActionResult> AcceptFriendRequest(string requestId)
         {
             var currentUserId = User.GetRequiredUserId();
 
-            await _friendServices.AcceptFriendRequestAsync(friendAcceptRequest.SenderId, currentUserId);
+            await _friendServices.AcceptFriendRequestAsync(currentUserId, requestId);
 
             return Ok(new GeneralResponse
             {
@@ -55,11 +55,11 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        [HttpPost("friend-requests/decline")]
-        public async Task<IActionResult> DeclineFriendRequest([FromBody] FriendRequestRequest declineRequest)
+        [HttpPost("friend-requests/{requestId}/decline")]
+        public async Task<IActionResult> DeclineFriendRequest(string requestId)
         {
             var currentUserId = User.GetRequiredUserId();
-            await _friendServices.DeclineFriendRequestAsync(declineRequest.SenderId, currentUserId);
+            await _friendServices.DeclineFriendRequestAsync(currentUserId, requestId);
 
             return Ok(new GeneralResponse
             {
@@ -69,11 +69,11 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        [HttpPost("friend-requests/cancel")]
-        public async Task<IActionResult> CancelFriendRequest([FromBody] FriendRequestRequest cancelRequest)
+        [HttpPost("friend-requests/{requestId}/cancel")]
+        public async Task<IActionResult> CancelFriendRequest(string requestId)
         {
             var currentUserId = User.GetRequiredUserId();
-            await _friendServices.CancelFriendRequestAsync(currentUserId, cancelRequest.receiverId);
+            await _friendServices.CancelFriendRequestAsync(currentUserId, requestId);
 
             return Ok(new GeneralResponse
             {

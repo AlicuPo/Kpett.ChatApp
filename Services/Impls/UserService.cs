@@ -155,6 +155,11 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Username and DisplayName are required");
             }
 
+            if (await _dbcontext.Users.AnyAsync(u => u.Username == accountSetupRequest.Username && u.Id != userId, cancel))
+            {
+                throw new BadRequestException(ErrorCodes.USER.USERNAME_TAKEN, "Username is already taken");
+            }
+
             user.Username = accountSetupRequest.Username;
             user.DisplayName = accountSetupRequest.DisplayName;
             user.Biography = accountSetupRequest.Biography;
@@ -210,84 +215,101 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<UserProfileResponse> GetUserProfileAsync(string targetUsername, string currentUserId, CancellationToken cancel)
         {
-            var profile = await _dbcontext.Users
-                .AsNoTracking()
-                .Where(u => u.Username == targetUsername && u.Email != null && u.Username != null)
-                .Select(u => new UserProfileResponse
-                {
-                    Id = u.Id,
-                    Username = u.Username,
-                    DisplayName = u.DisplayName,
-                    AvatarUrl = u.AvatarUrl,
-                    IsVerified = u.IsVerified,
-                    IsProfileCompleted = true,
+            string pendingStatus = FriendRequestStatus.Pending.ToString();
+            bool isGuest = string.IsNullOrEmpty(currentUserId);
 
-                    Biography = u.Biography,
-                    Cocupation = u.Occupation,
-                    Location = u.Location,
-                    CoverUrl = u.CoverUrl,
+            var query = from u in _dbcontext.Users.AsNoTracking()
+                        where u.Username == targetUsername && u.Email != null && u.Username != null
 
-                    CreatedAt = u.CreatedAt,
-
-                    Stats = new UserStatsResponse
-                    {
-                        TotalPosts = _dbcontext.UserFeeds.Count(p => p.UserId == u.Id),
-                        Followers = _dbcontext.Follows.Count(f => f.FolloweeId == u.Id),
-                        Following = _dbcontext.Follows.Count(f => f.FollowerId == u.Id),
-                        Friends = _dbcontext.Friendships.Count(f =>
-                            (f.UserLowId == currentUserId || f.UserHighId == u.Id) || 
-                            (f.UserLowId == u.Id || f.UserHighId == currentUserId))
-                    },
-
-                    ViewerContext = currentUserId == null ? new ProfileViewerContext
-                    {
-                        IsOwner = false,
-                        IsFriend = false,
-                        IsFollowing = false,
-                        HasSentFriendRequest = false,
-                        HasReceivedFriendRequest = false,
-                        IsBlocked = false,
-                        CanMessage = false
-                    }
-                    : new ProfileViewerContext
-                    {
-                        IsOwner = u.Id == currentUserId,
-
-                        IsFriend = _dbcontext.Friendships.Any(f =>
-                            (f.UserLowId == currentUserId && f.UserHighId == u.Id) ||
-                            (f.UserLowId == u.Id && f.UserHighId == currentUserId)),
-
-                        IsFollowing = _dbcontext.Follows.Any(f =>
-                            f.FollowerId == currentUserId && f.FolloweeId == u.Id),
-
-                        HasSentFriendRequest = _dbcontext.FriendRequests.Any(fr =>
-                            fr.SenderId == currentUserId && fr.ReceiverId == u.Id && fr.Status == FriendRequestStatus.Pending.ToString()),
-
-                        HasReceivedFriendRequest = _dbcontext.FriendRequests.Any(fr =>
-                            fr.SenderId == u.Id && fr.ReceiverId == currentUserId && fr.Status == FriendRequestStatus.Pending.ToString()),
-
-                        IsBlocked = _dbcontext.Blocks.Any(b =>
-                            (b.BlockerId == currentUserId && b.BlockedId == u.Id) ||
-                            (b.BlockerId == u.Id && b.BlockedId == currentUserId)),
-
-                        // Logic CanMessage: Là bạn bè và không ai block ai
-                        CanMessage = _dbcontext.Friendships.Any(f =>
+                        let isFriend = !isGuest && _dbcontext.Friendships.Any(f =>
                             (f.UserLowId == currentUserId && f.UserHighId == u.Id) ||
                             (f.UserLowId == u.Id && f.UserHighId == currentUserId))
-                            &&
-                            !_dbcontext.Blocks.Any(b =>
+
+                        let isBlocked = !isGuest && _dbcontext.Blocks.Any(b =>
                             (b.BlockerId == currentUserId && b.BlockedId == u.Id) ||
                             (b.BlockerId == u.Id && b.BlockedId == currentUserId))
-                    }
-                })
+
+                        let pendingRequest = isGuest ? null : _dbcontext.FriendRequests
+                            .AsNoTracking()
+                            .Where(fr => fr.Status == pendingStatus &&
+                                ((fr.SenderId == currentUserId && fr.ReceiverId == u.Id) ||
+                                 (fr.SenderId == u.Id && fr.ReceiverId == currentUserId)))
+                            .Select(fr => new { fr.Id, fr.SenderId })
+                            .FirstOrDefault()
+
+                        select new
+                        {
+                            User = u,
+
+                            TotalPosts = _dbcontext.Posts.Count(p => p.CreatedByUserId == u.Id),
+                            Followers = _dbcontext.Follows.Count(f => f.FolloweeId == u.Id),
+                            Following = _dbcontext.Follows.Count(f => f.FollowerId == u.Id),
+                            Friends = _dbcontext.Friendships.Count(f => f.UserLowId == u.Id || f.UserHighId == u.Id),
+
+                            IsFriend = isFriend,
+                            IsBlocked = isBlocked,
+                            IsFollowing = !isGuest && _dbcontext.Follows.Any(f => f.FollowerId == currentUserId && f.FolloweeId == u.Id),
+
+                            PendingRequestData = pendingRequest
+                        };
+
+            var result = await query
+                .AsNoTracking()
                 .FirstOrDefaultAsync(cancel);
 
-            if(profile == null)
+            if (result == null)
             {
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
-            return profile;
+            return new UserProfileResponse
+            {
+                Id = result.User.Id,
+                Username = result.User.Username,
+                DisplayName = result.User.DisplayName,
+                AvatarUrl = result.User.AvatarUrl,
+                IsVerified = result.User.IsVerified,
+                IsProfileCompleted = true,
+
+                Biography = result.User.Biography,
+                Cocupation = result.User.Occupation,
+                Location = result.User.Location,
+                CoverUrl = result.User.CoverUrl,
+                CreatedAt = result.User.CreatedAt,
+
+                Stats = new UserStatsResponse
+                {
+                    TotalPosts = result.TotalPosts,
+                    Followers = result.Followers,
+                    Following = result.Following,
+                    Friends = result.Friends
+                },
+
+                ViewerContext = isGuest ? new ProfileViewerContext
+                {
+                    IsOwner = false,
+                    IsFriend = false,
+                    IsFollowing = false,
+                    RelationshipRequestId = null,
+                    HasSentFriendRequest = false,
+                    HasReceivedFriendRequest = false,
+                    IsBlocked = false,
+                    CanMessage = false
+                } : new ProfileViewerContext
+                {
+                    IsOwner = result.User.Id == currentUserId,
+                    IsFriend = result.IsFriend,
+                    IsFollowing = result.IsFollowing,
+                    IsBlocked = result.IsBlocked,
+                    CanMessage = !result.IsBlocked,
+
+                    RelationshipRequestId = result.PendingRequestData?.Id,
+
+                    HasSentFriendRequest = result.PendingRequestData?.SenderId == currentUserId,
+
+                    HasReceivedFriendRequest = result.PendingRequestData?.SenderId == result.User.Id
+                }
+            };
         }
     }
 }
