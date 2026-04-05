@@ -17,6 +17,9 @@ public partial class Comment
 
     [MaxLength(450)]
     public string? ParentCommentId { get; set; }
+
+    public string Path { get; set; } = null!;
+
     public int LikeCount { get; set; }
     public int ReplyCount { get; set; }
     public bool IsEdited { get; set; }

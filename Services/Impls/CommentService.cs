@@ -47,10 +47,13 @@ namespace Kpett.ChatApp.Services.Impls
             if (!string.IsNullOrEmpty(normalizedParentCommentId))
             {
                 parentComment = await _dbContext.Comments
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(c => c.Id == normalizedParentCommentId && c.PostId == postId && c.DeletedAt == null, cancel);
 
                 if (parentComment == null)
+                {
                     throw new NotFoundException(ErrorCodes.COMMENT.PARENT_COMMENT_NOT_FOUND, "Parent comment not found");
+                }
             }
 
             var user = _dbContext.Users
@@ -73,6 +76,8 @@ namespace Kpett.ChatApp.Services.Impls
                 IsEdited = false,
                 CreatedAt = utcNow
             };
+
+            comment.Path = parentComment == null ? comment.Id : $"{parentComment.Path}/{comment.Id}";
 
             await _dbContext.Comments.AddAsync(comment, cancel);
 
@@ -197,8 +202,6 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
-        // Method help post
-
         // Method help comment
 
         public async Task<CommentListItemDTO> UpdateCommentAsync(
@@ -260,10 +263,14 @@ namespace Kpett.ChatApp.Services.Impls
                 .FirstOrDefaultAsync(c => c.Id == commentId && c.DeletedAt == null, cancel);
 
             if (comment == null)
+            {
                 throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");
+            }
 
             if (comment.UserId != userId)
+            {
                 throw new ForbiddenException(ErrorCodes.COMMENT.USER_NOT_AUTHORIZED, "Not authorized to delete this comment");
+            }
 
             if (!string.IsNullOrEmpty(comment.ParentCommentId))
             {
