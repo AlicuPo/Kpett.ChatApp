@@ -224,7 +224,3 @@ app.MapControllers();
 app.MapHub<ChatHub>("/chat-Hub").RequireCors("ClientCors");
 
 app.Run();
-
-public partial class Program
-{
-}

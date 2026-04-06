@@ -46,7 +46,7 @@ namespace Kpett.ChatApp.Services.Impls
         }
         public async Task<bool> IsAccessTokenBlacklistedAsync(string jti)
         {
-                var value = await _redis.StringGetAsync(AccessBlacklistKey(jti));
+            var value = await _redis.StringGetAsync(AccessBlacklistKey(jti));
             return value.HasValue;
         }
         public async Task BlacklistRefreshTokenAsync(string refreshToken, TimeSpan ttl)
@@ -82,6 +82,37 @@ namespace Kpett.ChatApp.Services.Impls
             var key = UserConnectionsKey(userId);
             var values = await _redis.ListRangeAsync(key);
             return values.Where(v => v.HasValue).Select(v => v.ToString()!).ToArray();
+        }
+
+        public async Task<bool> IsUserOnlineAsync(string userId)
+        {
+            var key = UserConnectionsKey(userId);
+            var count = await _redis.ListLengthAsync(key);
+            return count > 0;
+        }
+
+        public async Task<Dictionary<string, bool>> GetUsersOnlineStatusAsync(IEnumerable<string> userIds)
+        {
+            var result = new Dictionary<string, bool>();
+
+
+            var batch = _redis.CreateBatch();
+            var tasks = new Dictionary<string, Task<long>>();
+
+            foreach (var userId in userIds)
+            {
+                var key = UserConnectionsKey(userId);
+                tasks[userId] = batch.ListLengthAsync(key);
+            }
+
+            batch.Execute();
+
+            foreach (var task in tasks)
+            {
+                result[task.Key] = (await task.Value) > 0;
+            }
+
+            return result;
         }
 
         // Conversation membership helpers

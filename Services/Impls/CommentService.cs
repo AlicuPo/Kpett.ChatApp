@@ -9,19 +9,18 @@ using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
-using static Kpett.ChatApp.Contants.ErrorCodes;
 
 namespace Kpett.ChatApp.Services.Impls
 {
-    public class CommentService: ICommentService
+    public class CommentService : ICommentService
     {
         private static readonly Regex MentionTokenRegex = new(
             "<@(?<userId>[^<>\\s]+)>",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         private readonly AppDbContext _dbContext;
-        public CommentService(AppDbContext dbContext) 
-        { 
+        public CommentService(AppDbContext dbContext)
+        {
             _dbContext = dbContext;
         }
 
@@ -47,7 +46,6 @@ namespace Kpett.ChatApp.Services.Impls
             if (!string.IsNullOrEmpty(normalizedParentCommentId))
             {
                 parentComment = await _dbContext.Comments
-                    .AsNoTracking()
                     .FirstOrDefaultAsync(c => c.Id == normalizedParentCommentId && c.PostId == postId && c.DeletedAt == null, cancel);
 
                 if (parentComment == null)
@@ -89,12 +87,7 @@ namespace Kpett.ChatApp.Services.Impls
             var mentions = await SyncCommentMentionsAsync(comment.Id, ExtractMentionUserIds(content), utcNow, cancel);
             await _dbContext.SaveChangesAsync(cancel);
 
-            return MapCommentListItem(
-                    comment,
-                    user,
-                    mentions,
-                    false,
-                    user.Id);
+            return MapCommentListItem(comment, user, mentions, false, user.Id);
         }
 
         public async Task<PaginatedData<CommentListItemDTO>> GetCommentsAsync(
@@ -222,7 +215,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             if (comment == null)
             {
-                throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");  
+                throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");
             }
 
             if (comment.UserId != userId)
@@ -240,7 +233,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             var user = await _dbContext.Users
                 .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Id == comment.UserId, cancel);  
+                .FirstOrDefaultAsync(u => u.Id == comment.UserId, cancel);
 
             if (user == null)
             {

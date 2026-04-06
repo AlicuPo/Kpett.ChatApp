@@ -8,5 +8,6 @@
         public string? CoverUrl { get; set; }
         public UserStatsResponse? Stats { get; set; }
         public ProfileViewerContext? ViewerContext { get; set; }
+        public bool IsOnline { get; set; }
     }
 }

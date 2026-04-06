@@ -154,37 +154,5 @@ namespace Kpett.ChatApp.Controllers
             var result = await _postService.GetPostReactionsAsync(postId, cancel);
             return Ok(result);
         }
-
-        [HttpPost("{postId}/comments")]
-        public async Task<ActionResult> AddComment(string postId, [FromBody] CreateCommentRequest request, CancellationToken cancel)
-        {
-            var userId = User.GetRequiredUserId();
-            var result = await _postService.AddCommentAsync(
-                postId,
-                userId,
-                request?.Content ?? string.Empty,
-                request?.ParentCommentId,
-                cancel);
-            return Created($"/api/comments/{result.Id}", result);
-        }
-
-        [HttpGet("{postId}/comments")]
-        public async Task<ActionResult> GetComments(
-            string postId,
-            [FromQuery] string? parentCommentId,
-            [FromQuery] string? cursor,
-            [FromQuery] int limit = 10,
-            CancellationToken cancel = default)
-        {
-            var userId = User.GetRequiredUserId();
-            var result = await _postService.GetCommentsAsync(postId, parentCommentId, userId, cursor, limit, cancel);
-            return Ok(new GeneralResponse<CommentsPageDTO>
-            {
-                IsSuccess = true,
-                Message = "Get comments successfully",
-                StatusCode = 200,
-                Data = result
-            });
-        }
     }
 }

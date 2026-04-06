@@ -12,10 +12,12 @@ namespace Kpett.ChatApp.Services.Impls
     public class UserService : IUserService
     {
         private readonly AppDbContext _dbcontext;
+        private readonly IRedisService _redisService;
 
-        public UserService(AppDbContext dbContext)
+        public UserService(AppDbContext dbContext, IRedisService redisService)
         {
             _dbcontext = dbContext;
+            _redisService = redisService;
         }
 
         public async Task<UserResponse> inforUser(UserRequest Request, CancellationToken cancel)
@@ -183,7 +185,7 @@ namespace Kpett.ChatApp.Services.Impls
         public async Task<UserStatsResponse> GetUserStatsAsync(string userId, CancellationToken cancel)
         {
             var userStats = await _dbcontext.Users
-                .AsNoTracking() 
+                .AsNoTracking()
                 .Where(u => u.Id == userId)
                 .Select(u => new UserStatsResponse
                 {
@@ -308,7 +310,9 @@ namespace Kpett.ChatApp.Services.Impls
                     HasSentFriendRequest = result.PendingRequestData?.SenderId == currentUserId,
 
                     HasReceivedFriendRequest = result.PendingRequestData?.SenderId == result.User.Id
-                }
+                },
+
+                IsOnline = await _redisService.IsUserOnlineAsync(result.User.Id)
             };
         }
     }

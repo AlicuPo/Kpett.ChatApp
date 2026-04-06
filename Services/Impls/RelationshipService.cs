@@ -1,4 +1,3 @@
-using System.Data;
 using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Request.Friend;
@@ -9,20 +8,21 @@ using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Extentions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
+using System.Data;
 
 namespace Kpett.ChatApp.Services.Impls
 {
     public class RelationshipService : IRelationshipService
     {
         private readonly AppDbContext _context;
+        private readonly IRedisService _redisService;
 
-        public RelationshipService(AppDbContext context)
+        public RelationshipService(AppDbContext context, IRedisService redisService)
         {
             _context = context;
+            _redisService = redisService;
         }
 
         // Friend request
@@ -233,7 +233,7 @@ namespace Kpett.ChatApp.Services.Impls
             var friendRequest = await _context.FriendRequests
                 .FirstOrDefaultAsync(fr => (fr.SenderId == currentUserId && fr.ReceiverId == targetUserId) || (fr.SenderId == targetUserId && fr.ReceiverId == currentUserId) && fr.Status == acceptedStatus);
 
-            if(friendRequest != null)
+            if (friendRequest != null)
             {
                 friendRequest.Status = FriendRequestStatus.Unfriended.GetDescription();
                 friendRequest.UpdatedAt = DateTime.UtcNow;
@@ -256,7 +256,7 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 throw new BadRequestException(ErrorCodes.FOLLOW.ALREADY_FOLLOWING, "You are already following this person.");
             }
-                
+
             var follow = new Follow
             {
                 Id = Guid.NewGuid().ToString(),
@@ -362,6 +362,9 @@ namespace Kpett.ChatApp.Services.Impls
                 itemsToProcess = rawFriends.Take(normalizedLimit).ToList();
             }
 
+            var friendIds = itemsToProcess.Select(i => i.FriendId).ToList();
+            var onlineStatuses = await _redisService.GetUsersOnlineStatusAsync(friendIds);
+
             var items = itemsToProcess
                 .Select(friend => new FriendListItemDTO
                 {
@@ -370,9 +373,11 @@ namespace Kpett.ChatApp.Services.Impls
                     DisplayName = friend.DisplayName,
                     AvatarUrl = friend.AvatarUrl,
                     IsVerified = friend.IsVerified,
-                    FriendedAt = friend.FriendedAt == DateTime.MinValue ? null : friend.FriendedAt
+                    FriendedAt = friend.FriendedAt == DateTime.MinValue ? null : friend.FriendedAt,
+                    IsOnline = onlineStatuses.TryGetValue(friend.FriendId, out var isOnline) && isOnline
                 })
                 .ToList();
+
 
             return new PaginatedData<FriendListItemDTO>
             {
