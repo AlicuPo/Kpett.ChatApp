@@ -46,7 +46,6 @@ namespace Kpett.ChatApp.Services.Impls
             if (!string.IsNullOrEmpty(normalizedParentCommentId))
             {
                 parentComment = await _dbContext.Comments
-                    .AsNoTracking()
                     .FirstOrDefaultAsync(c => c.Id == normalizedParentCommentId && c.PostId == postId && c.DeletedAt == null, cancel);
 
                 if (parentComment == null)
