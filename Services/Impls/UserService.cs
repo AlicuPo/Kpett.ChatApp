@@ -210,7 +210,7 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
-            return userStats;e
+            return userStats;
         }
 
         public async Task<UserProfileResponse> GetUserProfileAsync(string targetUsername, string currentUserId, CancellationToken cancel)
