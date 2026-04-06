@@ -22,10 +22,6 @@ namespace Kpett.ChatApp.Services.Impls
 {
     public class PostService : IPostService
     {
-        private static readonly Regex MentionTokenRegex = new(
-            "<@(?<userId>[^<>\\s]+)>",
-            RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
         private readonly AppDbContext _dbContext;
         private readonly IRealtimeService _realtimeService;
         private readonly INotificationService _notificationService;

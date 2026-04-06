@@ -25,15 +25,6 @@ namespace Kpett.ChatApp.Services.Impls
             _context = context;
         }
 
-        /// <summary>
-        /// Helper sắp xếp ID theo thứ tự từ điển để gán vào UserLowId và UserHighId
-        /// Giúp truy vấn Index nhanh hơn và tránh duplicate record.
-        /// </summary>
-        private static (string lowId, string highId) GetOrderedIds(string id1, string id2)
-        {
-            return string.CompareOrdinal(id1, id2) < 0 ? (id1, id2) : (id2, id1);
-        }
-
         // Friend request
         public async Task<FriendRequestResponse> SendFriendRequestAsync(string senderId, string receiverId)
         {
@@ -48,13 +39,12 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "Sender or Receiver not found");
             }
 
-            var (lowId, highId) = GetOrderedIds(senderId, receiverId);
             var acceptedStatus = FriendRequestStatus.Accepted.GetDescription();
             var pendingStatus = FriendRequestStatus.Pending.GetDescription();
 
             // Kiểm tra xem đã là bạn bè chưa 
             var isFriend = await _context.Friendships
-                .AnyAsync(f => f.UserLowId == lowId && f.UserHighId == highId && f.Status == acceptedStatus);
+                .AnyAsync(f => f.UserLowId == senderId && f.UserHighId == receiverId && f.Status == acceptedStatus);
 
             if (isFriend)
                 throw new BadRequestException(ErrorCodes.FRIEND.ALREADY_FRIENDS, "You were already friends.");
@@ -62,7 +52,7 @@ namespace Kpett.ChatApp.Services.Impls
             // Kiểm tra xem đã có lời mời Pending giữa 2 người chưa
             var existingRequest = await _context.FriendRequests
                 .AsNoTracking()
-                .FirstOrDefaultAsync(r => r.UserLowId == lowId && r.UserHighId == highId && r.Status == pendingStatus);
+                .FirstOrDefaultAsync(r => ((r.SenderId == senderId && r.ReceiverId == receiverId) || (r.SenderId == receiverId && r.ReceiverId == senderId)) && r.Status == pendingStatus);
 
             if (existingRequest != null)
             {
@@ -81,9 +71,9 @@ namespace Kpett.ChatApp.Services.Impls
                 Id = Guid.NewGuid().ToString(),
                 SenderId = senderId,
                 ReceiverId = receiverId,
+                UserLowId = senderId,
+                UserHighId = receiverId,
                 Status = pendingStatus,
-                UserLowId = lowId,
-                UserHighId = highId,
                 CreatedAt = DateTime.UtcNow,
             };
             await _context.FriendRequests.AddAsync(request);
@@ -106,6 +96,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             return new FriendRequestResponse
             {
+                RequestId = request.Id,
                 SenderId = request.SenderId,
                 ReceiverId = request.ReceiverId,
                 Status = request.Status,
@@ -115,23 +106,21 @@ namespace Kpett.ChatApp.Services.Impls
         }
 
         // Accept request
-        public async Task AcceptFriendRequestAsync(string senderId, string receiverId)
+        public async Task AcceptFriendRequestAsync(string currentUserId, string requestId)
         {
-            if (!(await _context.Users.AnyAsync(u => u.Id == receiverId)))
+            if (!(await _context.Users.AnyAsync(u => u.Id == currentUserId)))
             {
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "Current user not found");
             }
 
             var pendingStatus = FriendRequestStatus.Pending.GetDescription();
             var request = await _context.FriendRequests
-                .FirstOrDefaultAsync(fr => fr.SenderId == senderId && fr.ReceiverId == receiverId && fr.Status == pendingStatus);
+                .FirstOrDefaultAsync(fr => fr.Id == requestId && fr.Status == pendingStatus);
 
             if (request == null)
             {
                 throw new NotFoundException(ErrorCodes.FRIEND.FRIEND_REQUEST_NOT_FOUND, "Friend request not found or not pending.");
             }
-
-            var (lowId, highId) = GetOrderedIds(senderId, receiverId);
 
             // Cập nhật trạng thái Request
             request.Status = FriendRequestStatus.Accepted.GetDescription();
@@ -139,34 +128,34 @@ namespace Kpett.ChatApp.Services.Impls
 
             // Cập nhật hoặc tạo mới Friendship
             var friendship = await _context.Friendships
-                 .FirstOrDefaultAsync(f => f.UserLowId == lowId && f.UserHighId == highId);
+                 .FirstOrDefaultAsync(f => (f.UserLowId == request.SenderId && f.UserHighId == request.ReceiverId) || (f.UserLowId == request.ReceiverId && f.UserHighId == request.SenderId));
 
             if (friendship != null)
             {
                 friendship.Status = FriendshipStatus.Active.GetDescription();
                 friendship.UpdatedAt = DateTime.UtcNow;
-                friendship.ActionUserId = receiverId;
+                friendship.ActionUserId = request.ReceiverId;
             }
             else
             {
                 await _context.Friendships.AddAsync(new Friendship
                 {
-                    UserLowId = lowId,
-                    UserHighId = highId,
+                    UserLowId = request.SenderId,
+                    UserHighId = request.ReceiverId,
                     Status = FriendshipStatus.Active.GetDescription(),
-                    ActionUserId = receiverId,
+                    ActionUserId = request.ReceiverId,
                     CreatedAt = DateTime.UtcNow,
                 });
             }
 
             // Logic chấp nhận bạn bè = Tự động Follow ngược lại
-            var isFollowingBack = await _context.Follows.AnyAsync(f => f.FollowerId == receiverId && f.FolloweeId == request.SenderId);
+            var isFollowingBack = await _context.Follows.AnyAsync(f => f.FollowerId == request.ReceiverId && f.FolloweeId == request.SenderId);
             if (!isFollowingBack)
             {
                 await _context.Follows.AddAsync(new Follow
                 {
                     Id = Guid.NewGuid().ToString(),
-                    FollowerId = receiverId,
+                    FollowerId = request.ReceiverId,
                     FolloweeId = request.SenderId,
                     CreatedAt = DateTime.UtcNow,
                     IsMuted = false
@@ -176,35 +165,37 @@ namespace Kpett.ChatApp.Services.Impls
             await _context.SaveChangesAsync();
         }
 
-        public async Task DeclineFriendRequestAsync(string senderId, string receiverId)
+        public async Task DeclineFriendRequestAsync(string currentUserId, string requestId)
         {
             var pendingStatus = FriendRequestStatus.Pending.GetDescription();
             var request = await _context.FriendRequests
-                .FirstOrDefaultAsync(fr => fr.SenderId == senderId && fr.ReceiverId == receiverId && fr.Status == pendingStatus);
-
-            if (request == null)
-                throw new NotFoundException(ErrorCodes.FRIEND.FRIEND_REQUEST_NOT_FOUND, "Friend request not found.");
-
-            _context.FriendRequests.Remove(request);
-            await _context.SaveChangesAsync();
-        }
-
-        public async Task CancelFriendRequestAsync(string senderId, string receiverId)
-        {
-            var pendingStatus = FriendRequestStatus.Pending.GetDescription();
-            var request = await _context.FriendRequests
-                .FirstOrDefaultAsync(fr => fr.SenderId == senderId && fr.ReceiverId == receiverId && fr.Status == pendingStatus);
+                .FirstOrDefaultAsync(fr => fr.Id == requestId && fr.Status == pendingStatus);
 
             if (request == null)
             {
                 throw new NotFoundException(ErrorCodes.FRIEND.FRIEND_REQUEST_NOT_FOUND, "Friend request not found.");
             }
 
-            // Người gửi thu hồi
-            _context.FriendRequests.Remove(request);
+            request.Status = FriendRequestStatus.Declined.GetDescription();
+
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task CancelFriendRequestAsync(string currentUserId, string requestId)
+        {
+            var pendingStatus = FriendRequestStatus.Pending.GetDescription();
+            var request = await _context.FriendRequests
+                .FirstOrDefaultAsync(fr => fr.Id == requestId && fr.Status == pendingStatus);
+
+            if (request == null)
+            {
+                throw new NotFoundException(ErrorCodes.FRIEND.FRIEND_REQUEST_NOT_FOUND, "Friend request not found.");
+            }
+
+            request.Status = FriendRequestStatus.Cancelled.GetDescription();
 
             // Hủy Follow
-            var follow = await _context.Follows.FirstOrDefaultAsync(f => f.FollowerId == senderId && f.FolloweeId == request.ReceiverId);
+            var follow = await _context.Follows.FirstOrDefaultAsync(f => f.FollowerId == request.SenderId && f.FolloweeId == request.ReceiverId);
             if (follow != null)
             {
                 _context.Follows.Remove(follow);
@@ -215,12 +206,10 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task UnfriendAsync(string currentUserId, string targetUserId)
         {
-            // Fix lỗi thiếu biến lowId, highId ở mã cũ
-            var (lowId, highId) = GetOrderedIds(currentUserId, targetUserId);
-
             var activeStatus = FriendshipStatus.Active.GetDescription();
+            var acceptedStatus = FriendRequestStatus.Accepted.GetDescription();
             var friendship = await _context.Friendships
-                .FirstOrDefaultAsync(f => f.UserLowId == lowId && f.UserHighId == highId && f.Status == activeStatus);
+                .FirstOrDefaultAsync(f => (f.UserLowId == currentUserId && f.UserHighId == targetUserId) || (f.UserLowId == targetUserId && f.UserHighId == currentUserId) && f.Status == activeStatus);
 
             if (friendship == null)
             {
@@ -229,13 +218,6 @@ namespace Kpett.ChatApp.Services.Impls
 
             // Xóa quan hệ bạn bè 
             _context.Friendships.Remove(friendship);
-
-            // Dọn dẹp FriendRequest cũ đã Accept
-            var oldRequest = await _context.FriendRequests.FirstOrDefaultAsync(r => r.UserLowId == lowId && r.UserHighId == highId);
-            if (oldRequest != null)
-            {
-                _context.FriendRequests.Remove(oldRequest);
-            }
 
             // Hủy bạn bè = Unfollow lẫn nhau
             var follows = await _context.Follows
@@ -246,6 +228,15 @@ namespace Kpett.ChatApp.Services.Impls
             if (follows.Any())
             {
                 _context.Follows.RemoveRange(follows);
+            }
+
+            var friendRequest = await _context.FriendRequests
+                .FirstOrDefaultAsync(fr => (fr.SenderId == currentUserId && fr.ReceiverId == targetUserId) || (fr.SenderId == targetUserId && fr.ReceiverId == currentUserId) && fr.Status == acceptedStatus);
+
+            if(friendRequest != null)
+            {
+                friendRequest.Status = FriendRequestStatus.Unfriended.GetDescription();
+                friendRequest.UpdatedAt = DateTime.UtcNow;
             }
 
             await _context.SaveChangesAsync();

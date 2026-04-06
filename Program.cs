@@ -197,6 +197,7 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRelationshipService, RelationshipService>();
 builder.Services.AddScoped<IPostService, PostService>();
+builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddScoped<IMediaService, MediaService>();
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
