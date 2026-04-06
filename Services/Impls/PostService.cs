@@ -34,6 +34,9 @@ namespace Kpett.ChatApp.Services.Impls
             _mediaService = mediaService;
         }
 
+        // Add this field to the PostService class (preferably near the top, after other private fields)
+        private static readonly Regex MentionTokenRegex = new Regex(@"\[mention:(?<userId>[^\]]+)\]", RegexOptions.Compiled);
+
         /// <summary>
         /// Create a new post
         /// </summary>

@@ -111,7 +111,12 @@ namespace Kpett.ChatApp.Controllers
         {
             var userId = User.GetRequiredUserId();
             await _postService.DeletePostAsync(postId, userId, cancel);
-            return NoContent();
+            return Ok(new GeneralResponse
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Delete post successfully"
+            });
         }
 
         [HttpDelete("media/{publicId}")]
