@@ -8,15 +8,12 @@ using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
-using Kpett.ChatApp.Extentions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Text;
-using System.Text.RegularExpressions;
 
 namespace Kpett.ChatApp.Services.Impls
 {
@@ -700,34 +697,6 @@ namespace Kpett.ChatApp.Services.Impls
         }
 
         /// <summary>
-        /// Update a post
-        /// </summary>
-        public async Task<PostResponseDTO> UpdatePostAsync(string postId, string userId, string content, string privacy, CancellationToken cancel)
-        {
-            if (string.IsNullOrWhiteSpace(content))
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Content cannot be empty");
-
-            cancel.ThrowIfCancellationRequested();
-
-            var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
-
-            if (post == null)
-                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
-
-            if (post.CreatedByUserId != userId)
-                throw new ForbiddenException(ErrorCodes.POST.USER_NOT_AUTHORIZED, "Not authorized to update this post");
-
-            post.Content = content;
-            post.Privacy = privacy ?? "Public";
-            post.UpdatedAt = DateTime.UtcNow;
-
-            _dbContext.Posts.Update(post);
-            await _dbContext.SaveChangesAsync(cancel);
-
-            return null;
-        }
-
-        /// <summary>
         /// Delete a post (soft delete)
         /// </summary>
         public async Task DeletePostAsync(string postId, string userId, CancellationToken cancel)
@@ -737,10 +706,14 @@ namespace Kpett.ChatApp.Services.Impls
             var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
 
             if (post == null)
+            {
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
+            }
 
             if (post.CreatedByUserId != userId)
+            {
                 throw new ForbiddenException(ErrorCodes.POST.USER_NOT_AUTHORIZED, "Not authorized to delete this post");
+            }
 
             post.IsDeleted = true;
             post.UpdatedAt = DateTime.UtcNow;

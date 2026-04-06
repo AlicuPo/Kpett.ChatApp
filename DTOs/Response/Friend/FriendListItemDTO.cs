@@ -7,6 +7,7 @@ namespace Kpett.ChatApp.DTOs.Response.Friend
         public string? DisplayName { get; set; }
         public string? AvatarUrl { get; set; }
         public bool IsVerified { get; set; }
+        public bool IsOnline { get; set; }
         public DateTime? FriendedAt { get; set; }
     }
 }

@@ -10,13 +10,13 @@ namespace Kpett.ChatApp.Hubs
     [Authorize]
     public class ChatHub : Hub
     {
-        private readonly Services.Interfaces.IRedisService _redis;
+        private readonly IRedisService _redis;
         private readonly IMessageService _messageService;
         private readonly IConversationAccessService _conversationAccessService;
         private readonly IConversationPresenceService _conversationPresenceService;
 
         public ChatHub(
-            Services.Interfaces.IRedisService redis,
+            IRedisService redis,
             IMessageService messageService,
             IConversationAccessService conversationAccessService,
             IConversationPresenceService conversationPresenceService)
@@ -30,51 +30,60 @@ namespace Kpett.ChatApp.Hubs
         public override async Task OnConnectedAsync()
         {
             var userId = Context.UserIdentifier;
+            if (string.IsNullOrEmpty(userId)) return;
 
-            if (string.IsNullOrEmpty(userId))
+            var wasOnline = await _redis.IsUserOnlineAsync(userId);
+            await _redis.AddConnectionAsync(userId, Context.ConnectionId);
+
+            if (!wasOnline)
             {
-                await base.OnConnectedAsync();
-                return;
+                await Clients.Group($"presence_watcher_{userId}").SendAsync("UserStatusChanged", new
+                {
+                    userId = userId,
+                    isOnline = true
+                });
             }
 
-            try
-            {
-                await _redis.AddConnectionAsync(userId, Context.ConnectionId);
-
-                await base.OnConnectedAsync();
-            }
-            catch (Exception ex)
-            {
-                await Clients.Caller.SendAsync("Error", $"Connection error: {ex.Message}");
-            }
+            await base.OnConnectedAsync();
         }
+
 
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
             var userId = Context.UserIdentifier;
+            if (string.IsNullOrEmpty(userId)) return;
 
-            try
-            {
-                await _conversationPresenceService.CleanupConnectionAsync(userId, Context.ConnectionId);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Conversation cleanup error: {ex.Message}");
-            }
+            await _redis.RemoveConnectionAsync(userId, Context.ConnectionId);
+            var isStillOnline = await _redis.IsUserOnlineAsync(userId);
 
-            if (!string.IsNullOrEmpty(userId))
+            if (!isStillOnline)
             {
-                try
+                await Clients.Group($"presence_watcher_{userId}").SendAsync("UserStatusChanged", new
                 {
-                    await _redis.RemoveConnectionAsync(userId, Context.ConnectionId);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Disconnect error: {ex.Message}");
-                }
+                    userId = userId,
+                    isOnline = false
+                });
             }
 
             await base.OnDisconnectedAsync(exception);
+        }
+
+        // Subscribe friend status change
+        public async Task SubscribeToPresence(List<string> targetUserIds)
+        {
+            // Đưa ConnectionId của người này vào Group mang tên người họ muốn theo dõi
+            foreach (var targetId in targetUserIds)
+            {
+                await Groups.AddToGroupAsync(Context.ConnectionId, $"presence_watcher_{targetId}");
+            }
+        }
+
+        public async Task UnsubscribeFromPresence(List<string> targetUserIds)
+        {
+            foreach (var targetId in targetUserIds)
+            {
+                await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"presence_watcher_{targetId}");
+            }
         }
 
         /// <summary>

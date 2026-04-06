@@ -85,7 +85,7 @@ namespace Kpett.ChatApp.Controllers
 
         // --- FRIENDSHIPS ---
 
-        [HttpGet("/fiends")]
+        [HttpGet("friends")]
         public async Task<ActionResult<GeneralResponse<PaginatedData<FriendListItemDTO>>>> GetFriends(
             [FromQuery] FriendListRequest request,
             CancellationToken cancel)

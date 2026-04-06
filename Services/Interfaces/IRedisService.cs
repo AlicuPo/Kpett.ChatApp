@@ -16,6 +16,8 @@
         Task AddConnectionAsync(string userId, string connectionId);
         Task RemoveConnectionAsync(string userId, string connectionId);
         Task<string[]> GetConnectionsAsync(string userId);
+        Task<bool> IsUserOnlineAsync(string userId);
+        Task<Dictionary<string, bool>> GetUsersOnlineStatusAsync(IEnumerable<string> userIds);
 
         // Conversation membership helpers
         Task AddUserToConversationAsync(string conversationId, string userId);
