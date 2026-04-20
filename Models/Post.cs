@@ -20,6 +20,10 @@ public partial class Post
 
     public string? Type { get; set; }
 
+    public int LikeCount { get; set; }
+
+    public int CommentCount { get; set; }
+
     public bool IsPinned { get; set; } = false;
 
     public DateTime PinnedAt { get; set; }

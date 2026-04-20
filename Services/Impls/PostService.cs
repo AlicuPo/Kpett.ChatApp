@@ -13,10 +13,8 @@ using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Services.Interfaces;
-using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Text.RegularExpressions;
 
 namespace Kpett.ChatApp.Services.Impls
 {
@@ -34,9 +32,6 @@ namespace Kpett.ChatApp.Services.Impls
             _mediaService = mediaService;
         }
 
-        // Add this field to the PostService class (preferably near the top, after other private fields)
-        private static readonly Regex MentionTokenRegex = new Regex(@"\[mention:(?<userId>[^\]]+)\]", RegexOptions.Compiled);
-
         /// <summary>
         /// Create a new post
         /// </summary>
@@ -44,130 +39,6 @@ namespace Kpett.ChatApp.Services.Impls
         {
             if (string.IsNullOrWhiteSpace(userId))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
-
-            cancel.ThrowIfCancellationRequested();
-
-            // Check if user exists
-            var user = await _dbContext.Users
-                              .Where(u => u.Id == userId)
-                              .Select(u => new UserResponse
-                              {
-                                  Id = u.Id,
-                                  Email = u.Email,
-                                  Username = u.Username,
-                                  DisplayName = u.DisplayName,
-                                  IsVerified = u.IsVerified,
-                                  AvatarUrl = u.AvatarUrl,
-                              })
-                              .FirstOrDefaultAsync(cancel);
-            if (user == null)
-            {
-                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
-            }
-
-            // Create post
-            var newPost = new Post
-            {
-                Id = Guid.NewGuid().ToString(),
-                CreatedByUserId = userId,
-                Content = postRequest.Content,
-                Privacy = postRequest.Privacy ?? PostPrivacy.Public.GetDescription(),
-                Type = PostType.Post.GetDescription(),
-                GroupId = postRequest.GroupId,
-                CreatedAt = DateTime.UtcNow,
-                IsDeleted = false
-            };
-
-            await _dbContext.Posts.AddAsync(newPost, cancel);
-
-            var media = postRequest.Media;
-
-            if (media?.Any() == true)
-            {
-                var mediaIds = media.Select(m => m.PublicId).ToList();
-
-                var existingMedias = await _dbContext.PostMedia
-                    .Where(m => mediaIds.Contains(m.Id))
-                    .ToDictionaryAsync(m => m.Id, cancel);
-
-                foreach (var m in media)
-                {
-                    if (existingMedias.TryGetValue(m.PublicId, out var existingMedia))
-                    {
-                        existingMedia.PostId = newPost.Id;
-                        existingMedia.MediaUrl = m.Url;
-                        existingMedia.IsTemporary = false;
-                        existingMedia.MediaType = m.Type;
-                    }
-                }
-            }
-
-            await _dbContext.SaveChangesAsync();
-
-            // Map media response
-            var mediaResponse = media?.Select(m => new MediaPostResponse
-            {
-                PublicId = m.PublicId,
-                Url = m.Url,
-                Type = m.Type
-            }).ToList() ?? new List<MediaPostResponse>();
-
-            // Initialize metrics and viewer context
-            var metrics = new PostMetricsResponse
-            {
-                LikeCount = 0,
-                CommentCount = 0
-            };
-
-            // Since the creator is viewing their own post immediately after creation, we can set the viewer context accordingly
-            var viewerContext = new PostViewerContextResponse
-            {
-                IsOwner = true,
-                IsLiked = false,
-                IsSaved = false,
-                IsPinned = false,
-                CanEdit = true,
-                CanDelete = true,
-                CanLike = true,
-                CanComment = true,
-                CanPin = true
-            };
-
-            // Notify followers about the new post
-            return new PostFeedResponse
-            {
-                Id = newPost.Id,
-                Author = user,
-                Content = newPost.Content,
-                Media = mediaResponse,
-                Metrics = metrics,
-                Privacy = newPost.Privacy,
-                ViewerContext = viewerContext,
-
-                CreatedAt = newPost.CreatedAt,
-                UpdatedAt = newPost.UpdatedAt,
-            };
-        }
-
-        /// <summary>
-        /// Update a post
-        /// </summary>
-        public async Task<PostFeedResponse> UpdatePostAsync(string postId, string userId, PostRequest postRequest, CancellationToken cancel)
-        {
-            if (string.IsNullOrWhiteSpace(userId))
-            {
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
-            }
-
-            var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
-            if (post == null)
-            {
-                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
-            }
-            if (post.CreatedByUserId != userId)
-            {
-                throw new ForbiddenException(ErrorCodes.POST.USER_NOT_AUTHORIZED, "Not authorized to update this post");
-            }
 
             var user = await _dbContext.Users
                 .Where(u => u.Id == userId)
@@ -182,114 +53,168 @@ namespace Kpett.ChatApp.Services.Impls
                 })
                 .FirstOrDefaultAsync(cancel);
 
-            post.Content = postRequest.Content;
-            post.Privacy = postRequest.Privacy ?? post.Privacy;
-            post.UpdatedAt = DateTime.UtcNow;
+            if (user == null)
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
 
-            var media = postRequest.Media;
-
-            if (media?.Any() == true)
+            var newPost = new Post
             {
-                var mediaIds = media.Select(m => m.PublicId).ToList();
+                Id = Guid.NewGuid().ToString(),
+                CreatedByUserId = userId,
+                Content = postRequest.Content,
+                Privacy = postRequest.Privacy ?? PostPrivacy.Public.GetDescription(),
+                Type = PostType.Post.GetDescription(),
+                GroupId = postRequest.GroupId,
+                CreatedAt = DateTime.UtcNow,
+                PinnedAt = DateTime.UtcNow,
+                IsDeleted = false,
+                LikeCount = 0,
+                CommentCount = 0
+            };
 
-                var existingMedias = await _dbContext.PostMedia
-                    .Where(m => mediaIds.Contains(m.Id))
-                    .ToDictionaryAsync(m => m.Id, cancel);
+            await _dbContext.Posts.AddAsync(newPost, cancel);
 
-                foreach (var m in media)
-                {
-                    if (existingMedias.TryGetValue(m.PublicId, out var existingMedia))
-                    {
-                        existingMedia.PostId = post.Id;
-                        existingMedia.MediaUrl = m.Url;
-                        existingMedia.IsTemporary = false;
-                        existingMedia.MediaType = m.Type;
-                    }
-                }
-            }
+            await SyncPostMediaAsync(newPost.Id, postRequest.Media, cancel);
 
-            await _dbContext.SaveChangesAsync();
+            await _dbContext.SaveChangesAsync(cancel);
 
-            // Map media response
-            var mediaResponse = media?.Select(m => new MediaPostResponse
+            var mediaResponse = postRequest.Media?.Select(m => new MediaPostResponse
             {
                 PublicId = m.PublicId,
                 Url = m.Url,
                 Type = m.Type
             }).ToList() ?? new List<MediaPostResponse>();
 
-            // Initialize metrics and viewer context
-            var metrics = new PostMetricsResponse
-            {
-                LikeCount = await _dbContext.PostReactions.CountAsync(pr => pr.PostId == postId, cancel),
-                CommentCount = await _dbContext.Comments.CountAsync(pr => pr.PostId == postId && pr.DeletedAt == null, cancel)
-            };
-
-            // Since the creator is viewing their own post immediately after creation, we can set the viewer context accordingly
-            var viewerContext = new PostViewerContextResponse
-            {
-                IsOwner = true,
-                IsLiked = await _dbContext.PostReactions.AnyAsync(pr => pr.PostId == postId && pr.UserId == userId, cancel),
-                IsSaved = false,
-                IsPinned = post.IsPinned,
-                CanEdit = true,
-                CanDelete = true,
-                CanLike = true,
-                CanComment = true,
-                CanPin = true
-            };
-
-            // Notify followers about the new post
-            return new PostFeedResponse
-            {
-                Id = post.Id,
-                Author = user,
-                Content = post.Content,
-                Media = mediaResponse,
-                Metrics = metrics,
-                Privacy = post.Privacy,
-                ViewerContext = viewerContext,
-
-                CreatedAt = post.CreatedAt,
-                UpdatedAt = post.UpdatedAt,
-            };
+            return BuildPostResponse(newPost, user, mediaResponse, isLiked: false);
         }
 
+        /// <summary>
+        /// Update a post
+        /// </summary>
+        public async Task<PostFeedResponse> UpdatePostAsync(string postId, string userId, PostRequest postRequest, CancellationToken cancel)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
+            }
+
+            var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
+
+            if (post == null)
+            {
+                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
+            }
+
+            var user = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => new UserResponse
+                {
+                    Id = u.Id,
+                    Email = u.Email,
+                    Username = u.Username,
+                    DisplayName = u.DisplayName,
+                    IsVerified = u.IsVerified,
+                    AvatarUrl = u.AvatarUrl,
+                })
+                .FirstOrDefaultAsync(cancel);
+
+            if (user == null)
+            {
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
+            }
+
+            if (post.CreatedByUserId != userId)
+            {
+                throw new ForbiddenException(ErrorCodes.POST.USER_NOT_AUTHORIZED, "Not authorized to update this post");
+            }
+
+            post.Content = postRequest.Content;
+            post.Privacy = postRequest.Privacy ?? post.Privacy;
+            post.UpdatedAt = DateTime.UtcNow;
+
+            await SyncPostMediaAsync(post.Id, postRequest.Media, cancel);
+
+            await _dbContext.SaveChangesAsync(cancel);
+
+            var allCurrentMedias = await _dbContext.PostMedia
+                .Where(m => m.PostId == post.Id && !m.IsTemporary)
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => new MediaPostResponse
+                {
+                    PublicId = m.Id,
+                    Url = m.MediaUrl,
+                    Type = m.MediaType
+                })
+                .ToListAsync(cancel);
+
+            var authorResponse = new UserResponse
+            {
+                Id = user.Id,
+                Email = user.Email,
+                Username = user.Username,
+                DisplayName = user.DisplayName,
+                IsVerified = user.IsVerified,
+                AvatarUrl = user.AvatarUrl,
+            };
+
+            bool isLiked = await _dbContext.PostReactions.AnyAsync(pr => pr.PostId == postId && pr.UserId == userId, cancel);
+
+            return BuildPostResponse(post, authorResponse, allCurrentMedias, isLiked);
+        }
 
         /// <summary>
         /// Get a single post with details
         /// </summary>
         public async Task<PostFeedResponse> GetPostByIdAsync(string postId, string? currentUserId, CancellationToken cancel)
         {
-            cancel.ThrowIfCancellationRequested();
-
             var post = await _dbContext.Posts
                 .AsNoTracking()
                 .Where(p => p.Id == postId && p.IsDeleted == false)
-                .Select(p => new
+                .Select(p => new PostFeedResponse
                 {
-                    Post = p,
+                    Id = p.Id,
+                    Content = p.Content,
+                    Privacy = p.Privacy,
+                    CreatedAt = p.CreatedAt,
+                    UpdatedAt = p.UpdatedAt,
 
-                    User = _dbContext.Users.Where(u => u.Id == p.CreatedByUserId)
-                                           .Select(u => new
-                                           {
-                                               Id = u.Id,
-                                               Email = u.Email,
-                                               Username = u.Username,
-                                               DisplayName = u.DisplayName,
-                                               IsVerified = u.IsVerified,
-                                               AvatarUrl = u.AvatarUrl,
-                                           })
-                                           .FirstOrDefault(),
+                    Author = _dbContext.Users.Where(u => u.Id == p.CreatedByUserId)
+                                             .Select(u => new UserResponse
+                                             {
+                                                 Id = u.Id,
+                                                 Email = u.Email,
+                                                 Username = u.Username,
+                                                 DisplayName = u.DisplayName,
+                                                 IsVerified = u.IsVerified,
+                                                 AvatarUrl = u.AvatarUrl,
+                                             })
+                                             .FirstOrDefault(),
 
                     Media = _dbContext.PostMedia.Where(m => m.PostId == p.Id)
-                                         .Select(m => new { m.Id, m.MediaUrl, m.MediaType, m.CreatedAt })
+                                         .OrderBy(m => m.CreatedAt)
+                                         .Select(m => new MediaPostResponse { PublicId = m.Id, Url = m.MediaUrl, Type = m.MediaType })
                                          .ToList(),
 
-                    LikeCount = _dbContext.PostReactions.Count(r => r.PostId == p.Id),
-                    CommentCount = _dbContext.Comments.Count(c => c.PostId == p.Id && c.DeletedAt == null),
-                    IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == currentUserId)
+                    Metrics = new PostMetricsResponse
+                    {
+                        LikeCount = p.LikeCount,
+                        CommentCount = p.CommentCount
+                    },
+
+                    ViewerContext = new PostViewerContextResponse
+                    {
+                        IsOwner = p.CreatedByUserId == currentUserId,
+                        IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == currentUserId),
+                        IsSaved = false,
+                        IsPinned = false,
+                        CanEdit = p.CreatedByUserId == currentUserId,
+                        CanDelete = p.CreatedByUserId == currentUserId,
+                        CanLike = true,
+                        CanComment = true,
+                        CanPin = p.CreatedByUserId == currentUserId
+                    },
                 })
+                .AsSplitQuery()
                 .FirstOrDefaultAsync(cancel);
 
             if (post == null)
@@ -297,51 +222,7 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
             }
 
-            return new PostFeedResponse
-            {
-                Id = post.Post.Id,
-                Content = post.Post.Content,
-                Privacy = post.Post.Privacy,
-                Author = new UserResponse
-                {
-                    Id = post.User.Id,
-                    Username = post.User.Username,
-                    AvatarUrl = post.User.AvatarUrl,
-                    DisplayName = post.User.DisplayName,
-                    Email = post.User.Email,
-                    IsVerified = post.User.IsVerified,
-                },
-                Media = post.Media
-                .OrderBy(m => m.CreatedAt)
-                .Select(m => new MediaPostResponse
-                {
-                    PublicId = m.Id,
-                    Url = m.MediaUrl,
-                    Type = m.MediaType
-                }).ToList(),
-
-                ViewerContext = new PostViewerContextResponse
-                {
-                    IsOwner = post.Post.CreatedByUserId == currentUserId,
-                    IsLiked = post.IsLiked,
-                    IsSaved = false,
-                    IsPinned = false,
-                    CanEdit = post.Post.CreatedByUserId == currentUserId,
-                    CanDelete = post.Post.CreatedByUserId == currentUserId,
-                    CanLike = true,
-                    CanComment = true,
-                    CanPin = post.Post.CreatedByUserId == currentUserId
-                },
-
-                Metrics = new PostMetricsResponse
-                {
-                    LikeCount = post.LikeCount,
-                    CommentCount = post.CommentCount
-                },
-
-                CreatedAt = post.Post.CreatedAt,
-                UpdatedAt = post.Post.UpdatedAt,
-            };
+            return post;
         }
 
         /// <summary>
@@ -376,21 +257,20 @@ namespace Kpett.ChatApp.Services.Impls
                     (p.CreatedAt == cursorDate.Value && p.Id.CompareTo(cursorId) < 0));
             }
 
-            var rawData = await query
+            var fetchedPosts = await query
                 .OrderByDescending(p => p.CreatedAt)
                 .ThenByDescending(p => p.Id)
-                .Take(limit + 1)     
-                .Select(p => new
+                .Take(limit + 1)
+                .Select(p => new PostFeedResponse
                 {
                     Id = p.Id,
                     Content = p.Content,
                     Privacy = p.Privacy,
-                    CreatedByUserId = p.CreatedByUserId,
                     CreatedAt = p.CreatedAt,
                     UpdatedAt = p.UpdatedAt,
 
                     Author = _dbContext.Users.Where(u => u.Id == p.CreatedByUserId)
-                                             .Select(u => new
+                                             .Select(u => new UserResponse
                                              {
                                                  Id = u.Id,
                                                  Email = u.Email,
@@ -401,18 +281,34 @@ namespace Kpett.ChatApp.Services.Impls
                                              })
                                              .FirstOrDefault(),
 
-                    Medias = _dbContext.PostMedia.Where(m => m.PostId == p.Id)
-                                         .Select(m => new { m.Id, m.MediaUrl, m.MediaType, CreatedAt = m.CreatedAt })
+                    Media = _dbContext.PostMedia.Where(m => m.PostId == p.Id)
+                                         .OrderBy(m => m.CreatedAt)
+                                         .Select(m => new MediaPostResponse { PublicId = m.Id, Url = m.MediaUrl, Type = m.MediaType })
                                          .ToList(),
 
-                    LikeCount = _dbContext.PostReactions.Count(r => r.PostId == p.Id),
-                    CommentCount = _dbContext.Comments.Count(c => c.PostId == p.Id && c.DeletedAt == null),
-                    IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == currentUserId)
+                    Metrics = new PostMetricsResponse
+                    {
+                        LikeCount = p.LikeCount,
+                        CommentCount = p.CommentCount
+                    },
+
+                    ViewerContext = new PostViewerContextResponse
+                    {
+                        IsOwner = p.CreatedByUserId == currentUserId,
+                        IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == currentUserId),
+                        IsSaved = false,
+                        IsPinned = false,
+                        CanEdit = p.CreatedByUserId == currentUserId,
+                        CanDelete = p.CreatedByUserId == currentUserId,
+                        CanLike = true,
+                        CanComment = true,
+                        CanPin = p.CreatedByUserId == currentUserId
+                    },
                 })
                 .AsSplitQuery()
                 .ToListAsync(cancel);
 
-            if (!rawData.Any())
+            if (!fetchedPosts.Any())
             {
                 return new PaginatedData<PostFeedResponse>
                 {
@@ -422,71 +318,27 @@ namespace Kpett.ChatApp.Services.Impls
             }
 
             string? nextCursor = null;
-            var itemsToProcess = rawData;
 
-            if (rawData.Count > limit)
+            if (fetchedPosts.Count > limit)
             {
-                var lastItemInPage = rawData[limit - 1];
+                var lastItemInPage = fetchedPosts[limit - 1];
                 nextCursor = CursorHelper.Encode(new BaseCursorPayload
                 {
                     Id = lastItemInPage.Id,
                     CreatedAt = lastItemInPage.CreatedAt
                 });
-                itemsToProcess = rawData.Take(limit).ToList();
+                fetchedPosts = fetchedPosts.Take(limit).ToList();
             }
 
-            var mappedPosts = itemsToProcess.Select(data => new PostFeedResponse
+            foreach(var post in fetchedPosts)
             {
-                Id = data.Id,
-                Content = data.Content,
-                CreatedAt = data.CreatedAt,
-                UpdatedAt = data.UpdatedAt,
-                Privacy = data.Privacy,
-
-                Author = data.Author != null
-            ? new UserResponse
-            {
-                Id = data.Author.Id,
-                Username = data.Author.Username,
-                AvatarUrl = data.Author.AvatarUrl,
-                DisplayName = data.Author.DisplayName,
-                Email = data.Author.Email,
-                IsVerified = data.Author.IsVerified,
+                post.CreatedAt = post.CreatedAt.ToUtc();
+                post.UpdatedAt = post.UpdatedAt?.ToUtc();
             }
-            : new UserResponse { Id = data.CreatedByUserId, Username = "Unknown User" },
-
-                Media = data.Medias
-                .OrderBy(m => m.CreatedAt)
-                .Select(m => new MediaPostResponse
-                {
-                    PublicId = m.Id,
-                    Url = m.MediaUrl,
-                    Type = m.MediaType
-                }).ToList(),
-
-                Metrics = new PostMetricsResponse
-                {
-                    LikeCount = data.LikeCount,
-                    CommentCount = data.CommentCount
-                },
-
-                ViewerContext = new PostViewerContextResponse
-                {
-                    IsOwner = data.CreatedByUserId == currentUserId,
-                    IsLiked = data.IsLiked,
-                    IsSaved = false,
-                    IsPinned = false,
-                    CanEdit = data.CreatedByUserId == currentUserId,
-                    CanDelete = data.CreatedByUserId == currentUserId,
-                    CanLike = true,
-                    CanComment = true,
-                    CanPin = data.CreatedByUserId == currentUserId
-                },
-            }).ToList();
 
             return new PaginatedData<PostFeedResponse>
             {
-                Items = mappedPosts,
+                Items = fetchedPosts,
                 Pagination = new CursorPaginationMeta
                 {
                     NextCursor = nextCursor,
@@ -496,7 +348,7 @@ namespace Kpett.ChatApp.Services.Impls
         }
 
         /// <summary>
-        /// Get all posts from a user
+        /// Get posts created by a specific user with pagination and optional type filter
         /// </summary>
         public async Task<PaginatedData<PostThumbnailResponse>> GetPostsByUserIdAsync(string userId, string currentUserId, SearchRequest searchRequest, CursorPaginationRequest cursorPagination, CancellationToken cancel = default)
         {
@@ -737,6 +589,9 @@ namespace Kpett.ChatApp.Services.Impls
             await _dbContext.SaveChangesAsync(cancel);
         }
 
+        /// <summary>
+        /// Delete a media file
+        /// </summary>
         public async Task DeleteMedia(string publicId, [FromQuery] string resourceType)
         {
             // Tìm ảnh trong DB và kiểm tra quyền sở hữu
@@ -885,6 +740,68 @@ namespace Kpett.ChatApp.Services.Impls
                 .ToListAsync(cancel);
 
             return reactions;
+        }
+
+        // HELPER METHODS
+
+        // Helper method to sync media with a post during creation or update
+        private async Task SyncPostMediaAsync(string postId, IEnumerable<MediaRequest>? requestedMedia, CancellationToken cancel)
+        {
+            if (requestedMedia == null || !requestedMedia.Any())
+                return;
+
+            var requestedMediaList = requestedMedia.ToList();
+            var requestedMediaIds = requestedMediaList.Select(m => m.PublicId).ToList();
+
+            var mediasToUpdate = await _dbContext.PostMedia
+                .Where(m => requestedMediaIds.Contains(m.Id))
+                .ToListAsync(cancel);
+
+            foreach (var reqMedia in requestedMediaList)
+            {
+                var targetMedia = mediasToUpdate.FirstOrDefault(m => m.Id == reqMedia.PublicId);
+                if (targetMedia != null)
+                {
+                    targetMedia.PostId = postId;
+                    targetMedia.MediaUrl = reqMedia.Url;
+                    targetMedia.IsTemporary = false;
+                    targetMedia.MediaType = reqMedia.Type;
+                }
+            }
+        }
+
+        // Helper method to build PostFeedResponse from Post entity
+        private PostFeedResponse BuildPostResponse(Post post, UserResponse author, List<MediaPostResponse> mediaResponse, bool isLiked)
+        {
+            return new PostFeedResponse
+            {
+                Id = post.Id,
+                Author = author,
+                Content = post.Content,
+                Media = mediaResponse,
+                Privacy = post.Privacy,
+                CreatedAt = post.CreatedAt,
+                UpdatedAt = post.UpdatedAt,
+
+                Metrics = new PostMetricsResponse
+                {
+                    LikeCount = post.LikeCount,
+                    CommentCount = post.CommentCount
+                },
+
+                ViewerContext = new PostViewerContextResponse
+                {
+                    IsOwner = true,
+                    IsLiked = isLiked,
+                    IsSaved = false,
+                    IsPinned = post.IsPinned,
+                    CanEdit = true,
+                    CanDelete = true,
+                    CanPin = true,
+                    CanLike = true,
+                    CanComment = true
+                }
+            };
         }
     }
 }

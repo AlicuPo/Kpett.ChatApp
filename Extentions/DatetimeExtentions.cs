@@ -12,5 +12,12 @@
                 _ => dateTime
             };
         }
+
+        public static DateTime? ToUtc(this DateTime? dateTime)
+        {
+            return dateTime.HasValue
+                ? dateTime.Value.ToUtc()
+                : null;
+        }
     }
 }

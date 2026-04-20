@@ -7,7 +7,7 @@ namespace Kpett.ChatApp.DTOs.Response.Post
     {
         public string Id { get; set; } = string.Empty;
 
-        public UserResponse Author { get; set; } = null!;
+        public UserResponse? Author { get; set; } = null!;
 
         public string? Title { get; set; }
 
