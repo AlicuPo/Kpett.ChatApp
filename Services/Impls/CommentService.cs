@@ -33,38 +33,45 @@ namespace Kpett.ChatApp.Services.Impls
 
             cancel.ThrowIfCancellationRequested();
 
-            var utcNow = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
+            var utcNow = DateTime.UtcNow;
+            var commentId = Guid.NewGuid().ToString();
             var normalizedParentCommentId = NormalizeOptionalString(parentCommentId);
-            var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
-            if (post == null)
-            {
-                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
+            var mentionIds = ExtractMentionUserIds(content);
+
+            var user = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => u.Id == userId)
+                .FirstOrDefaultAsync(cancel);
+
+            if (user == null)
+            {
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
-            Comment? parentComment = null;
+            if (await _dbContext.Posts.AnyAsync(p => p.Id == postId && !p.IsDeleted, cancel) == false)
+            {
+                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
+            }
+
+            string? parentPath = null;
             if (!string.IsNullOrEmpty(normalizedParentCommentId))
             {
-                parentComment = await _dbContext.Comments
-                    .FirstOrDefaultAsync(c => c.Id == normalizedParentCommentId && c.PostId == postId && c.DeletedAt == null, cancel);
+                parentPath = await _dbContext.Comments
+                    .Where(c => c.Id == normalizedParentCommentId && c.PostId == postId && c.DeletedAt == null)
+                    .Select(c => c.Path)
+                    .FirstOrDefaultAsync(cancel);
 
-                if (parentComment == null)
+                if (parentPath == null)
                 {
                     throw new NotFoundException(ErrorCodes.COMMENT.PARENT_COMMENT_NOT_FOUND, "Parent comment not found");
                 }
             }
 
-            var user = _dbContext.Users
-                .AsNoTracking()
-                .Where(u => u.Id == userId)
-                .FirstOrDefault();
-
-            if (user == null)
-                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
-
+            // Khởi tạo Comment Entity
             var comment = new Comment
             {
-                Id = Guid.NewGuid().ToString(),
+                Id = commentId,
                 PostId = postId,
                 UserId = userId,
                 Content = content,
@@ -72,22 +79,40 @@ namespace Kpett.ChatApp.Services.Impls
                 LikeCount = 0,
                 ReplyCount = 0,
                 IsEdited = false,
-                CreatedAt = utcNow
+                CreatedAt = utcNow,
+                Path = parentPath == null ? commentId : $"{parentPath}/{commentId}"
             };
 
-            comment.Path = parentComment == null ? comment.Id : $"{parentComment.Path}/{comment.Id}";
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
 
-            await _dbContext.Comments.AddAsync(comment, cancel);
-
-            if (parentComment != null)
+            try
             {
-                parentComment.ReplyCount += 1;
+                await _dbContext.Comments.AddAsync(comment, cancel);
+
+                var mentions = await SyncCommentMentionsAsync(comment.Id, mentionIds, utcNow, cancel);
+
+                await _dbContext.Posts
+                    .Where(p => p.Id == postId)
+                    .ExecuteUpdateAsync(p => p.SetProperty(x => x.CommentCount, x => x.CommentCount + 1), cancel);
+
+                if (!string.IsNullOrEmpty(normalizedParentCommentId))
+                {
+                    await _dbContext.Comments
+                        .Where(c => c.Id == normalizedParentCommentId)
+                        .ExecuteUpdateAsync(c => c.SetProperty(x => x.ReplyCount, x => x.ReplyCount + 1), cancel);
+                }
+
+                await _dbContext.SaveChangesAsync(cancel);
+
+                await transaction.CommitAsync();
+
+                return MapCommentListItem(comment, user, mentions, false, user.Id);
             }
-
-            var mentions = await SyncCommentMentionsAsync(comment.Id, ExtractMentionUserIds(content), utcNow, cancel);
-            await _dbContext.SaveChangesAsync(cancel);
-
-            return MapCommentListItem(comment, user, mentions, false, user.Id);
+            catch (Exception)
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
 
         public async Task<PaginatedData<CommentListItemDTO>> GetCommentsAsync(
@@ -195,8 +220,6 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
-        // Method help comment
-
         public async Task<CommentListItemDTO> UpdateCommentAsync(
             string commentId,
             string userId,
@@ -240,44 +263,51 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
-            return MapCommentListItem(
-                    comment,
-                    user,
-                    mentions,
-                    false,
-                    user.Id);
+            return MapCommentListItem(comment, user, mentions, false, user.Id);
         }
 
         public async Task DeleteCommentAsync(string commentId, string userId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
 
-            var comment = await _dbContext.Comments
-                .FirstOrDefaultAsync(c => c.Id == commentId && c.DeletedAt == null, cancel);
+            var commentInfo = await _dbContext.Comments
+                .Where(c => c.Id == commentId && c.DeletedAt == null)
+                .Select(c => new { c.UserId, c.ParentCommentId, c.PostId })
+                .FirstOrDefaultAsync(cancel);
 
-            if (comment == null)
-            {
+            if (commentInfo == null)
                 throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");
-            }
 
-            if (comment.UserId != userId)
-            {
+            if (commentInfo.UserId != userId)
                 throw new ForbiddenException(ErrorCodes.COMMENT.USER_NOT_AUTHORIZED, "Not authorized to delete this comment");
-            }
 
-            if (!string.IsNullOrEmpty(comment.ParentCommentId))
+            var utcNow = DateTime.UtcNow;
+
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancel);
+            try
             {
-                var parentComment = await _dbContext.Comments
-                    .FirstOrDefaultAsync(c => c.Id == comment.ParentCommentId, cancel);
+                await _dbContext.Comments
+                    .Where(c => c.Id == commentId)
+                    .ExecuteUpdateAsync(c => c.SetProperty(x => x.DeletedAt, utcNow), cancel);
 
-                if (parentComment != null)
+                if (!string.IsNullOrEmpty(commentInfo.ParentCommentId))
                 {
-                    parentComment.ReplyCount = Math.Max(0, parentComment.ReplyCount - 1);
+                    await _dbContext.Comments
+                        .Where(c => c.Id == commentInfo.ParentCommentId && c.ReplyCount > 0)
+                        .ExecuteUpdateAsync(c => c.SetProperty(x => x.ReplyCount, x => x.ReplyCount - 1), cancel);
                 }
-            }
 
-            comment.DeletedAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync(cancel);
+                await _dbContext.Posts
+                    .Where(p => p.Id == commentInfo.PostId && p.CommentCount > 0)
+                    .ExecuteUpdateAsync(p => p.SetProperty(x => x.CommentCount, x => x.CommentCount - 1), cancel);
+
+                await transaction.CommitAsync(cancel);
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancel);
+                throw;
+            }
         }
 
         private async Task<CommentDTO> MapCommentAsync(Comment comment, CancellationToken cancel)
@@ -295,9 +325,7 @@ namespace Kpett.ChatApp.Services.Impls
                 new List<CommentDTO>());
         }
 
-        private async Task<Dictionary<string, List<CommentMentionDTO>>> GetCommentMentionsLookupAsync(
-            IReadOnlyCollection<string> commentIds,
-            CancellationToken cancel)
+        private async Task<Dictionary<string, List<CommentMentionDTO>>> GetCommentMentionsLookupAsync(IReadOnlyCollection<string> commentIds,CancellationToken cancel)
         {
             if (commentIds.Count == 0)
             {
