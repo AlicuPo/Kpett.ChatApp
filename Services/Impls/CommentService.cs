@@ -444,6 +444,13 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 var snapshot = mentionSnapshots[mentionUserId];
 
+                commentMetions.Add(new CommentMentionSummaryDTO
+                {
+                    UserId = mentionUserId,
+                    Username = snapshot.Username,
+                    DisplayName = snapshot.DisplayName,
+                });
+
                 if (existingByUserId.TryGetValue(mentionUserId, out var existingMention))
                 {
                     existingMention.Username = snapshot.Username;
@@ -451,13 +458,6 @@ namespace Kpett.ChatApp.Services.Impls
                     existingMention.UpdatedAt = utcNow;
                     continue;
                 }
-
-                commentMetions.Add(new CommentMentionSummaryDTO
-                {
-                    UserId = mentionUserId,
-                    Username = snapshot.Username,
-                    DisplayName = snapshot.DisplayName,
-                });
 
                 await _dbContext.MentionComments.AddAsync(new MentionComment
                 {

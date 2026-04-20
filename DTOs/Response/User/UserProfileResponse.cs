@@ -2,8 +2,9 @@
 {
     public class UserProfileResponse: UserResponse
     {
+        public DateTime? DayOfBirth { get; set; }
         public string? Biography { get; set; }
-        public string? Cocupation { get; set; }
+        public string? Occupation { get; set; }
         public string? Location { get; set; }
         public string? CoverUrl { get; set; }
         public UserStatsResponse? Stats { get; set; }

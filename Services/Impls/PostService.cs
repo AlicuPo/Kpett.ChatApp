@@ -13,6 +13,7 @@ using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Services.Interfaces;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
@@ -364,7 +365,9 @@ namespace Kpett.ChatApp.Services.Impls
 
             }
 
-            var query = _dbContext.Posts.AsNoTracking();
+            var query = _dbContext.Posts
+                .AsNoTracking()
+                .Where(p => !p.IsDeleted);
 
             if (cursorDate.HasValue && !string.IsNullOrEmpty(cursorId))
             {
@@ -376,21 +379,27 @@ namespace Kpett.ChatApp.Services.Impls
             var rawData = await query
                 .OrderByDescending(p => p.CreatedAt)
                 .ThenByDescending(p => p.Id)
-                .Take(limit + 1)
+                .Take(limit + 1)     
                 .Select(p => new
                 {
-                    Post = p,
+                    Id = p.Id,
+                    Content = p.Content,
+                    Privacy = p.Privacy,
+                    CreatedByUserId = p.CreatedByUserId,
+                    CreatedAt = p.CreatedAt,
+                    UpdatedAt = p.UpdatedAt,
+
                     Author = _dbContext.Users.Where(u => u.Id == p.CreatedByUserId)
-                                               .Select(u => new
-                                               {
-                                                   Id = u.Id,
-                                                   Email = u.Email,
-                                                   Username = u.Username,
-                                                   DisplayName = u.DisplayName,
-                                                   IsVerified = u.IsVerified,
-                                                   AvatarUrl = u.AvatarUrl,
-                                               })
-                                               .FirstOrDefault(),
+                                             .Select(u => new
+                                             {
+                                                 Id = u.Id,
+                                                 Email = u.Email,
+                                                 Username = u.Username,
+                                                 DisplayName = u.DisplayName,
+                                                 IsVerified = u.IsVerified,
+                                                 AvatarUrl = u.AvatarUrl,
+                                             })
+                                             .FirstOrDefault(),
 
                     Medias = _dbContext.PostMedia.Where(m => m.PostId == p.Id)
                                          .Select(m => new { m.Id, m.MediaUrl, m.MediaType, CreatedAt = m.CreatedAt })
@@ -400,6 +409,7 @@ namespace Kpett.ChatApp.Services.Impls
                     CommentCount = _dbContext.Comments.Count(c => c.PostId == p.Id && c.DeletedAt == null),
                     IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == currentUserId)
                 })
+                .AsSplitQuery()
                 .ToListAsync(cancel);
 
             if (!rawData.Any())
@@ -416,7 +426,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             if (rawData.Count > limit)
             {
-                var lastItemInPage = rawData[limit - 1].Post;
+                var lastItemInPage = rawData[limit - 1];
                 nextCursor = CursorHelper.Encode(new BaseCursorPayload
                 {
                     Id = lastItemInPage.Id,
@@ -427,11 +437,11 @@ namespace Kpett.ChatApp.Services.Impls
 
             var mappedPosts = itemsToProcess.Select(data => new PostFeedResponse
             {
-                Id = data.Post.Id,
-                Content = data.Post.Content,
-                CreatedAt = data.Post.CreatedAt,
-                UpdatedAt = data.Post.UpdatedAt,
-                Privacy = data.Post.Privacy,
+                Id = data.Id,
+                Content = data.Content,
+                CreatedAt = data.CreatedAt,
+                UpdatedAt = data.UpdatedAt,
+                Privacy = data.Privacy,
 
                 Author = data.Author != null
             ? new UserResponse
@@ -443,7 +453,7 @@ namespace Kpett.ChatApp.Services.Impls
                 Email = data.Author.Email,
                 IsVerified = data.Author.IsVerified,
             }
-            : new UserResponse { Id = data.Post.CreatedByUserId, Username = "Unknown User" },
+            : new UserResponse { Id = data.CreatedByUserId, Username = "Unknown User" },
 
                 Media = data.Medias
                 .OrderBy(m => m.CreatedAt)
@@ -462,15 +472,15 @@ namespace Kpett.ChatApp.Services.Impls
 
                 ViewerContext = new PostViewerContextResponse
                 {
-                    IsOwner = data.Post.CreatedByUserId == currentUserId,
+                    IsOwner = data.CreatedByUserId == currentUserId,
                     IsLiked = data.IsLiked,
                     IsSaved = false,
                     IsPinned = false,
-                    CanEdit = data.Post.CreatedByUserId == currentUserId,
-                    CanDelete = data.Post.CreatedByUserId == currentUserId,
+                    CanEdit = data.CreatedByUserId == currentUserId,
+                    CanDelete = data.CreatedByUserId == currentUserId,
                     CanLike = true,
                     CanComment = true,
-                    CanPin = data.Post.CreatedByUserId == currentUserId
+                    CanPin = data.CreatedByUserId == currentUserId
                 },
             }).ToList();
 

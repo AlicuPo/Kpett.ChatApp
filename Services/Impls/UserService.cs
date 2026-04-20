@@ -20,6 +20,40 @@ namespace Kpett.ChatApp.Services.Impls
             _redisService = redisService;
         }
 
+        public async Task<UserProfileResponse> GetMyInfo(string userId, CancellationToken cancel)
+        {
+            var user = await _dbcontext.Users
+                .AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => new UserProfileResponse
+                {
+                    Id = u.Id,
+                    Username = u.Username,
+                    DisplayName = u.DisplayName,
+                    AvatarUrl = u.AvatarUrl,
+                    IsVerified = u.IsVerified,
+                    DayOfBirth = u.DateOfBirth,
+                    Biography = u.Biography,
+                    Occupation = u.Occupation,
+                    Location = u.Location,
+                    CoverUrl = u.CoverUrl,
+                    CreatedAt = u.CreatedAt
+                })
+                .FirstOrDefaultAsync(cancel);
+            if (user == null)
+            {
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
+            }
+
+            user.ViewerContext = new ProfileViewerContext 
+            { 
+                IsOwner = user.Id == userId,
+            };
+
+
+            return user;
+        }
+
         public async Task<UserResponse> inforUser(UserRequest Request, CancellationToken cancel)
         {
             if (Request.Id == null)
@@ -197,7 +231,7 @@ namespace Kpett.ChatApp.Services.Impls
                     IsVerified = u.IsVerified,
                     IsProfileCompleted = !string.IsNullOrEmpty(u.Username) && !string.IsNullOrEmpty(u.DisplayName),
 
-                    TotalPosts = _dbcontext.UserFeeds.Count(p => p.UserId == u.Id),
+                    TotalPosts = _dbcontext.Posts.Count(p => p.CreatedByUserId == u.Id && p.IsDeleted == false),
 
                     Followers = _dbcontext.Follows.Count(f => f.FolloweeId == u.Id),
 
@@ -215,7 +249,7 @@ namespace Kpett.ChatApp.Services.Impls
             return userStats;
         }
 
-        public async Task<UserProfileResponse> GetUserProfileAsync(string targetUsername, string currentUserId, CancellationToken cancel)
+        public async Task<UserProfileResponse> GetUserProfileAsync(string targetUsername, string? currentUserId, CancellationToken cancel)
         {
             string pendingStatus = FriendRequestStatus.Pending.ToString();
             bool isGuest = string.IsNullOrEmpty(currentUserId);
@@ -243,7 +277,7 @@ namespace Kpett.ChatApp.Services.Impls
                         {
                             User = u,
 
-                            TotalPosts = _dbcontext.Posts.Count(p => p.CreatedByUserId == u.Id),
+                            TotalPosts = _dbcontext.Posts.Count(p => p.CreatedByUserId == u.Id && p.IsDeleted == false),
                             Followers = _dbcontext.Follows.Count(f => f.FolloweeId == u.Id),
                             Following = _dbcontext.Follows.Count(f => f.FollowerId == u.Id),
                             Friends = _dbcontext.Friendships.Count(f => f.UserLowId == u.Id || f.UserHighId == u.Id),
@@ -274,7 +308,7 @@ namespace Kpett.ChatApp.Services.Impls
                 IsProfileCompleted = true,
 
                 Biography = result.User.Biography,
-                Cocupation = result.User.Occupation,
+                Occupation = result.User.Occupation,
                 Location = result.User.Location,
                 CoverUrl = result.User.CoverUrl,
                 CreatedAt = result.User.CreatedAt,

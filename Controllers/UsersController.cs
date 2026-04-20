@@ -1,20 +1,15 @@
 using Kpett.ChatApp.DTOs.Request.User;
-using Kpett.ChatApp.DTOs.Request.Shared;
-using Kpett.ChatApp.DTOs.Response.Post;
-using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Kpett.ChatApp.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize]
     public class UsersController : ControllerBase
     {
         private readonly IUserService _userService;
@@ -26,8 +21,23 @@ namespace Kpett.ChatApp.Controllers
             _postFeedService = postFeedService;
         }
 
+        [HttpGet("me")]
+        [Authorize]
+        public async Task<ActionResult<GeneralResponse<UserProfileResponse>>> GetMyInfo(CancellationToken cancel = default)
+        {
+            var userId = User.GetRequiredUserId();
+            var myInfo = await _userService.GetMyInfo(userId, cancel);
+            return Ok(new GeneralResponse<UserProfileResponse>
+            {
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Get my info successfully",
+                IsSuccess = true,
+                Data = myInfo
+            });
+        }
+
         [HttpPost("inforUser")]
-        public async Task<IActionResult> GetAllUser(UserRequest usercurrent, CancellationToken cancel = default)
+        public async Task<ActionResult<GeneralResponse<UserResponse>>> GetAllUser(UserRequest usercurrent, CancellationToken cancel = default)
         {
             usercurrent.Id ??= User.GetRequiredUserId();
             var inforUser = await _userService.inforUser(usercurrent, cancel);
@@ -55,7 +65,6 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        [AllowAnonymous]
         [HttpGet("{id}")]
         public async Task<ActionResult<UserResponse>> GetUserById(string id, CancellationToken cancel = default)
         {
@@ -108,6 +117,7 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpPost("account-setup")]
+        [Authorize]
         public async Task<IActionResult> AccountSetup([FromBody] AccountSetupRequest accountSetupRequest, CancellationToken cancel = default)
         {
             var result = await _userService.AccountSetup(User.GetRequiredUserId(), accountSetupRequest, cancel);
@@ -122,6 +132,7 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpGet("me/stats")]
+        [Authorize]
         public async Task<IActionResult> GetMyStats(CancellationToken cancel = default)
         {
             var result = await _userService.GetUserStatsAsync(User.GetRequiredUserId(), cancel);
@@ -135,7 +146,22 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        [HttpGet("profile/{username}/guest")]
+        public async Task<IActionResult> GetUserProfileByGuest(string username, CancellationToken cancel = default)
+        {
+            var result = await _userService.GetUserProfileAsync(username, null, cancel);
+
+            return Ok(new GeneralResponse<UserProfileResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Get user profile by guest successfully",
+                Data = result
+            });
+        }
+
         [HttpGet("profile/{username}")]
+        [Authorize]
         public async Task<IActionResult> GetUserProfile(string username, CancellationToken cancel = default)
         {
             var result = await _userService.GetUserProfileAsync(username, User.GetRequiredUserId() ,cancel);

@@ -13,7 +13,6 @@ using System.Net;
 namespace Kpett.ChatApp.Controllers
 {
     [Route("api/[controller]")]
-    [Authorize]
     public class PostsController : ControllerBase
     {
         private readonly IPostService _postService;
@@ -26,6 +25,7 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpPost]
+        [Authorize]
         public async Task<ActionResult> CreatePost([FromBody] PostRequest postRequest, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
@@ -40,6 +40,7 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpPut("{postId}")]
+        [Authorize]
         public async Task<ActionResult> UpdatePost(string postId, [FromBody] PostRequest postRequest, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
@@ -54,7 +55,7 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult> GetPostFeed(
+        public async Task<ActionResult<GeneralResponse<PaginatedData<PostFeedResponse>>>> GetPostFeed(
             [FromQuery] string? cursor = null,
             [FromQuery] int limit = 10,
             CancellationToken cancel = default)
@@ -107,6 +108,7 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpDelete("{postId}")]
+        [Authorize]
         public async Task<IActionResult> DeletePost(string postId, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
@@ -120,6 +122,7 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpDelete("media/{publicId}")]
+        [Authorize]
         public async Task<IActionResult> DeleteMedia(string publicId, [FromQuery] string resourceType)
         {
             await _postService.DeleteMedia(publicId, resourceType);
@@ -133,6 +136,7 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpPut("{postId}/reactions/me")]
+        [Authorize]
         public async Task<ActionResult> UpsertReaction(string postId, [FromBody] UpsertReactionRequest request, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
@@ -141,6 +145,7 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpDelete("{postId}/reactions/me")]
+        [Authorize]
         public async Task<IActionResult> RemoveReaction(string postId, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
