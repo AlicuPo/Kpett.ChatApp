@@ -332,7 +332,6 @@ namespace Kpett.ChatApp.Services.Impls
                     link.FriendedAt,
                     user.Username,
                     user.DisplayName,
-                    user.AvatarUrl,
                     user.IsVerified
                 };
 
@@ -371,7 +370,6 @@ namespace Kpett.ChatApp.Services.Impls
                     Id = friend.FriendId,
                     Username = friend.Username,
                     DisplayName = friend.DisplayName,
-                    AvatarUrl = friend.AvatarUrl,
                     IsVerified = friend.IsVerified,
                     FriendedAt = friend.FriendedAt == DateTime.MinValue ? null : friend.FriendedAt,
                     IsOnline = onlineStatuses.TryGetValue(friend.FriendId, out var isOnline) && isOnline

@@ -46,7 +46,6 @@ public class AuthService : IAuthService
                 Username = u.Username,
                 Email = u.Email,
                 DisplayName = u.DisplayName,
-                AvatarUrl = u.AvatarUrl,
                 Password = u.Password,
                 IsActive = u.IsActive,
                 IsVerified = u.IsVerified
@@ -73,7 +72,6 @@ public class AuthService : IAuthService
             Username = user.Username,
             Email = user.Email,
             DisplayName = user.DisplayName,
-            AvatarUrl = user.AvatarUrl,
             IsVerified = user.IsVerified,
             IsProfileCompleted = !string.IsNullOrEmpty(user.DisplayName) && !string.IsNullOrEmpty(user.Username),
             CreatedAt = DateTime.UtcNow
@@ -169,7 +167,7 @@ public class AuthService : IAuthService
                 }
             }
 
-            await _redis.BlacklistRefreshTokenAsync(logoutRequest.RefreshToken, refreshRemainTtl);        
+            await _redis.BlacklistRefreshTokenAsync(logoutRequest.RefreshToken, refreshRemainTtl);
         }
 
         return true;
@@ -208,12 +206,12 @@ public class AuthService : IAuthService
 
         var email = principal.FindFirst(ClaimTypes.Email)?.Value;
 
-                if(string.IsNullOrEmpty(email))
+        if (string.IsNullOrEmpty(email))
         {
             throw new UnauthorizedException(ErrorCodes.AUTH.REFRESH_TOKEN_INVALID, "Invalid refresh token");
         }
 
-        if(await _redis.IsRefreshTokenBlacklistedAsync(request.RefreshToken))
+        if (await _redis.IsRefreshTokenBlacklistedAsync(request.RefreshToken))
         {
             throw new UnauthorizedException(ErrorCodes.AUTH.REFRESH_TOKEN_INVALID, "Token in black list");
         }

@@ -54,6 +54,7 @@ public partial class AppDbContext : DbContext
     public virtual DbSet<PostReactionType> PostReactionTypes { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
+    public virtual DbSet<UserMedia> UserMedias { get; set; }
 
     public virtual DbSet<UserDevice> UserDevices { get; set; }
 
@@ -89,6 +90,7 @@ public partial class AppDbContext : DbContext
         modelBuilder.Entity<UserDevice>().HasKey(e => e.Id);
         modelBuilder.Entity<UserFeed>().HasKey(e => e.Id);
         modelBuilder.Entity<UserSetting>().HasKey(e => e.Id);
+        modelBuilder.Entity<UserMedia>().HasKey(e => e.Id);
 
         // Các bảng dùng khóa đặc thù hoặc khóa phức hợp (Composite Key)
         modelBuilder.Entity<MessageDetail>().HasKey(e => e.MessageId);

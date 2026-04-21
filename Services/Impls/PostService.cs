@@ -24,6 +24,8 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly IRealtimeService _realtimeService;
         private readonly INotificationService _notificationService;
         private readonly IMediaService _mediaService;
+
+        private readonly string avatarType = UserMediaType.Avatar.GetDescription();
         public PostService(AppDbContext dbContext, IRealtimeService realtimeService, INotificationService notificationService, IMediaService mediaService)
         {
             _dbContext = dbContext;
@@ -49,7 +51,6 @@ namespace Kpett.ChatApp.Services.Impls
                     Username = u.Username,
                     DisplayName = u.DisplayName,
                     IsVerified = u.IsVerified,
-                    AvatarUrl = u.AvatarUrl,
                 })
                 .FirstOrDefaultAsync(cancel);
 
@@ -114,7 +115,6 @@ namespace Kpett.ChatApp.Services.Impls
                     Username = u.Username,
                     DisplayName = u.DisplayName,
                     IsVerified = u.IsVerified,
-                    AvatarUrl = u.AvatarUrl,
                 })
                 .FirstOrDefaultAsync(cancel);
 
@@ -185,8 +185,11 @@ namespace Kpett.ChatApp.Services.Impls
                                                  Email = u.Email,
                                                  Username = u.Username,
                                                  DisplayName = u.DisplayName,
+                                                 AvatarUrl = _dbContext.UserMedias
+                                                            .Where(um => um.UserId == u.Id && um.MediaType == avatarType && um.IsPrimary)
+                                                            .Select(um => um.MediaUrl)
+                                                            .FirstOrDefault(),
                                                  IsVerified = u.IsVerified,
-                                                 AvatarUrl = u.AvatarUrl,
                                              })
                                              .FirstOrDefault(),
 
@@ -276,8 +279,11 @@ namespace Kpett.ChatApp.Services.Impls
                                                  Email = u.Email,
                                                  Username = u.Username,
                                                  DisplayName = u.DisplayName,
+                                                 AvatarUrl = _dbContext.UserMedias
+                                                            .Where(um => um.UserId == u.Id && um.MediaType == avatarType && um.IsPrimary)
+                                                            .Select(um => um.MediaUrl)
+                                                            .FirstOrDefault(),
                                                  IsVerified = u.IsVerified,
-                                                 AvatarUrl = u.AvatarUrl,
                                              })
                                              .FirstOrDefault(),
 
@@ -330,7 +336,7 @@ namespace Kpett.ChatApp.Services.Impls
                 fetchedPosts = fetchedPosts.Take(limit).ToList();
             }
 
-            foreach(var post in fetchedPosts)
+            foreach (var post in fetchedPosts)
             {
                 post.CreatedAt = post.CreatedAt.ToUtc();
                 post.UpdatedAt = post.UpdatedAt?.ToUtc();
@@ -366,8 +372,11 @@ namespace Kpett.ChatApp.Services.Impls
                     Email = u.Email,
                     Username = u.Username,
                     DisplayName = u.DisplayName,
+                    AvatarUrl = _dbContext.UserMedias
+                        .Where(um => um.UserId == u.Id && um.MediaType == avatarType && um.IsPrimary)
+                        .Select(um => um.MediaUrl)
+                        .FirstOrDefault(),
                     IsVerified = u.IsVerified,
-                    AvatarUrl = u.AvatarUrl,
                 })
                 .FirstOrDefaultAsync(cancel);
 

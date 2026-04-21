@@ -325,7 +325,7 @@ namespace Kpett.ChatApp.Services.Impls
                 new List<CommentDTO>());
         }
 
-        private async Task<Dictionary<string, List<CommentMentionDTO>>> GetCommentMentionsLookupAsync(IReadOnlyCollection<string> commentIds,CancellationToken cancel)
+        private async Task<Dictionary<string, List<CommentMentionDTO>>> GetCommentMentionsLookupAsync(IReadOnlyCollection<string> commentIds, CancellationToken cancel)
         {
             if (commentIds.Count == 0)
             {
@@ -418,7 +418,6 @@ namespace Kpett.ChatApp.Services.Impls
                     Id = userInfo.Id,
                     Username = userInfo.Username,
                     DisplayName = userInfo.DisplayName,
-                    AvatarUrl = userInfo.AvatarUrl,
                     IsVerified = userInfo.IsVerified
                 },
                 Content = comment.Content,
@@ -594,7 +593,6 @@ namespace Kpett.ChatApp.Services.Impls
                 PostId = comment.PostId,
                 UserId = comment.UserId,
                 UserName = userInfo?.DisplayName ?? userInfo?.Username ?? "Anonymous",
-                UserAvatar = userInfo?.AvatarUrl,
                 Content = comment.Content,
                 ParentCommentId = comment.ParentCommentId,
                 LikeCount = comment.LikeCount,

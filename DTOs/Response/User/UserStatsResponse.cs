@@ -1,6 +1,6 @@
 ﻿namespace Kpett.ChatApp.DTOs.Response.User
 {
-    public class UserStatsResponse: UserResponse
+    public class UserStatsResponse
     {
         public int TotalPosts { get; set; }
         public int Followers { get; set; }

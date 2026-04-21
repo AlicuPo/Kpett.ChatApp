@@ -20,8 +20,6 @@ public partial class User
     public bool? PhoneConfirmed { get; set; }
     public string Password { get; set; } = null!;
     public string? DisplayName { get; set; }
-    public string? AvatarUrl { get; set; }
-    public string? CoverUrl { get; set; }
     public string? Biography { get; set; }
     public string? Location { get; set; }
     public DateTime? DateOfBirth { get; set; }

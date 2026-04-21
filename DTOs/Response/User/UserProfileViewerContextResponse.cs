@@ -1,6 +1,6 @@
 ﻿namespace Kpett.ChatApp.DTOs.Response.User
 {
-    public class ProfileViewerContext
+    public class UserProfileViewerContextResponse
     {
         public bool IsOwner { get; set; }
         public bool IsFriend { get; set; }

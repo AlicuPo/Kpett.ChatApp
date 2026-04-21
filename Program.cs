@@ -156,7 +156,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     Message = errorMessage
                 };
 
-                await context.Response.WriteAsync(JsonSerializer.Serialize(errorResponse));
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    DictionaryKeyPolicy = JsonNamingPolicy.CamelCase 
+                };
+
+                await context.Response.WriteAsync(JsonSerializer.Serialize(errorResponse, jsonOptions));
             },
 
             OnForbidden = async context =>

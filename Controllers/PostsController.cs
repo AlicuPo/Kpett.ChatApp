@@ -2,13 +2,13 @@ using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Request.Shared;
 using Kpett.ChatApp.DTOs.Response.Post;
 using Kpett.ChatApp.DTOs.Response.Shared;
+using Kpett.ChatApp.Filters;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System.Net;
+using System.Security.Claims;
 
 namespace Kpett.ChatApp.Controllers
 {
@@ -16,12 +16,10 @@ namespace Kpett.ChatApp.Controllers
     public class PostsController : ControllerBase
     {
         private readonly IPostService _postService;
-        private readonly AppDbContext _context;
 
-        public PostsController(IPostService postFeedService, AppDbContext context)
+        public PostsController(IPostService postFeedService)
         {
             _postService = postFeedService;
-            _context = context;
         }
 
         [HttpPost]
@@ -55,14 +53,15 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpGet]
+        [OptionalAuthorize]
         public async Task<ActionResult<GeneralResponse<PaginatedData<PostFeedResponse>>>> GetPostFeed(
             [FromQuery] string? cursor = null,
             [FromQuery] int limit = 10,
             CancellationToken cancel = default)
         {
-            var userId = User.GetRequiredUserId();
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            var result = await _postService.GetFeedAsync(userId, cursor, limit, cancel);
+            var result = await _postService.GetFeedAsync(currentUserId, cursor, limit, cancel);
 
             return Ok(new GeneralResponse<PaginatedData<PostFeedResponse>>
             {
@@ -74,13 +73,14 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpGet("users/{userId}")]
+        [OptionalAuthorize]
         public async Task<ActionResult> GetUserPosts(
             string userId,
             [FromQuery] SearchRequest searchRequest,
             [FromQuery] CursorPaginationRequest cursorPagination,
             CancellationToken cancel = default)
         {
-            var currentUserId = User.GetRequiredUserId();
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             var result = await _postService.GetPostsByUserIdAsync(userId, currentUserId, searchRequest, cursorPagination, cancel);
 
@@ -94,6 +94,7 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpGet("{postId}")]
+        [Authorize]
         public async Task<ActionResult> GetPost(string postId, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();

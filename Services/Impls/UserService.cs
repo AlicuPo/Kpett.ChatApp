@@ -3,6 +3,8 @@ using Kpett.ChatApp.DTOs.Request.User;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
+using Kpett.ChatApp.Extentions;
+using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -14,29 +16,32 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly AppDbContext _dbcontext;
         private readonly IRedisService _redisService;
 
+        private readonly string avatarType = UserMediaType.Avatar.GetDescription();
         public UserService(AppDbContext dbContext, IRedisService redisService)
         {
             _dbcontext = dbContext;
             _redisService = redisService;
         }
 
-        public async Task<UserProfileResponse> GetMyInfo(string userId, CancellationToken cancel)
+        public async Task<UserGeneralInfoResponse> GetMyGeneralInfo(string userId, CancellationToken cancel)
         {
             var user = await _dbcontext.Users
                 .AsNoTracking()
                 .Where(u => u.Id == userId)
-                .Select(u => new UserProfileResponse
+                .Select(u => new UserGeneralInfoResponse
                 {
                     Id = u.Id,
                     Username = u.Username,
                     DisplayName = u.DisplayName,
-                    AvatarUrl = u.AvatarUrl,
                     IsVerified = u.IsVerified,
-                    DayOfBirth = u.DateOfBirth,
+                    AvatarUrl = _dbcontext.UserMedias
+                                .Where(um => um.UserId == u.Id && um.MediaType == avatarType && um.IsPrimary)
+                                .Select(um => um.MediaUrl)
+                                .FirstOrDefault(),
+                    DateOfBirth = u.DateOfBirth,
                     Biography = u.Biography,
                     Occupation = u.Occupation,
                     Location = u.Location,
-                    CoverUrl = u.CoverUrl,
                     CreatedAt = u.CreatedAt
                 })
                 .FirstOrDefaultAsync(cancel);
@@ -45,37 +50,12 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
-            user.ViewerContext = new ProfileViewerContext 
-            { 
-                IsOwner = user.Id == userId,
-            };
-
+            if (user.Id != userId)
+            {
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You can only access your own profile.");
+            }
 
             return user;
-        }
-
-        public async Task<UserResponse> inforUser(UserRequest Request, CancellationToken cancel)
-        {
-            if (Request.Id == null)
-            {
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Id cannot be null");
-            }
-
-            var user = await _dbcontext.Users.FindAsync(new object[] { Request.Id }, cancel);
-            if (user == null)
-            {
-                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
-            }
-
-            return new UserResponse
-            {
-                Id = user.Id,
-                Username = user.Username,
-                Email = user.Email,
-                DisplayName = user.DisplayName,
-                AvatarUrl = user.AvatarUrl,
-                CreatedAt = user.CreatedAt
-            };
         }
 
         public async Task<(List<UserResponse>, int)> GetAllUser(UserRequest search, CancellationToken cancel = default)
@@ -101,7 +81,10 @@ namespace Kpett.ChatApp.Services.Impls
                     Username = u.Username,
                     Email = u.Email,
                     DisplayName = u.DisplayName,
-                    AvatarUrl = u.AvatarUrl,
+                    AvatarUrl = _dbcontext.UserMedias
+                                .Where(um => um.UserId == u.Id && um.MediaType == avatarType && um.IsPrimary)
+                                .Select(um => um.MediaUrl)
+                                .FirstOrDefault(),
                     CreatedAt = u.CreatedAt
                 })
                 .ToListAsync(cancel);
@@ -109,36 +92,53 @@ namespace Kpett.ChatApp.Services.Impls
             return (users, totalCount);
         }
 
-        public async Task<UserResponse> UpdateUser(string id, string currentUserId, UpdateUserRequest request, CancellationToken cancel)
+        public async Task<UserGeneralInfoResponse> UpdateUserGeneralInfo(string currentUserId, UpdateGeneralInfoUserRequest request, CancellationToken cancel)
         {
-            if (id != currentUserId)
+            if (string.IsNullOrEmpty(request.Username))
             {
-                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You can only update your own profile.");
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Username is required");
             }
 
-            var user = await _dbcontext.Users.FindAsync(new object[] { id }, cancel);
+            if (string.IsNullOrEmpty(request.DisplayName))
+            {
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "DisplayName is required");
+            }
+
+            var user = await _dbcontext.Users.FirstOrDefaultAsync(u => u.Id == currentUserId, cancel);
             if (user == null)
             {
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
-            if (!string.IsNullOrEmpty(request.DisplayName)) user.DisplayName = request.DisplayName;
-            if (!string.IsNullOrEmpty(request.AvatarUrl)) user.AvatarUrl = request.AvatarUrl;
-            if (!string.IsNullOrEmpty(request.Phone)) user.Phone = request.Phone;
-            if (!string.IsNullOrEmpty(request.Gender)) user.Gender = request.Gender;
+            if (request.Username != user.Username)
+            {
+                if (await _dbcontext.Users.AnyAsync(u => u.Username == request.Username && u.Id != currentUserId, cancel))
+                {
+                    throw new BadRequestException(ErrorCodes.USER.USERNAME_TAKEN, "Username is already taken");
+                }
+                user.Username = request.Username;
+            }
 
+            user.DisplayName = request.DisplayName;
+            user.Occupation = request.Occupation;
+            user.Location = request.Location;
+            user.Biography = request.Biography;
+            user.DateOfBirth = request.DateOfBirth;
             user.UpdatedAt = DateTime.UtcNow;
 
-            await _dbcontext.SaveChangesAsync(cancel);
+            await _dbcontext.SaveChangesAsync();
 
-            return new UserResponse
+            return new UserGeneralInfoResponse
             {
                 Id = user.Id,
                 Username = user.Username,
-                Email = user.Email,
                 DisplayName = user.DisplayName,
-                AvatarUrl = user.AvatarUrl,
-                CreatedAt = user.CreatedAt
+                Occupation = user.Occupation,
+                Location = user.Location,
+                DateOfBirth = user.DateOfBirth,
+                Biography = user.Biography,
+                CreatedAt = user.CreatedAt.ToUtc(),
+                UpdatedAt = user.UpdatedAt?.ToUtc()
             };
         }
 
@@ -209,33 +209,40 @@ namespace Kpett.ChatApp.Services.Impls
                 Username = user.Username,
                 Email = user.Email!,
                 DisplayName = user.DisplayName,
-                AvatarUrl = user.AvatarUrl,
                 IsVerified = user.IsVerified,
                 IsProfileCompleted = true,
+                AvatarUrl = _dbcontext.UserMedias
+                            .Where(um => um.UserId == user.Id && um.MediaType == avatarType && um.IsPrimary)
+                            .Select(um => um.MediaUrl)
+                            .FirstOrDefault(),
                 CreatedAt = user.CreatedAt
             };
         }
 
-        public async Task<UserStatsResponse> GetUserStatsAsync(string userId, CancellationToken cancel)
+        public async Task<UserWithStatResponse> GetUserStatsAsync(string userId, CancellationToken cancel)
         {
             var userStats = await _dbcontext.Users
                 .AsNoTracking()
                 .Where(u => u.Id == userId)
-                .Select(u => new UserStatsResponse
+                .Select(u => new UserWithStatResponse
                 {
                     Id = u.Id,
                     Username = u.Username,
                     DisplayName = u.DisplayName,
-                    AvatarUrl = u.AvatarUrl,
                     Email = u.Email!,
                     IsVerified = u.IsVerified,
                     IsProfileCompleted = !string.IsNullOrEmpty(u.Username) && !string.IsNullOrEmpty(u.DisplayName),
-
-                    TotalPosts = _dbcontext.Posts.Count(p => p.CreatedByUserId == u.Id && p.IsDeleted == false),
-
-                    Followers = _dbcontext.Follows.Count(f => f.FolloweeId == u.Id),
-
-                    Following = _dbcontext.Follows.Count(f => f.FollowerId == u.Id),
+                    AvatarUrl = _dbcontext.UserMedias
+                                .Where(um => um.UserId == u.Id && um.MediaType == avatarType && um.IsPrimary)
+                                .Select(um => um.MediaUrl)
+                                .FirstOrDefault(),
+                    Stats = new UserStatsResponse
+                    {
+                        TotalPosts = _dbcontext.Posts.Count(p => p.CreatedByUserId == u.Id && p.IsDeleted == false),
+                        Followers = _dbcontext.Follows.Count(f => f.FolloweeId == u.Id),
+                        Following = _dbcontext.Follows.Count(f => f.FollowerId == u.Id),
+                        Friends = _dbcontext.Friendships.Count(f => f.UserLowId == u.Id || f.UserHighId == u.Id)
+                    },
 
                     CreatedAt = u.CreatedAt,
                 })
@@ -246,72 +253,87 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
+            userStats.CreatedAt = userStats.CreatedAt.ToUtc();
+
             return userStats;
         }
 
         public async Task<UserProfileResponse> GetUserProfileAsync(string targetUsername, string? currentUserId, CancellationToken cancel)
         {
-            string pendingStatus = FriendRequestStatus.Pending.ToString();
             bool isGuest = string.IsNullOrEmpty(currentUserId);
 
-            var query = from u in _dbcontext.Users.AsNoTracking()
-                        where u.Username == targetUsername && u.Email != null && u.Username != null
+            string pendingStatus = FriendRequestStatus.Pending.ToString();
 
-                        let isFriend = !isGuest && _dbcontext.Friendships.Any(f =>
-                            (f.UserLowId == currentUserId && f.UserHighId == u.Id) ||
-                            (f.UserLowId == u.Id && f.UserHighId == currentUserId))
-
-                        let isBlocked = !isGuest && _dbcontext.Blocks.Any(b =>
-                            (b.BlockerId == currentUserId && b.BlockedId == u.Id) ||
-                            (b.BlockerId == u.Id && b.BlockedId == currentUserId))
-
-                        let pendingRequest = isGuest ? null : _dbcontext.FriendRequests
-                            .AsNoTracking()
-                            .Where(fr => fr.Status == pendingStatus &&
-                                ((fr.SenderId == currentUserId && fr.ReceiverId == u.Id) ||
-                                 (fr.SenderId == u.Id && fr.ReceiverId == currentUserId)))
-                            .Select(fr => new { fr.Id, fr.SenderId })
-                            .FirstOrDefault()
-
-                        select new
-                        {
-                            User = u,
-
-                            TotalPosts = _dbcontext.Posts.Count(p => p.CreatedByUserId == u.Id && p.IsDeleted == false),
-                            Followers = _dbcontext.Follows.Count(f => f.FolloweeId == u.Id),
-                            Following = _dbcontext.Follows.Count(f => f.FollowerId == u.Id),
-                            Friends = _dbcontext.Friendships.Count(f => f.UserLowId == u.Id || f.UserHighId == u.Id),
-
-                            IsFriend = isFriend,
-                            IsBlocked = isBlocked,
-                            IsFollowing = !isGuest && _dbcontext.Follows.Any(f => f.FollowerId == currentUserId && f.FolloweeId == u.Id),
-
-                            PendingRequestData = pendingRequest
-                        };
-
-            var result = await query
+            var query = _dbcontext.Users
                 .AsNoTracking()
-                .FirstOrDefaultAsync(cancel);
+                .Where(u => u.Username == targetUsername && u.Email != null)
+                .Select(u => new
+                {
+                    User = new
+                    {
+                        u.Id,
+                        u.Email,
+                        u.Username,
+                        u.DisplayName,
+                        u.IsVerified,
+                        u.Biography,
+                        u.Occupation,
+                        u.Location,
+                        u.CreatedAt
+                    },
+
+                    AvatarUrl = _dbcontext.UserMedias
+                        .Where(um => um.UserId == u.Id && um.MediaType == avatarType && um.IsPrimary)
+                        .Select(um => um.MediaUrl)
+                        .FirstOrDefault(),
+
+                    TotalPosts = _dbcontext.Posts.Count(p => p.CreatedByUserId == u.Id && !p.IsDeleted),
+                    Followers = _dbcontext.Follows.Count(f => f.FolloweeId == u.Id),
+                    Following = _dbcontext.Follows.Count(f => f.FollowerId == u.Id),
+                    Friends = _dbcontext.Friendships.Count(f => f.UserLowId == u.Id || f.UserHighId == u.Id),
+
+                    IsFriend = !isGuest && _dbcontext.Friendships.Any(f =>
+                        (f.UserLowId == currentUserId && f.UserHighId == u.Id) ||
+                        (f.UserLowId == u.Id && f.UserHighId == currentUserId)),
+
+                    IsBlocked = !isGuest && _dbcontext.Blocks.Any(b =>
+                        (b.BlockerId == currentUserId && b.BlockedId == u.Id) ||
+                        (b.BlockerId == u.Id && b.BlockedId == currentUserId)),
+
+                    IsFollowing = !isGuest && _dbcontext.Follows.Any(f =>
+                        f.FollowerId == currentUserId && f.FolloweeId == u.Id),
+
+                    PendingRequest = isGuest ? null : _dbcontext.FriendRequests
+                        .Where(fr => fr.Status == pendingStatus &&
+                            ((fr.SenderId == currentUserId && fr.ReceiverId == u.Id) ||
+                             (fr.SenderId == u.Id && fr.ReceiverId == currentUserId)))
+                        .Select(fr => new { fr.Id, fr.SenderId })
+                        .FirstOrDefault()
+                });
+
+            var result = await query.FirstOrDefaultAsync(cancel);
 
             if (result == null)
             {
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
+            bool isOnline = await _redisService.IsUserOnlineAsync(result.User.Id);
+
             return new UserProfileResponse
             {
                 Id = result.User.Id,
                 Username = result.User.Username,
                 DisplayName = result.User.DisplayName,
-                AvatarUrl = result.User.AvatarUrl,
                 IsVerified = result.User.IsVerified,
                 IsProfileCompleted = true,
 
                 Biography = result.User.Biography,
                 Occupation = result.User.Occupation,
                 Location = result.User.Location,
-                CoverUrl = result.User.CoverUrl,
                 CreatedAt = result.User.CreatedAt,
+
+                AvatarUrl = result.AvatarUrl,
 
                 Stats = new UserStatsResponse
                 {
@@ -321,7 +343,7 @@ namespace Kpett.ChatApp.Services.Impls
                     Friends = result.Friends
                 },
 
-                ViewerContext = isGuest ? new ProfileViewerContext
+                ViewerContext = isGuest ? new UserProfileViewerContextResponse
                 {
                     IsOwner = false,
                     IsFriend = false,
@@ -331,22 +353,19 @@ namespace Kpett.ChatApp.Services.Impls
                     HasReceivedFriendRequest = false,
                     IsBlocked = false,
                     CanMessage = false
-                } : new ProfileViewerContext
+                } : new UserProfileViewerContextResponse
                 {
                     IsOwner = result.User.Id == currentUserId,
                     IsFriend = result.IsFriend,
                     IsFollowing = result.IsFollowing,
                     IsBlocked = result.IsBlocked,
                     CanMessage = !result.IsBlocked,
-
-                    RelationshipRequestId = result.PendingRequestData?.Id,
-
-                    HasSentFriendRequest = result.PendingRequestData?.SenderId == currentUserId,
-
-                    HasReceivedFriendRequest = result.PendingRequestData?.SenderId == result.User.Id
+                    RelationshipRequestId = result.PendingRequest?.Id,
+                    HasSentFriendRequest = result.PendingRequest?.SenderId == currentUserId,
+                    HasReceivedFriendRequest = result.PendingRequest?.SenderId == result.User.Id
                 },
 
-                IsOnline = await _redisService.IsUserOnlineAsync(result.User.Id)
+                IsOnline = isOnline
             };
         }
     }
