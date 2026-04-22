@@ -11,6 +11,7 @@ namespace Kpett.ChatApp.Services.Interfaces
         Task<UserGeneralInfoResponse> GetMyGeneralInfo(string userId, CancellationToken cancel);
         Task<UserGeneralInfoResponse> UpdateUserGeneralInfo(string currentUserId, UpdateGeneralInfoUserRequest request, CancellationToken cancel);
         Task<UserMediaResponse> UpdateUserMedia(string currentUserId, MediaRequest media, string mediaType);
+        Task<bool> DeleteUserMediaPrimaryAsync(string currentUserId, string mediaType);
         Task<bool> DeleteUser(string id, string currentUserId, CancellationToken cancel);
         Task<UserResponse> AccountSetup(string userId, AccountSetupRequest accountSetupRequest, CancellationToken cancel);
         Task<UserWithStatResponse> GetUserStatsAsync(string userId, CancellationToken cancel);

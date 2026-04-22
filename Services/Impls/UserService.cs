@@ -18,7 +18,8 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly AppDbContext _dbcontext;
         private readonly IRedisService _redisService;
 
-        private readonly string avatarType = UserMediaType.Avatar.GetDescription();
+        private readonly string AVATAR_TYPE = UserMediaType.Avatar.GetDescription();
+        private readonly string COVER_TYPE = UserMediaType.Cover.GetDescription();
         public UserService(AppDbContext dbContext, IRedisService redisService)
         {
             _dbcontext = dbContext;
@@ -37,7 +38,11 @@ namespace Kpett.ChatApp.Services.Impls
                     DisplayName = u.DisplayName,
                     IsVerified = u.IsVerified,
                     AvatarUrl = _dbcontext.UserMedias
-                                .Where(um => um.UserId == u.Id && um.MediaType == avatarType && um.IsPrimary)
+                                .Where(um => um.UserId == u.Id && um.MediaType == AVATAR_TYPE && um.IsPrimary)
+                                .Select(um => um.MediaUrl)
+                                .FirstOrDefault(),
+                    CoverUrl = _dbcontext.UserMedias
+                                .Where(um => um.UserId == u.Id && um.MediaType == COVER_TYPE && um.IsPrimary)
                                 .Select(um => um.MediaUrl)
                                 .FirstOrDefault(),
                     DateOfBirth = u.DateOfBirth,
@@ -84,7 +89,7 @@ namespace Kpett.ChatApp.Services.Impls
                     Email = u.Email,
                     DisplayName = u.DisplayName,
                     AvatarUrl = _dbcontext.UserMedias
-                                .Where(um => um.UserId == u.Id && um.MediaType == avatarType && um.IsPrimary)
+                                .Where(um => um.UserId == u.Id && um.MediaType == AVATAR_TYPE && um.IsPrimary)
                                 .Select(um => um.MediaUrl)
                                 .FirstOrDefault(),
                     CreatedAt = u.CreatedAt
@@ -151,8 +156,8 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Media is not null");
             }
 
-            var currrentUserMediaPrimary = _dbcontext.UserMedias
-                .FirstOrDefault(um => um.UserId == currentUserId && um.IsPrimary && um.MediaType == mediaType);
+            var currrentUserMediaPrimary = await _dbcontext.UserMedias
+                .FirstOrDefaultAsync(um => um.UserId == currentUserId && um.IsPrimary && um.MediaType == mediaType);
             if (currrentUserMediaPrimary != null)
             {
                 currrentUserMediaPrimary.IsPrimary = false;
@@ -187,6 +192,32 @@ namespace Kpett.ChatApp.Services.Impls
                 CreatedAt = userMedia.CreatedAt.ToUtc(),
                 UpdatedAt = userMedia.UpdatedAt.ToUtc()
             };
+        }
+
+        public async Task<bool> DeleteUserMediaPrimaryAsync(string currentUserId, string mediaType)
+        {
+            if (_dbcontext.Users.AnyAsync(u => u.Id == currentUserId).Result == false)
+            {
+                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
+            }
+
+            var userMedia = await _dbcontext.UserMedias
+                .FirstOrDefaultAsync(um => um.UserId == currentUserId && um.IsPrimary && um.MediaType == mediaType);
+            if (userMedia == null)
+            {
+                throw new BadRequestException(ErrorCodes.MEDIA.NOT_FOUND, "Media not found or does not belong to the user");
+            }
+
+            if (userMedia.IsPrimary)
+            {
+                userMedia.IsPrimary = false;
+                userMedia.UpdatedAt = DateTime.UtcNow;
+
+                _dbcontext.UserMedias.Update(userMedia);
+                await _dbcontext.SaveChangesAsync();
+            }
+
+            return true;
         }
 
         public async Task<bool> DeleteUser(string id, string currentUserId, CancellationToken cancel)
@@ -259,7 +290,7 @@ namespace Kpett.ChatApp.Services.Impls
                 IsVerified = user.IsVerified,
                 IsProfileCompleted = true,
                 AvatarUrl = _dbcontext.UserMedias
-                            .Where(um => um.UserId == user.Id && um.MediaType == avatarType && um.IsPrimary)
+                            .Where(um => um.UserId == user.Id && um.MediaType == AVATAR_TYPE && um.IsPrimary)
                             .Select(um => um.MediaUrl)
                             .FirstOrDefault(),
                 CreatedAt = user.CreatedAt
@@ -280,7 +311,7 @@ namespace Kpett.ChatApp.Services.Impls
                     IsVerified = u.IsVerified,
                     IsProfileCompleted = !string.IsNullOrEmpty(u.Username) && !string.IsNullOrEmpty(u.DisplayName),
                     AvatarUrl = _dbcontext.UserMedias
-                                .Where(um => um.UserId == u.Id && um.MediaType == avatarType && um.IsPrimary)
+                                .Where(um => um.UserId == u.Id && um.MediaType == AVATAR_TYPE && um.IsPrimary)
                                 .Select(um => um.MediaUrl)
                                 .FirstOrDefault(),
                     Stats = new UserStatsResponse
@@ -330,9 +361,14 @@ namespace Kpett.ChatApp.Services.Impls
                     },
 
                     AvatarUrl = _dbcontext.UserMedias
-                        .Where(um => um.UserId == u.Id && um.MediaType == avatarType && um.IsPrimary)
-                        .Select(um => um.MediaUrl)
-                        .FirstOrDefault(),
+                                .Where(um => um.UserId == u.Id && um.MediaType == AVATAR_TYPE && um.IsPrimary)
+                                .Select(um => um.MediaUrl)
+                                .FirstOrDefault(),
+
+                    CoverUrl = _dbcontext.UserMedias
+                                .Where(um => um.UserId == u.Id && um.MediaType == COVER_TYPE && um.IsPrimary)
+                                .Select(um => um.MediaUrl)
+                                .FirstOrDefault(),
 
                     TotalPosts = _dbcontext.Posts.Count(p => p.CreatedByUserId == u.Id && !p.IsDeleted),
                     Followers = _dbcontext.Follows.Count(f => f.FolloweeId == u.Id),
@@ -381,6 +417,7 @@ namespace Kpett.ChatApp.Services.Impls
                 CreatedAt = result.User.CreatedAt,
 
                 AvatarUrl = result.AvatarUrl,
+                CoverUrl = result.CoverUrl,
 
                 Stats = new UserStatsResponse
                 {

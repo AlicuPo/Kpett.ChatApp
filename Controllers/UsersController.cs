@@ -67,6 +67,21 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+
+        [HttpDelete("me/media/primary")]
+        [Authorize]
+        public async Task<ActionResult<UserMediaResponse>> DeleteUserMedia([FromQuery] string mediaType)
+        {
+            var currentUserId = User.GetRequiredUserId();
+            var result = await _userService.DeleteUserMediaPrimaryAsync(currentUserId, mediaType);
+            return Ok(new GeneralResponse<UserMediaResponse>
+            {
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Delete user media primary successfully",
+                IsSuccess = result,
+            });
+        }
+
         [HttpDelete("DeleteUser/{id}")]
         public async Task<IActionResult> DeleteUser(string id, CancellationToken cancel = default)
         {
