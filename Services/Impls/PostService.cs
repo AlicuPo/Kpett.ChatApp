@@ -1,3 +1,4 @@
+using Hangfire;
 using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Request.Post;
@@ -13,7 +14,6 @@ using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Services.Interfaces;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Kpett.ChatApp.Services.Impls
@@ -85,6 +85,13 @@ namespace Kpett.ChatApp.Services.Impls
                 Type = m.Type
             }).ToList() ?? new List<MediaPostResponse>();
 
+            if (postRequest.Media != null && postRequest.Media.Any())
+            {
+                var publicIdsToConfirm = postRequest.Media.Select(m => m.PublicId).ToList();
+
+                BackgroundJob.Enqueue<IMediaService>(x => x.ConfirmMediaOnCloudinaryAsync(publicIdsToConfirm));
+            }
+
             return BuildPostResponse(newPost, user, mediaResponse, isLiked: false);
         }
 
@@ -135,6 +142,13 @@ namespace Kpett.ChatApp.Services.Impls
             await SyncPostMediaAsync(post.Id, postRequest.Media, cancel);
 
             await _dbContext.SaveChangesAsync(cancel);
+
+            if (postRequest.Media != null && postRequest.Media.Any())
+            {
+                var publicIdsToConfirm = postRequest.Media.Select(m => m.PublicId).ToList();
+
+                BackgroundJob.Enqueue<IMediaService>(x => x.ConfirmMediaOnCloudinaryAsync(publicIdsToConfirm));
+            }
 
             var allCurrentMedias = await _dbContext.PostMedia
                 .Where(m => m.PostId == post.Id && !m.IsTemporary)
@@ -599,32 +613,6 @@ namespace Kpett.ChatApp.Services.Impls
         }
 
         /// <summary>
-        /// Delete a media file
-        /// </summary>
-        public async Task DeleteMedia(string publicId, [FromQuery] string resourceType)
-        {
-            // Tìm ảnh trong DB và kiểm tra quyền sở hữu
-            var mediaRecord = await _dbContext.PostMedia.FirstOrDefaultAsync(m => m.Id == publicId);
-
-            if (mediaRecord == null)
-            {
-                throw new NotFoundException(ErrorCodes.MEDIA.NOT_FOUND, "File not found");
-            }
-
-            // Gọi Cloudinary SDK để xóa file thực tế trên mây
-            bool isDeletedFromCloud = await _mediaService.DeleteFileAsync(publicId, resourceType);
-
-            if (!isDeletedFromCloud)
-            {
-                throw new Exception("Không thể xóa file trên Cloudinary.");
-            }
-
-            // Xóa record trong Database
-            _dbContext.PostMedia.Remove(mediaRecord);
-            await _dbContext.SaveChangesAsync();
-        }
-
-        /// <summary>
         /// Add a reaction to a post
         /// </summary>
         public async Task<PostReactionDTO> AddReactionAsync(string postId, string userId, byte reactionType, CancellationToken cancel)
@@ -756,29 +744,50 @@ namespace Kpett.ChatApp.Services.Impls
         // Helper method to sync media with a post during creation or update
         private async Task SyncPostMediaAsync(string postId, IEnumerable<MediaRequest>? requestedMedia, CancellationToken cancel)
         {
-            if (requestedMedia == null || !requestedMedia.Any())
-                return;
+            // Lấy danh sách Media hiện tại từ DB
+            var currentMedias = await _dbContext.PostMedia
+                .Where(m => m.PostId == postId)
+                .ToListAsync(cancel);
 
-            var requestedMediaList = requestedMedia.ToList();
+            var requestedMediaList = requestedMedia?.ToList() ?? new List<MediaRequest>();
             var requestedMediaIds = requestedMediaList.Select(m => m.PublicId).ToList();
 
-            var mediasToUpdate = await _dbContext.PostMedia
-                .Where(m => requestedMediaIds.Contains(m.Id))
-                .ToListAsync(cancel);
+            // Tìm và xóa các media đã bị xóa trên client
+            var mediasToRemove = currentMedias
+                .Where(m => !requestedMediaIds.Contains(m.Id))
+                .ToList();
+
+            if (mediasToRemove.Any())
+            {
+                _dbContext.PostMedia.RemoveRange(mediasToRemove);
+            }
+
+            if (!requestedMediaList.Any())
+            {
+                return;
+            }
 
             foreach (var reqMedia in requestedMediaList)
             {
-                var targetMedia = mediasToUpdate.FirstOrDefault(m => m.Id == reqMedia.PublicId);
-                if (targetMedia != null)
+                var existingMedia = currentMedias.FirstOrDefault(m => m.Id == reqMedia.PublicId);
+
+                if (existingMedia == null)
                 {
-                    targetMedia.PostId = postId;
-                    targetMedia.MediaUrl = reqMedia.Url;
-                    targetMedia.IsTemporary = false;
-                    targetMedia.MediaType = reqMedia.Type;
+                    var newMedia = new PostMedia
+                    {
+                        Id = reqMedia.PublicId,
+                        PostId = postId,
+                        MediaUrl = reqMedia.Url,
+                        MediaType = reqMedia.Type,
+                        IsTemporary = false,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    await _dbContext.PostMedia.AddAsync(newMedia, cancel);
                 }
             }
         }
 
+        /// Hàm gọi lên Cloudinary để gỡ bỏ tag 'status_temp' và thêm tag 'active'
         // Helper method to build PostFeedResponse from Post entity
         private PostFeedResponse BuildPostResponse(Post post, UserResponse author, List<MediaPostResponse> mediaResponse, bool isLiked)
         {

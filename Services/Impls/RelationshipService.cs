@@ -325,6 +325,14 @@ namespace Kpett.ChatApp.Services.Impls
             var query =
                 from link in friendLinksQuery
                 join user in _context.Users.AsNoTracking() on link.FriendId equals user.Id
+
+                join userMedia in _context.UserMedias.AsNoTracking()
+                    .Where(m => m.IsPrimary == true && m.MediaType == UserMediaType.Avatar.GetDescription())
+                    on user.Id equals userMedia.UserId
+                    into mediaGroup
+
+                from media in mediaGroup.DefaultIfEmpty()
+
                 where user.IsActive
                 select new
                 {
@@ -332,7 +340,8 @@ namespace Kpett.ChatApp.Services.Impls
                     link.FriendedAt,
                     user.Username,
                     user.DisplayName,
-                    user.IsVerified
+                    user.IsVerified,
+                    AvatarUrl = media != null ? media.MediaUrl : null
                 };
 
             if (!string.IsNullOrWhiteSpace(normalizedSearch))
@@ -371,6 +380,7 @@ namespace Kpett.ChatApp.Services.Impls
                     Username = friend.Username,
                     DisplayName = friend.DisplayName,
                     IsVerified = friend.IsVerified,
+                    AvatarUrl = friend.AvatarUrl,
                     FriendedAt = friend.FriendedAt == DateTime.MinValue ? null : friend.FriendedAt,
                     IsOnline = onlineStatuses.TryGetValue(friend.FriendId, out var isOnline) && isOnline
                 })

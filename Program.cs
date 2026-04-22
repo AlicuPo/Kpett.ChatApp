@@ -1,10 +1,10 @@
 using CloudinaryDotNet;
+using Hangfire;
 using Kpett.ChatApp.Configs;
 using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Hubs;
-using Kpett.ChatApp.Middlewares;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Options;
 using Kpett.ChatApp.Receive;
@@ -47,6 +47,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSignalR();
 
+//Configure DbContext with SQL Server
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("KpettChatAppDb")));
 
@@ -68,6 +69,16 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 
     return ConnectionMultiplexer.Connect(configuration);
 });
+
+// Configure Hangfire
+builder.Services.AddHangfire(config => config
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UseSqlServerStorage(builder.Configuration.GetConnectionString("KpettChatAppDb")));
+
+// Add the Hangfire server to process background jobs
+builder.Services.AddHangfireServer();
 
 var account = new Account(
     builder.Configuration["CloudinarySettings:CloudName"],
@@ -159,7 +170,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var jsonOptions = new JsonSerializerOptions
                 {
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    DictionaryKeyPolicy = JsonNamingPolicy.CamelCase 
+                    DictionaryKeyPolicy = JsonNamingPolicy.CamelCase
                 };
 
                 await context.Response.WriteAsync(JsonSerializer.Serialize(errorResponse, jsonOptions));
@@ -219,6 +230,16 @@ app.UseRouting();
 app.UseCors("ClientCors");
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Enable Hangfire Dashboard (optional, for monitoring background jobs)
+app.UseHangfireDashboard();
+
+// Schedule a recurring job to clean up orphaned images daily at 2 AM
+RecurringJob.AddOrUpdate<IMediaService>(
+    "cleanup-temp-images",
+    service => service.CleanUpOrphanedImagesAsync(),
+    Cron.Daily(2)
+);
 
 if (app.Environment.IsDevelopment())
 {

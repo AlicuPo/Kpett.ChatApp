@@ -1,4 +1,6 @@
+using Hangfire;
 using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Request.User;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
@@ -139,6 +141,51 @@ namespace Kpett.ChatApp.Services.Impls
                 Biography = user.Biography,
                 CreatedAt = user.CreatedAt.ToUtc(),
                 UpdatedAt = user.UpdatedAt?.ToUtc()
+            };
+        }
+
+        public async Task<UserMediaResponse> UpdateUserMedia(string currentUserId, MediaRequest media, string mediaType)
+        {
+            if (media == null)
+            {
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Media is not null");
+            }
+
+            var currrentUserMediaPrimary = _dbcontext.UserMedias
+                .FirstOrDefault(um => um.UserId == currentUserId && um.IsPrimary && um.MediaType == mediaType);
+            if (currrentUserMediaPrimary != null)
+            {
+                currrentUserMediaPrimary.IsPrimary = false;
+                currrentUserMediaPrimary.UpdatedAt = DateTime.UtcNow;
+                _dbcontext.UserMedias.Update(currrentUserMediaPrimary);
+            }
+
+            var userMedia = new UserMedia
+            {
+                Id = media.PublicId,
+                UserId = currentUserId,
+                IsPrimary = true,
+                MediaUrl = media.Url,
+                IsTemporary = false,
+                MediaType = mediaType,
+                MimeType = media.Type,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _dbcontext.UserMedias.AddAsync(userMedia);
+            await _dbcontext.SaveChangesAsync();
+
+            BackgroundJob.Enqueue<IMediaService>(e => e.ConfirmMediaOnCloudinaryAsync(new List<string> { userMedia.Id }));
+
+            return new UserMediaResponse
+            {
+                Id = userMedia.Id,
+                IsPrimary = userMedia.IsPrimary,
+                MediaType = userMedia.MediaType,
+                MimeType = userMedia.MediaType,
+                Url = userMedia.MediaUrl,
+                CreatedAt = userMedia.CreatedAt.ToUtc(),
+                UpdatedAt = userMedia.UpdatedAt.ToUtc()
             };
         }
 

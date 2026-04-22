@@ -57,7 +57,7 @@ namespace Kpett.ChatApp.Controllers
 
         }
 
-        // --- 4. XÓA FILE ---
+        // --- XÓA FILE ---
         [HttpDelete("delete")]
         public async Task<IActionResult> DeleteMedia([FromQuery] string publicId, [FromQuery] string resourceType)
         {

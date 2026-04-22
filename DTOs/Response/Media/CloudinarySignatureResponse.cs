@@ -10,5 +10,6 @@
         public string Folder { get; set; } = string.Empty;
         public string UploadUrl { get; set; } = string.Empty;
         public string NotificationUrl { get; set; } = string.Empty;
+        public string Tags { get; set; } = string.Empty;
     }
 }

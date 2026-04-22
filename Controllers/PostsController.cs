@@ -122,20 +122,6 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        [HttpDelete("media/{publicId}")]
-        [Authorize]
-        public async Task<IActionResult> DeleteMedia(string publicId, [FromQuery] string resourceType)
-        {
-            await _postService.DeleteMedia(publicId, resourceType);
-
-            return Ok(new GeneralResponse
-            {
-                IsSuccess = true,
-                Message = "Delete media successfully",
-                StatusCode = StatusCodes.Status200OK
-            });
-        }
-
         [HttpPut("{postId}/reactions/me")]
         [Authorize]
         public async Task<ActionResult> UpsertReaction(string postId, [FromBody] UpsertReactionRequest request, CancellationToken cancel)

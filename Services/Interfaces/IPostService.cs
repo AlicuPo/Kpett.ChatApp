@@ -15,10 +15,6 @@ namespace Kpett.ChatApp.Services.Interfaces
         Task<PaginatedData<PostFeedResponse>> GetFeedAsync(string? currentUserId, string? cursor = null, int limit = 10, CancellationToken cancel = default);
         Task<PaginatedData<PostThumbnailResponse>> GetPostsByUserIdAsync(string userId, string? currentUserId, SearchRequest request, CursorPaginationRequest cursorPagination, CancellationToken cancel = default);
         Task DeletePostAsync(string postId, string userId, CancellationToken cancel);
-
-        // Media operations
-        Task DeleteMedia(string publicId, [FromQuery] string resourceType);
-
         // Reaction operations
         Task<PostReactionDTO> AddReactionAsync(string postId, string userId, byte reactionType, CancellationToken cancel);
         Task RemoveReactionAsync(string postId, string userId, CancellationToken cancel);

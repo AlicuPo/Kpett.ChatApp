@@ -21,11 +21,13 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly CloudinaryOptions _cloudinarySettings;
         private readonly MediaOptions _mediaSettings;
         private readonly AppDbContext _context;
+        private readonly ILogger<MediaService> _logger;
 
         public MediaService(
             IOptions<CloudinaryOptions> cloudinaryConfig,
             IOptions<MediaOptions> mediaConfig,
-            AppDbContext context)
+            AppDbContext context,
+            ILogger<MediaService> logger)
         {
             var acc = new Account(
                 cloudinaryConfig.Value.CloudName,
@@ -39,6 +41,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             _mediaSettings = mediaConfig.Value;
             _context = context;
+            _logger = logger;
         }
 
         /// <summary>
@@ -54,24 +57,13 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 { "asset_folder", folder },
                 { "public_id", publicId },
+                { "tags", "status_temp" },
                 { "timestamp", timestamp },
             };
 
             string signature = _cloudinary.Api.SignParameters(parametersToSign);
 
             string uploadUrl = $"https://api.cloudinary.com/v1_1/{cloudName}/auto/upload";
-
-            var media = new PostMedia
-            {
-                Id = publicId,
-                MediaUrl = null,
-                MediaType = null,
-                IsTemporary = true,
-                CreatedAt = DateTime.Now,
-            };
-
-            await _context.PostMedia.AddAsync(media);
-            await _context.SaveChangesAsync();
 
             return new CloudinarySignatureResponse
             {
@@ -82,7 +74,39 @@ namespace Kpett.ChatApp.Services.Impls
                 CloudName = _cloudinary.Api.Account.Cloud,
                 ApiKey = _cloudinary.Api.Account.ApiKey,
                 UploadUrl = uploadUrl,
+                Tags = "status_temp"
             };
+        }
+
+        public async Task ConfirmMediaOnCloudinaryAsync(List<string> publicIds)
+        {
+            if (publicIds == null || !publicIds.Any())
+            {
+                return;
+            }
+
+            try
+            {
+                var removeTagParams = new TagParams()
+                {
+                    Command = TagCommand.Remove,
+                    Tag = "status_temp",
+                    PublicIds = publicIds
+                };
+                await _cloudinary.TagAsync(removeTagParams);
+
+                var addTagParams = new TagParams()
+                {
+                    Command = TagCommand.Add,
+                    Tag = "active",
+                    PublicIds = publicIds
+                };
+                await _cloudinary.TagAsync(addTagParams);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi confirm media trên Cloudinary cho các ID: {Ids}", string.Join(",", publicIds));
+            }
         }
 
         public async Task<MediaUploadResponse> UploadImageAsync(IFormFile file, string folder = "general")
@@ -154,100 +178,44 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<bool> DeleteFileAsync(string publicId, string resourceType)
         {
-            if (string.IsNullOrEmpty(publicId) || string.IsNullOrEmpty(resourceType))
+            if (string.IsNullOrWhiteSpace(publicId) || string.IsNullOrWhiteSpace(resourceType))
             {
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Thiếu publicId hoặc resourceType");
+                throw new BadRequestException(VALIDATION.REQUIRED, "Thiếu publicId hoặc resourceType");
             }
+
+            // Phân loại linh hoạt các định dạng file sang chuẩn của Cloudinary
+            ResourceType cloudinaryResourceType = resourceType.ToLower() switch
+            {
+                "video" => ResourceType.Video,
+                "audio" => ResourceType.Video,
+                "raw" => ResourceType.Raw,
+                "image" => ResourceType.Image,
+                "auto" => ResourceType.Auto,
+                _ => ResourceType.Image
+            };
 
             var deleteParams = new DeletionParams(publicId)
             {
-                ResourceType = resourceType.ToLower() == "video"
-                    ? ResourceType.Video
-                    : ResourceType.Image
+                ResourceType = cloudinaryResourceType
             };
 
             var result = await _cloudinary.DestroyAsync(deleteParams);
 
-            return result.Result == "ok";
+            return result.Result == "ok" || result.Result == "not found";
         }
 
-        public async Task<bool> ProcessCloudinaryWebhookAsync(string rawBody, string signature, string timestampStr)
+        public async Task CleanUpOrphanedImagesAsync()
         {
-            // Ép kiểu timestamp an toàn
-            if (!long.TryParse(timestampStr, out long timestamp))
+            try
             {
-                return false;
+                var result = await _cloudinary.DeleteResourcesByTagAsync("status_temp");
+
+                _logger.LogInformation("Đã xóa {Count} ảnh rác trên Cloudinary.", result.Deleted.Count);
             }
-
-            // Xác minh chữ ký với thời hạn 7200 giây
-            bool isValid = _cloudinary.Api.VerifyNotificationSignature(rawBody, timestamp, signature, 7200);
-            if (!isValid)
+            catch (Exception ex)
             {
-                return false;
+                _logger.LogError(ex, "Lỗi khi chạy Cronjob dọn dẹp ảnh.");
             }
-
-            // Parse JSON thành Object
-            var payload = JsonSerializer.Deserialize<CloudinaryNotificationPayload>(rawBody);
-            if (payload == null) return false;
-
-            // Xử lý logic Database dựa trên sự kiện
-            switch (payload.notification_type)
-            {
-                case "upload":
-                    await HandleUploadEventAsync(payload);
-                    break;
-
-                case "delete":
-                    await HandleDeleteEventAsync(payload);
-                    break;
-
-                default:
-                    break;
-            }
-
-            return true;
-        }
-
-        // --- CÁC HÀM TRỢ GIÚP (PRIVATE) ---
-
-        private async Task HandleUploadEventAsync(CloudinaryNotificationPayload payload)
-        {
-            MediaType mediaType = payload.resource_type.ToLower() switch
-            {
-                "image" => MediaType.Image,
-                "video" => MediaType.Video,
-                "raw" => MediaType.Document,
-                _ => MediaType.Unknown
-            };
-
-            var existingMedia = await _context.PostMedia.AnyAsync(m => m.Id == payload.public_id);
-
-            if (!existingMedia)
-            {
-                var entity = new PostMedia
-                {
-                    Id = payload.public_id,
-                    MediaUrl = payload.secure_url,
-                    MediaType = mediaType.GetDescription(),
-                    IsTemporary = true,
-                    CreatedAt = DateTime.Now,
-                };
-                _context.PostMedia.Add(entity);
-            }
-
-            await _context.SaveChangesAsync();
-        }
-
-        private async Task HandleDeleteEventAsync(CloudinaryNotificationPayload payload)
-        {
-            var entity = await _context.PostMedia.FirstOrDefaultAsync(m => m.Id == payload.public_id);
-
-            if (entity != null)
-            {
-                _context.PostMedia.Remove(entity);
-                await _context.SaveChangesAsync();
-            }
-
         }
     }
 }

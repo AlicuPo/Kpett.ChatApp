@@ -1,3 +1,4 @@
+using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Request.User;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
@@ -46,6 +47,21 @@ namespace Kpett.ChatApp.Controllers
             {
                 StatusCode = StatusCodes.Status200OK,
                 Message = "Update user general info successfully",
+                IsSuccess = true,
+                Data = result
+            });
+        }
+
+        [HttpPut("me/media")]
+        [Authorize]
+        public async Task<ActionResult<UserMediaResponse>> UpdateUserMedia([FromBody] MediaRequest media, [FromQuery] string mediaType, CancellationToken cancel = default)
+        {
+            var currentUserId = User.GetRequiredUserId();
+            var result = await _userService.UpdateUserMedia(currentUserId, media, mediaType);
+            return Ok(new GeneralResponse<UserMediaResponse>
+            {
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Update user media successfully",
                 IsSuccess = true,
                 Data = result
             });
