@@ -1,8 +1,10 @@
 using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Payload.Cursor;
+using Kpett.ChatApp.DTOs.Request.Firend;
 using Kpett.ChatApp.DTOs.Request.Friend;
 using Kpett.ChatApp.DTOs.Response.Friend;
 using Kpett.ChatApp.DTOs.Response.Shared;
+using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Extentions;
@@ -394,6 +396,149 @@ namespace Kpett.ChatApp.Services.Impls
                 {
                     NextCursor = nextCursor,
                     Limit = normalizedLimit
+                }
+            };
+        }
+
+        public async Task<PaginatedData<UserResponse>> GetFriendsNotInGroupAsync(string currentUserId, GetFriendsNotInGroupRequest request, CancellationToken cancel)
+        {
+            // =========================================================================
+            // PHASE 1: VALIDATION & SECURITY CHECK
+            // =========================================================================
+            if (string.IsNullOrWhiteSpace(currentUserId))
+                throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
+
+            if (string.IsNullOrWhiteSpace(request.ConversationId))
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Conversation ID is required.");
+
+            // Kiểm tra xem user hiện tại có thực sự nằm trong Group này không (Security)
+            var isMember = await _context.ConversationParticipants
+                .AnyAsync(cp => cp.ConversationId == request.ConversationId && cp.UserId == currentUserId, cancel);
+
+            if (!isMember)
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You are not a member of this conversation.");
+
+            var limit = request.Limit <= 0 ? 20 : Math.Min(request.Limit, 50);
+            var searchTerm = request.Search?.Trim();
+            var activeStatus = FriendshipStatus.Active.GetDescription();
+
+            DateTime? cursorFriendedAt = null;
+            string? cursorFriendId = null;
+
+            if (!string.IsNullOrWhiteSpace(request.Cursor))
+            {
+                var decoded = CursorHelper.Decode<FriendCursorPayload>(request.Cursor);
+                if (decoded != null)
+                {
+                    cursorFriendedAt = decoded.FriendedAt;
+                    cursorFriendId = decoded.FriendId;
+                }
+            }
+
+            // =========================================================================
+            // PHASE 2: DATABASE QUERY (ANTI-JOIN)
+            // =========================================================================
+
+            // A. Query lấy danh sách User đang ở trong nhóm
+            var participantsInGroupQuery = _context.ConversationParticipants.AsNoTracking()
+                .Where(cp => cp.ConversationId == request.ConversationId)
+                .Select(cp => cp.UserId);
+
+            // B. Query lấy danh sách bạn bè của Current User
+            var myFriendsQuery = _context.Friendships.AsNoTracking()
+                .Where(f => (f.UserLowId == currentUserId || f.UserHighId == currentUserId) && f.Status == activeStatus)
+                .Select(f => new
+                {
+                    FriendId = f.UserLowId == currentUserId ? f.UserHighId : f.UserLowId,
+                    FriendedAt = f.CreatedAt
+                });
+
+            // C. KẾT HỢP: Lấy bạn bè NHƯNG KHÔNG NẰM TRONG danh sách nhóm (SQL: NOT EXISTS)
+            var eligibleFriendsQuery = myFriendsQuery
+                .Where(f => !participantsInGroupQuery.Contains(f.FriendId));
+
+            // D. Join với bảng Users để lấy thông tin và tìm kiếm
+            var query = from f in eligibleFriendsQuery
+                        join u in _context.Users.AsNoTracking() on f.FriendId equals u.Id
+                        where u.IsActive
+                        select new
+                        {
+                            f.FriendId,
+                            f.FriendedAt,
+                            u.Username,
+                            u.DisplayName
+                        };
+
+            // Áp dụng tìm kiếm
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                query = query.Where(x =>
+                    (x.DisplayName != null && x.DisplayName.Contains(searchTerm)) ||
+                    (x.Username != null && x.Username.Contains(searchTerm)));
+            }
+
+            // Áp dụng Cursor (Sắp xếp theo thời gian kết bạn giảm dần)
+            if (cursorFriendedAt.HasValue && !string.IsNullOrWhiteSpace(cursorFriendId))
+            {
+                query = query.Where(x =>
+                    x.FriendedAt < cursorFriendedAt.Value ||
+                    (x.FriendedAt == cursorFriendedAt.Value && string.Compare(x.FriendId, cursorFriendId) < 0));
+            }
+
+            var rawFriends = await query
+                .OrderByDescending(x => x.FriendedAt)
+                .ThenByDescending(x => x.FriendId)
+                .Take(limit + 1)
+                .ToListAsync(cancel);
+
+            // =========================================================================
+            // PHASE 3: CURSOR PREPARATION
+            // =========================================================================
+            string? nextCursor = null;
+            var itemsToProcess = rawFriends;
+
+            if (rawFriends.Count > limit)
+            {
+                var lastItem = rawFriends[limit - 1];
+                nextCursor = CursorHelper.Encode(new FriendCursorPayload
+                {
+                    FriendId = lastItem.FriendId,
+                    FriendedAt = lastItem.FriendedAt
+                });
+                itemsToProcess = rawFriends.Take(limit).ToList();
+            }
+
+            // =========================================================================
+            // PHASE 4: POST-PROCESSING (FETCH AVATAR BULK)
+            // =========================================================================
+            var friendIds = itemsToProcess.Select(i => i.FriendId).ToList();
+            var avatarsDict = new Dictionary<string, string>();
+
+            if (friendIds.Any())
+            {
+                avatarsDict = await _context.UserMedias.AsNoTracking()
+                    .Where(m => friendIds.Contains(m.UserId) && m.IsPrimary == true && m.MediaType == UserMediaType.Avatar.GetDescription())
+                    .ToDictionaryAsync(m => m.UserId, m => m.MediaUrl, cancel);
+            }
+
+            // =========================================================================
+            // PHASE 5: FINAL MAPPING
+            // =========================================================================
+            var items = itemsToProcess.Select(f => new UserResponse
+            {
+                Id = f.FriendId,
+                Username = f.Username,
+                DisplayName = f.DisplayName ?? f.Username,
+                AvatarUrl = avatarsDict.GetValueOrDefault(f.FriendId)
+            }).ToList();
+
+            return new PaginatedData<UserResponse>
+            {
+                Items = items,
+                Pagination = new CursorPaginationMeta
+                {
+                    NextCursor = nextCursor,
+                    Limit = limit
                 }
             };
         }

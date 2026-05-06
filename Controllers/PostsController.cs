@@ -94,11 +94,11 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpGet("{postId}")]
-        [Authorize]
+        [OptionalAuthorize]
         public async Task<ActionResult> GetPost(string postId, CancellationToken cancel)
         {
-            var userId = User.GetRequiredUserId();
-            var result = await _postService.GetPostByIdAsync(postId, userId, cancel);
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var result = await _postService.GetPostByIdAsync(postId, currentUserId, cancel);
             return Ok(new GeneralResponse<PostFeedResponse>
             {
                 IsSuccess = true,
@@ -122,16 +122,22 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        [HttpPut("{postId}/reactions/me")]
+        [HttpPut("{postId}/reactions")]
         [Authorize]
-        public async Task<ActionResult> UpsertReaction(string postId, [FromBody] UpsertReactionRequest request, CancellationToken cancel)
+        public async Task<ActionResult<GeneralResponse<PostReactionDTO>>> UpsertReaction(string postId, [FromBody] UpsertReactionRequest request, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
             var result = await _postService.AddReactionAsync(postId, userId, request?.ReactionType ?? 0, cancel);
-            return Ok(result);
+            return Ok(new GeneralResponse<PostReactionDTO>
+            {
+                IsSuccess = true,
+                Message = "Add reaction successfully",
+                StatusCode = StatusCodes.Status200OK,
+                Data = result
+            });
         }
 
-        [HttpDelete("{postId}/reactions/me")]
+        [HttpDelete("{postId}/reactions")]
         [Authorize]
         public async Task<IActionResult> RemoveReaction(string postId, CancellationToken cancel)
         {

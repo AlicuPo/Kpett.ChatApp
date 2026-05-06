@@ -205,7 +205,6 @@ builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IRedisService, RedisService>();
 builder.Services.AddScoped<ICloudinaryService, UploadFileService>();
-builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 builder.Services.AddScoped<IConversationAccessService, ConversationAccessService>();
 builder.Services.AddScoped<IConversationPresenceService, ConversationPresenceService>();

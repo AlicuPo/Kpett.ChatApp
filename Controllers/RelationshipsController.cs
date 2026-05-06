@@ -120,7 +120,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<IActionResult> Follow(string followeeId)
         {
             var currentUserId = User.GetRequiredUserId();
-             await _friendServices.FollowAsync(currentUserId, followeeId);
+            await _friendServices.FollowAsync(currentUserId, followeeId);
 
             return Ok(new GeneralResponse
             {
@@ -141,7 +141,7 @@ namespace Kpett.ChatApp.Controllers
                 IsSuccess = true,
                 Message = "Unfollowed successfully",
                 StatusCode = StatusCodes.Status200OK
-            }); 
+            });
         }
     }
 }

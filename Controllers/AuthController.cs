@@ -1,19 +1,10 @@
-﻿using Azure.Core;
-using Kpett.ChatApp.DTOs.Request.Auth;
-using Kpett.ChatApp.DTOs.Response;
+﻿using Kpett.ChatApp.DTOs.Request.Auth;
 using Kpett.ChatApp.DTOs.Response.Auth;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using StackExchange.Redis;
-using System.Net;
-using System.Security.Claims;
-using System.Threading.Tasks;
-using IRedisService = Kpett.ChatApp.Services.Interfaces.IRedisService;
 
 namespace Kpett.ChatApp.Controllers
 {
@@ -21,17 +12,12 @@ namespace Kpett.ChatApp.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly IJwtService _token;
-        private readonly IRedisService _redis;
+        private readonly IRedisService _redisService;
         private readonly IAuthService _authService;
-        private readonly AppDbContext _dbContext;
-        public AuthController(IAuthService loginRepository, IRedisService redis, IJwtService token, AppDbContext dbContext)
+        public AuthController(IAuthService authService, IRedisService redisService)
         {
-            _authService = loginRepository;
-            _redis = redis;
-            _token = token;
-            _dbContext = dbContext;
-
+            _authService = authService;
+            _redisService = redisService;
         }
 
         [HttpPost("login")]
@@ -104,7 +90,7 @@ namespace Kpett.ChatApp.Controllers
             }
 
             // Blacklist the access token
-            await _redis.BlacklistAccessTokenAsync(jtiClaim, TimeSpan.FromMinutes(30));
+            await _redisService.BlacklistAccessTokenAsync(jtiClaim, TimeSpan.FromMinutes(30));
 
             return Ok(new GeneralResponse
             {

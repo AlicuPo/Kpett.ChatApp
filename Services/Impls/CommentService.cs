@@ -2,6 +2,7 @@
 using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Response.Post;
 using Kpett.ChatApp.DTOs.Response.Shared;
+using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Extentions;
 using Kpett.ChatApp.Helper;
@@ -93,20 +94,24 @@ namespace Kpett.ChatApp.Services.Impls
 
                 await _dbContext.Posts
                     .Where(p => p.Id == postId)
-                    .ExecuteUpdateAsync(p => p.SetProperty(x => x.CommentCount, x => x.CommentCount + 1), cancel);
+                    .ExecuteUpdateAsync(p => p.SetProperty(x => x.CommentCount, x => x.CommentCount + 1));
 
                 if (!string.IsNullOrEmpty(normalizedParentCommentId))
                 {
                     await _dbContext.Comments
                         .Where(c => c.Id == normalizedParentCommentId)
-                        .ExecuteUpdateAsync(c => c.SetProperty(x => x.ReplyCount, x => x.ReplyCount + 1), cancel);
+                        .ExecuteUpdateAsync(c => c.SetProperty(x => x.ReplyCount, x => x.ReplyCount + 1));
                 }
 
                 await _dbContext.SaveChangesAsync(cancel);
 
                 await transaction.CommitAsync();
 
-                return MapCommentListItem(comment, user, mentions, false, user.Id);
+                var userMedia = _dbContext.UserMedias
+                    .AsNoTracking()
+                    .FirstOrDefault(um => um.UserId == userId && um.MediaType == UserMediaType.Avatar.GetDescription() && um.IsPrimary);
+
+                return MapCommentListItem(comment, user, userMedia ,mentions, false, user.Id);
             }
             catch (Exception)
             {
@@ -145,9 +150,6 @@ namespace Kpett.ChatApp.Services.Impls
             }
 
             var normalizedLimit = limit <= 0 ? 20 : Math.Min(limit, 100);
-            var totalCount = await _dbContext.Comments
-                .AsNoTracking()
-                .CountAsync(c => c.PostId == postId && c.DeletedAt == null && c.ParentCommentId == parentCommentId, cancel);
 
             var query = _dbContext.Comments
                 .AsNoTracking()
@@ -161,16 +163,24 @@ namespace Kpett.ChatApp.Services.Impls
                     (c.CreatedAt == cursorDate.Value && c.Id.CompareTo(cursorId) < 0));
             }
 
-            var commentRows = await query
+            var pagedQuery = query
                 .OrderBy(c => c.CreatedAt)
                 .ThenByDescending(c => c.Id)
-                .Take(normalizedLimit + 1)
-                .Join(
-                    _dbContext.Users.AsNoTracking(),
-                    c => c.UserId,
-                    u => u.Id,
-                    (c, u) => new CommentRow(c, u))
-                .ToListAsync(cancel);
+                .Take(normalizedLimit + 1);
+
+            var avatars = _dbContext.UserMedias
+                .AsNoTracking()
+                .Where(m => m.MediaType == UserMediaType.Avatar.GetDescription() && m.IsPrimary);
+
+            var commentRows = await (
+                from c in pagedQuery
+                join u in _dbContext.Users.AsNoTracking() on c.UserId equals u.Id
+
+                join a in avatars on u.Id equals a.UserId into avatarGroup
+                from userAvatar in avatarGroup.DefaultIfEmpty()
+
+                select new CommentRow(c, u, userAvatar)
+            ).ToListAsync(cancel);
 
             var hasMore = commentRows.Count > normalizedLimit;
             var pagedCommentRows = hasMore
@@ -203,6 +213,7 @@ namespace Kpett.ChatApp.Services.Impls
                 .Select(x => MapCommentListItem(
                     x.Comment,
                     x.User,
+                    x.UserMedia,
                     GetMentionSummaries(mentionLookup, x.Comment.Id),
                     likedCommentIds.Contains(x.Comment.Id),
                     currentUserId))
@@ -215,7 +226,6 @@ namespace Kpett.ChatApp.Services.Impls
                 {
                     NextCursor = nextCursor,
                     Limit = normalizedLimit,
-                    TotalCount = totalCount
                 }
             };
         }
@@ -263,7 +273,11 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
-            return MapCommentListItem(comment, user, mentions, false, user.Id);
+            var userMedia = _dbContext.UserMedias
+                                .AsNoTracking()
+                                .FirstOrDefault(um => um.UserId == userId && um.MediaType == UserMediaType.Avatar.GetDescription() && um.IsPrimary);
+
+            return MapCommentListItem(comment, user ,userMedia, mentions, false, user.Id);
         }
 
         public async Task DeleteCommentAsync(string commentId, string userId, CancellationToken cancel)
@@ -401,6 +415,7 @@ namespace Kpett.ChatApp.Services.Impls
         private static CommentListItemDTO MapCommentListItem(
             Comment comment,
             User userInfo,
+            UserMedia? userMedia, 
             List<CommentMentionSummaryDTO> mentions,
             bool isLiked,
             string currentUserId)
@@ -418,6 +433,7 @@ namespace Kpett.ChatApp.Services.Impls
                     Id = userInfo.Id,
                     Username = userInfo.Username,
                     DisplayName = userInfo.DisplayName,
+                    AvatarUrl = userMedia.MediaUrl,
                     IsVerified = userInfo.IsVerified
                 },
                 Content = comment.Content,
@@ -607,6 +623,6 @@ namespace Kpett.ChatApp.Services.Impls
 
         private sealed record MentionUserSnapshot(string UserId, string Username, string? DisplayName);
 
-        private sealed record CommentRow(Comment Comment, User User);
+        private sealed record CommentRow(Comment Comment, User User, UserMedia UserMedia);
     }
 }

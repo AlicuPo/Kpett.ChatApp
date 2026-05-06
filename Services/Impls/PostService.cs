@@ -42,6 +42,7 @@ namespace Kpett.ChatApp.Services.Impls
             if (string.IsNullOrWhiteSpace(userId))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
 
+            var avatarType = UserMediaType.Avatar.GetDescription();
             var user = await _dbContext.Users
                 .Where(u => u.Id == userId)
                 .Select(u => new UserResponse
@@ -51,6 +52,10 @@ namespace Kpett.ChatApp.Services.Impls
                     Username = u.Username,
                     DisplayName = u.DisplayName,
                     IsVerified = u.IsVerified,
+                    AvatarUrl = _dbContext.UserMedias
+                                    .Where(um => um.UserId == userId && um.IsPrimary && um.MediaType == avatarType)
+                                    .Select(um => um.MediaUrl)
+                                    .FirstOrDefault()
                 })
                 .FirstOrDefaultAsync(cancel);
 
@@ -189,6 +194,7 @@ namespace Kpett.ChatApp.Services.Impls
                     Id = p.Id,
                     Content = p.Content,
                     Privacy = p.Privacy,
+                    Type = p.Type,
                     CreatedAt = p.CreatedAt,
                     UpdatedAt = p.UpdatedAt,
 
@@ -245,7 +251,7 @@ namespace Kpett.ChatApp.Services.Impls
         /// <summary>
         /// Get user feed with pagination
         /// </summary>
-        public async Task<PaginatedData<PostFeedResponse>> GetFeedAsync(string currentUserId, string? cursor = null, int limit = 10, CancellationToken cancel = default)
+        public async Task<PaginatedData<PostFeedResponse>> GetFeedAsync(string? currentUserId, string? cursor = null, int limit = 10, CancellationToken cancel = default)
         {
             // Giải mã Cursor
             DateTime? cursorDate = null;
@@ -283,6 +289,7 @@ namespace Kpett.ChatApp.Services.Impls
                     Id = p.Id,
                     Content = p.Content,
                     Privacy = p.Privacy,
+                    Type = p.Type,
                     CreatedAt = p.CreatedAt,
                     UpdatedAt = p.UpdatedAt,
 
@@ -370,7 +377,7 @@ namespace Kpett.ChatApp.Services.Impls
         /// <summary>
         /// Get posts created by a specific user with pagination and optional type filter
         /// </summary>
-        public async Task<PaginatedData<PostThumbnailResponse>> GetPostsByUserIdAsync(string userId, string currentUserId, SearchRequest searchRequest, CursorPaginationRequest cursorPagination, CancellationToken cancel = default)
+        public async Task<PaginatedData<PostThumbnailResponse>> GetPostsByUserIdAsync(string userId, string? currentUserId, SearchRequest searchRequest, CursorPaginationRequest cursorPagination, CancellationToken cancel = default)
         {
             if (string.IsNullOrWhiteSpace(userId))
             {
@@ -449,6 +456,7 @@ namespace Kpett.ChatApp.Services.Impls
                     p.CreatedAt,
                     p.UpdatedAt,
                     p.Privacy,
+                    p.Type,
                     p.CreatedByUserId,
                     p.PinnedAt
                 })
@@ -537,6 +545,7 @@ namespace Kpett.ChatApp.Services.Impls
                 CreatedAt = data.CreatedAt,
                 UpdatedAt = data.UpdatedAt,
                 Privacy = data.Privacy,
+                Type = data.Type,
 
                 Author = new UserResponse
                 {
@@ -617,76 +626,71 @@ namespace Kpett.ChatApp.Services.Impls
         /// </summary>
         public async Task<PostReactionDTO> AddReactionAsync(string postId, string userId, byte reactionType, CancellationToken cancel)
         {
-            cancel.ThrowIfCancellationRequested();
-
             if (reactionType == 0)
+            {
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Reaction type is required");
+            }
 
-            var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId, cancel);
+            var post = await _dbContext.Posts.FirstOrDefaultAsync(p => p.Id == postId);
             if (post == null)
+            {
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
+            }
 
             // Check if already reacted
             var existingReaction = await _dbContext.PostReactions
-                .FirstOrDefaultAsync(r => r.PostId == postId && r.UserId == userId, cancel);
+                .FirstOrDefaultAsync(r => r.PostId == postId && r.UserId == userId);
 
-            if (existingReaction != null)
+            var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
             {
-                // Update existing reaction
-                existingReaction.Type = reactionType;
-                existingReaction.CreatedAt = DateTime.UtcNow;
-                _dbContext.PostReactions.Update(existingReaction);
-            }
-            else
-            {
-                // Create new reaction
-                var reaction = new PostReaction
+                if (existingReaction != null)
                 {
-                    Id = Guid.NewGuid().ToString(),
-                    PostId = postId,
-                    UserId = userId,
-                    Type = reactionType,
-                    CreatedAt = DateTime.UtcNow
-                };
-                await _dbContext.PostReactions.AddAsync(reaction, cancel);
-            }
-
-            await _dbContext.SaveChangesAsync(cancel);
-
-            // Notify post owner
-            if (post.CreatedByUserId != userId)
-            {
-                try
+                    // Update existing reaction
+                    existingReaction.Type = reactionType;
+                    existingReaction.CreatedAt = DateTime.UtcNow;
+                    _dbContext.PostReactions.Update(existingReaction);
+                }
+                else
                 {
-                    var user = await _dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, cancel);
-                    await _realtimeService.PublishAsync($"user:{post.CreatedByUserId}:notifications", new
+                    // Create new reaction
+                    var reaction = new PostReaction
                     {
-                        type = "POST_REACTION",
-                        postId = postId,
-                        userId = userId,
-                        userName = user?.DisplayName ?? user?.Username,
-                        reactionType = reactionType,
-                        timestamp = DateTime.UtcNow
-                    });
+                        Id = Guid.NewGuid().ToString(),
+                        PostId = postId,
+                        UserId = userId,
+                        Type = reactionType,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    await _dbContext.PostReactions.AddAsync(reaction);
+
+                    await _dbContext.Posts
+                            .Where(p => p.Id == postId)
+                            .ExecuteUpdateAsync(p => p.SetProperty(x => x.LikeCount, x => x.LikeCount + 1));
+
+                    await transaction.CommitAsync();
                 }
-                catch (Exception ex)
+
+                await _dbContext.SaveChangesAsync();
+
+                var updatedReaction = await _dbContext.PostReactions
+                    .AsNoTracking()
+                    .FirstAsync(r => r.PostId == postId && r.UserId == userId);
+
+                return new PostReactionDTO
                 {
-                    Console.WriteLine($"Real-time notification failed: {ex.Message}");
-                }
+                    Id = updatedReaction.Id,
+                    PostId = updatedReaction.PostId,
+                    UserId = updatedReaction.UserId,
+                    Type = updatedReaction.Type,
+                    CreatedAt = updatedReaction.CreatedAt
+                };
             }
-
-            var updatedReaction = await _dbContext.PostReactions
-                .AsNoTracking()
-                .FirstAsync(r => r.PostId == postId && r.UserId == userId, cancel);
-
-            return new PostReactionDTO
+            catch
             {
-                Id = updatedReaction.Id,
-                PostId = updatedReaction.PostId,
-                UserId = updatedReaction.UserId,
-                Type = updatedReaction.Type,
-                CreatedAt = updatedReaction.CreatedAt
-            };
+                await transaction.RollbackAsync(cancel);
+                throw;
+            }
         }
 
         /// <summary>
@@ -694,20 +698,33 @@ namespace Kpett.ChatApp.Services.Impls
         /// </summary>
         public async Task RemoveReactionAsync(string postId, string userId, CancellationToken cancel)
         {
-            cancel.ThrowIfCancellationRequested();
-
             var postExists = await _dbContext.Posts
-                .AnyAsync(p => p.Id == postId && !p.IsDeleted, cancel);
+                .AnyAsync(p => p.Id == postId && !p.IsDeleted);
             if (!postExists)
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
 
             var reaction = await _dbContext.PostReactions
-                .FirstOrDefaultAsync(r => r.PostId == postId && r.UserId == userId, cancel);
+                .FirstOrDefaultAsync(r => r.PostId == postId && r.UserId == userId);
 
-            if (reaction != null)
+            var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
             {
-                _dbContext.PostReactions.Remove(reaction);
-                await _dbContext.SaveChangesAsync(cancel);
+                if (reaction != null)
+                {
+                    _dbContext.PostReactions.Remove(reaction);
+                    await _dbContext.SaveChangesAsync();
+
+                    await _dbContext.Posts
+                        .Where(p => p.Id == postId)
+                        .ExecuteUpdateAsync(p => p.SetProperty(x => x.LikeCount, x => x.LikeCount - 1));
+
+                    await transaction.CommitAsync();
+                }
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
             }
         }
 

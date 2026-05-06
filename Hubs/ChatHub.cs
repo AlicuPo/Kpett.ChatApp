@@ -1,6 +1,4 @@
-﻿using Kpett.ChatApp.DTOs;
-using Kpett.ChatApp.DTOs.Request.Message;
-using Kpett.ChatApp.Helper;
+﻿using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
@@ -11,18 +9,17 @@ namespace Kpett.ChatApp.Hubs
     public class ChatHub : Hub
     {
         private readonly IRedisService _redis;
-        private readonly IMessageService _messageService;
+        //private readonly IMessageService _messageService;
         private readonly IConversationAccessService _conversationAccessService;
         private readonly IConversationPresenceService _conversationPresenceService;
 
         public ChatHub(
             IRedisService redis,
-            IMessageService messageService,
             IConversationAccessService conversationAccessService,
             IConversationPresenceService conversationPresenceService)
         {
             _redis = redis;
-            _messageService = messageService;
+            //_messageService = messageService;
             _conversationAccessService = conversationAccessService;
             _conversationPresenceService = conversationPresenceService;
         }
@@ -218,48 +215,48 @@ namespace Kpett.ChatApp.Hubs
         /// <summary>
         /// Send a message in real-time
         /// </summary>
-        public async Task SendMessage(string conversationId, SendMessageRequest request, CancellationToken cancel)
-        {
-            var userId = Context.UserIdentifier;
+        //public async Task SendMessage(string conversationId, SendMessageRequest request, CancellationToken cancel)
+        //{
+        //    var userId = Context.UserIdentifier;
 
-            if (string.IsNullOrEmpty(userId))
-            {
-                await Clients.Caller.SendAsync("Error", "User ID not found.");
-                return;
-            }
+        //    if (string.IsNullOrEmpty(userId))
+        //    {
+        //        await Clients.Caller.SendAsync("Error", "User ID not found.");
+        //        return;
+        //    }
 
-            if (string.IsNullOrEmpty(conversationId))
-            {
-                await Clients.Caller.SendAsync("Error", "Conversation ID is required.");
-                return;
-            }
+        //    if (string.IsNullOrEmpty(conversationId))
+        //    {
+        //        await Clients.Caller.SendAsync("Error", "Conversation ID is required.");
+        //        return;
+        //    }
 
-            try
-            {
-                // Send message to database
-                var message = await _messageService.SendMessageAsync(conversationId, userId, request, cancel);
+        //    try
+        //    {
+        //        // Send message to database
+        //        //var message = await _messageService.SendMessageAsync(conversationId, userId, request, cancel);
 
-                // Create message DTO for broadcast but DO NOT broadcast here manually
-                // _messageService.SendMessageAsync already handles broadcasting via RealtimeService
+        //        // Create message DTO for broadcast but DO NOT broadcast here manually
+        //        // _messageService.SendMessageAsync already handles broadcasting via RealtimeService
 
-                // Send confirmation to sender
-                await Clients.Caller.SendAsync("MessageSent", new
-                {
-                    clientMessageId = request.ClientMessageId,
-                    messageId = message.Id,
-                    success = true,
-                    timestamp = DateTime.UtcNow
-                });
-            }
-            catch (AppException appEx)
-            {
-                await Clients.Caller.SendAsync("Error", appEx.Message);
-            }
-            catch (Exception ex)
-            {
-                await Clients.Caller.SendAsync("Error", $"Failed to send message: {ex.Message}");
-            }
-        }
+        //        // Send confirmation to sender
+        //        await Clients.Caller.SendAsync("MessageSent", new
+        //        {
+        //            clientMessageId = request.ClientMessageId,
+        //            messageId = message.Id,
+        //            success = true,
+        //            timestamp = DateTime.UtcNow
+        //        });
+        //    }
+        //    catch (AppException appEx)
+        //    {
+        //        await Clients.Caller.SendAsync("Error", appEx.Message);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        await Clients.Caller.SendAsync("Error", $"Failed to send message: {ex.Message}");
+        //    }
+        //}
 
         /// <summary>
         /// Send typing indicator

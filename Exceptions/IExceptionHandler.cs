@@ -48,12 +48,11 @@ namespace Kpett.ChatApp.Helper
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             };
-            var jsonResponse = JsonSerializer.Serialize(response, jsonOptions);
 
             httpContext.Response.StatusCode = statusCode;
             httpContext.Response.ContentType = "application/json";
 
-            await httpContext.Response.WriteAsJsonAsync(jsonResponse, cancellationToken);
+            await httpContext.Response.WriteAsJsonAsync(response, jsonOptions, cancellationToken);
 
             return true;
         }

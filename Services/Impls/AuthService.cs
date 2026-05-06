@@ -47,6 +47,10 @@ public class AuthService : IAuthService
                 Email = u.Email,
                 DisplayName = u.DisplayName,
                 Password = u.Password,
+                AvatarUrl = _dbContext.UserMedias
+                    .Where(um => um.UserId == u.Id && um.IsPrimary && um.MediaType == UserMediaType.Avatar.GetDescription())
+                    .Select(um => um.MediaUrl)
+                    .FirstOrDefault(),
                 IsActive = u.IsActive,
                 IsVerified = u.IsVerified
             })
@@ -72,6 +76,7 @@ public class AuthService : IAuthService
             Username = user.Username,
             Email = user.Email,
             DisplayName = user.DisplayName,
+            AvatarUrl = user.AvatarUrl,
             IsVerified = user.IsVerified,
             IsProfileCompleted = !string.IsNullOrEmpty(user.DisplayName) && !string.IsNullOrEmpty(user.Username),
             CreatedAt = DateTime.UtcNow

@@ -12,7 +12,7 @@ namespace Kpett.ChatApp.Services.Impls
     {
         private readonly AppDbContext _dbContext;
         public NotificationService(AppDbContext dbContext)
-        { 
+        {
             _dbContext = dbContext;
         }
 
@@ -48,10 +48,10 @@ namespace Kpett.ChatApp.Services.Impls
                 ["conversationId"] = conversationId
             };
 
-            if (dto.Id.HasValue)
-            {
-                payload["messageId"] = dto.Id.Value;
-            }
+            //if (dto.Id.HasValue)
+            //{
+            //    payload["messageId"] = dto.Id.Value;
+            //}
 
             var now = DateTime.UtcNow;
             var data = JsonSerializer.Serialize(payload);

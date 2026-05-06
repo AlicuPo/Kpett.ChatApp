@@ -88,6 +88,7 @@
         public static class VALIDATION
         {
             public const string REQUIRED = "VAL.REQUIRED";
+            public const string INVALID = "VAL.INVALID";
         }
 
         public static class CLOUDINARY

@@ -37,10 +37,6 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<GroupMember> GroupMembers { get; set; }
 
-    public virtual DbSet<Message> Messages { get; set; }
-
-    public virtual DbSet<MessageDetail> MessageDetails { get; set; }
-
     public virtual DbSet<MentionComment> MentionComments { get; set; }
 
     public virtual DbSet<Notification> Notifications { get; set; }
@@ -61,6 +57,8 @@ public partial class AppDbContext : DbContext
     public virtual DbSet<UserFeed> UserFeeds { get; set; }
 
     public virtual DbSet<UserSetting> UserSettings { get; set; }
+
+    public virtual DbSet<Message> Messages { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -93,8 +91,6 @@ public partial class AppDbContext : DbContext
         modelBuilder.Entity<UserMedia>().HasKey(e => e.Id);
 
         // Các bảng dùng khóa đặc thù hoặc khóa phức hợp (Composite Key)
-        modelBuilder.Entity<MessageDetail>().HasKey(e => e.MessageId);
-
         modelBuilder.Entity<Friendship>().HasKey(e => new { e.UserLowId, e.UserHighId });
 
         modelBuilder.Entity<ConversationKey>().HasKey(e => new { e.UserLowId, e.UserHighId });
