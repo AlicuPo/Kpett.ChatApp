@@ -1,6 +1,6 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
-using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Request.Auth;
 using Kpett.ChatApp.DTOs.Response.Auth;
 using Kpett.ChatApp.DTOs.Response.Shared;
@@ -155,3 +155,4 @@ public class AuthApiTests
         Assert.Equal("Token revoked successfully.", body.Message);
     }
 }
+

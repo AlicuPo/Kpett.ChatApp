@@ -23,5 +23,5 @@ public partial class Conversation
 
     public DateTime LastMessageAt { get; set; }
 
-    public bool? IsActive { get; set; }
+    public bool IsActive { get; set; } = false;
 }

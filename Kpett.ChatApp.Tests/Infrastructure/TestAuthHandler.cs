@@ -1,6 +1,6 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text.Encodings.Web;
-using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
@@ -77,3 +77,4 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
         });
     }
 }
+

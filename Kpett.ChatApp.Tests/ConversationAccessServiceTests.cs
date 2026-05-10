@@ -1,4 +1,4 @@
-using Kpett.ChatApp.Contants;
+﻿using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Impls;
@@ -62,3 +62,4 @@ public class ConversationAccessServiceTests
         return new AppDbContext(options);
     }
 }
+

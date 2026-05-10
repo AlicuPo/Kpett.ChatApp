@@ -110,5 +110,16 @@ public class ConversationPresenceServiceTests
         }
 
         public Task<long> PublishAsync(string channel, string message) => Task.FromResult(0L);
+
+        // Presence helpers còn thiếu
+        public Task<bool> IsUserOnlineAsync(string userId) => Task.FromResult(false);
+        public Task<Dictionary<string, bool>> GetUsersOnlineStatusAsync(IEnumerable<string> userIds)
+            => Task.FromResult(userIds.ToDictionary(id => id, _ => false));
+
+        // Conversation access cache
+        public Task SetConversationAccessCacheAsync(string userId, string conversationId, TimeSpan ttl)
+            => Task.CompletedTask;
+        public Task<bool> GetConversationAccessCacheAsync(string userId, string conversationId)
+            => Task.FromResult(false);
     }
 }

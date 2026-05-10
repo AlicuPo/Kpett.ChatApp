@@ -13,7 +13,7 @@ namespace Kpett.ChatApp.DTOs.Response.Conversation
         public DateTime LastMessageAt { get; set; }
         public MessageSnippetResponse? LastMessage { get; set; }
         public List<ParticipantResponse> Participants { get; set; } = new();
-
+        public bool IsActive { get; set; } = false;
         public bool HasUnread { get; set; }
     }
 }

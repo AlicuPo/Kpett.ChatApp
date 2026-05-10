@@ -1,4 +1,4 @@
-using Kpett.ChatApp.Contants;
+﻿using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
@@ -35,9 +35,7 @@ namespace Kpett.ChatApp.Services.Impls
                 .AnyAsync(p => p.ConversationId == conversationId && p.UserId == userId, cancellationToken);
 
             if (!isParticipant)
-                throw new ForbiddenException(
-                    ErrorCodes.CONVERSATION.USER_NOT_IN_CONVERSATION,
-                    "User is not a participant of this conversation.");
+                throw new ForbiddenException(ErrorCodes.CONVERSATION.USER_NOT_IN_CONVERSATION, "User is not a participant of this conversation.");
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using Kpett.ChatApp.Contants;
+﻿using Kpett.ChatApp.Constants;
 using System.Text.Json.Serialization;
 
 namespace Kpett.ChatApp.DTOs.Response.Conversation.Metadata
@@ -20,3 +20,4 @@ namespace Kpett.ChatApp.DTOs.Response.Conversation.Metadata
         public required string Name { set; get; }
     }
 }
+

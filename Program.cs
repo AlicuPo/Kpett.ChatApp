@@ -1,15 +1,14 @@
 using CloudinaryDotNet;
 using Hangfire;
 using Kpett.ChatApp.Configs;
-using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Options;
-using Kpett.ChatApp.Receive;
-using Kpett.ChatApp.Services.Impls;
 using Kpett.ChatApp.Services.Interfaces;
+using Kpett.ChatApp.Services.Impls;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -62,7 +61,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
 
     var configuration = ConfigurationOptions.Parse(redisConnectionString);
-    // Cho phép kết nối lại khi Redis sẵn sàng
+    // Cho phÃ©p káº¿t ná»‘i láº¡i khi Redis sáºµn sÃ ng
     configuration.AbortOnConnectFail = false;
     configuration.ConnectRetry = 3;
     configuration.ConnectTimeout = 5000;
@@ -101,10 +100,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = issuer, // Đảm bảo biến này đã được khai báo ở trên
-            ValidAudience = audience, // Đảm bảo biến này đã được khai báo ở trên
+            ValidIssuer = issuer,
+            ValidAudience = audience,
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(KeyAccess!) // Đảm bảo KeyAccess đã được khai báo
+                Encoding.UTF8.GetBytes(KeyAccess!)
             ),
             ClockSkew = TimeSpan.Zero
         };
@@ -132,7 +131,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
 
-                // Xử lý token cho kết nối WebSockets / SignalR
+                // Xá»­ lÃ½ token cho káº¿t ná»‘i WebSockets / SignalR
                 if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/chat-Hub"))
                 {
                     context.Token = accessToken;
@@ -207,14 +206,14 @@ builder.Services.AddScoped<IRedisService, RedisService>();
 builder.Services.AddScoped<ICloudinaryService, UploadFileService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 builder.Services.AddScoped<IConversationAccessService, ConversationAccessService>();
-builder.Services.AddScoped<IConversationPresenceService, ConversationPresenceService>();
-builder.Services.AddScoped<IRealtimeService, RealtimeService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRelationshipService, RelationshipService>();
 builder.Services.AddScoped<IPostService, PostService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddScoped<IMediaService, MediaService>();
+builder.Services.AddScoped<IConversationAccessService, ConversationAccessService>();
+builder.Services.AddScoped<ITypingService, ConversationTypingService>();
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
@@ -250,3 +249,5 @@ app.MapControllers();
 app.MapHub<ChatHub>("/chat-Hub").RequireCors("ClientCors");
 
 app.Run();
+
+

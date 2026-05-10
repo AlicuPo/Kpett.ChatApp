@@ -1,10 +1,10 @@
-﻿using Kpett.ChatApp.Contants;
+﻿using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Response.Post;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
-using Kpett.ChatApp.Extentions;
+using Kpett.ChatApp.Extensions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
@@ -626,3 +626,4 @@ namespace Kpett.ChatApp.Services.Impls
         private sealed record CommentRow(Comment Comment, User User, UserMedia UserMedia);
     }
 }
+

@@ -1,4 +1,4 @@
-﻿namespace Kpett.ChatApp.Extentions
+﻿namespace Kpett.ChatApp.Extensions
 {
     public static class DatetimeExtentions
     {
@@ -21,3 +21,4 @@
         }
     }
 }
+

@@ -1,5 +1,5 @@
-﻿using Azure.Core;
-using Kpett.ChatApp.Contants;
+using Azure.Core;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Request.Auth;
 using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.DTOs.Response.Auth;
@@ -52,7 +52,8 @@ public class AuthService : IAuthService
                     .Select(um => um.MediaUrl)
                     .FirstOrDefault(),
                 IsActive = u.IsActive,
-                IsVerified = u.IsVerified
+                IsVerified = u.IsVerified,
+                CreatedAt = u.CreatedAt
             })
             .FirstOrDefaultAsync(x => x.Email == request.Email);
 
@@ -66,7 +67,7 @@ public class AuthService : IAuthService
             throw new ForbiddenException(ErrorCodes.USER.INACTIVE, "User inactive");
         }
 
-        // Tạo JWT Token
+        // Táº¡o JWT Token
         var accessToken = _token.GenerateAccessToken(user.Id, user.Email);
         var refreshToken = _token.GenerateRefreshToken(user.Id, user.Email);
 
@@ -79,7 +80,7 @@ public class AuthService : IAuthService
             AvatarUrl = user.AvatarUrl,
             IsVerified = user.IsVerified,
             IsProfileCompleted = !string.IsNullOrEmpty(user.DisplayName) && !string.IsNullOrEmpty(user.Username),
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = user.CreatedAt // Dùng CreatedAt thực tế từ DB, không phải thời điểm đăng nhập
         };
 
         var tokenRes = new TokenResponse()
@@ -138,7 +139,7 @@ public class AuthService : IAuthService
         }
         var userId = userIdClaim.Value;
 
-        // THU HỒI ACCESS TOKEN (Lấy từ Header Authorization)
+        // THU Há»’I ACCESS TOKEN (Láº¥y tá»« Header Authorization)
         var jtiClaim = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
         var expClaim = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Exp)?.Value;
 
@@ -153,14 +154,14 @@ public class AuthService : IAuthService
             }
         }
 
-        // THU HỒI REFRESH TOKEN
+        // THU Há»’I REFRESH TOKEN
         if (logoutRequest != null && !string.IsNullOrEmpty(logoutRequest.RefreshToken))
         {
             TimeSpan refreshRemainTtl = TimeSpan.FromDays(30);
 
             var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
 
-            // Kiểm tra xem token client gửi lên có phải JWT hợp lệ không
+            // Kiá»ƒm tra xem token client gá»­i lÃªn cÃ³ pháº£i JWT há»£p lá»‡ khÃ´ng
             if (handler.CanReadToken(logoutRequest.RefreshToken))
             {
                 var jwtToken = handler.ReadJwtToken(logoutRequest.RefreshToken);
@@ -193,14 +194,12 @@ public class AuthService : IAuthService
             throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Refresh token is required");
         }
 
-        // Xác thực chữ ký token và trích xuất claims
         var principal = _token.GetPrincipalFromExpiredToken(request.RefreshToken, true);
         if (principal == null)
         {
             throw new UnauthorizedException(ErrorCodes.AUTH.REFRESH_TOKEN_INVALID, "Invalid refresh token");
         }
 
-        // Trích xuất thông tin user từ claims
         var userId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value
                      ?? principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.NameId)?.Value;
 
@@ -216,15 +215,14 @@ public class AuthService : IAuthService
             throw new UnauthorizedException(ErrorCodes.AUTH.REFRESH_TOKEN_INVALID, "Invalid refresh token");
         }
 
-        if (await _redis.IsRefreshTokenBlacklistedAsync(request.RefreshToken))
+        var isBlackList = await _redis.IsRefreshTokenBlacklistedAsync(request.RefreshToken);
+        if (isBlackList)
         {
             throw new UnauthorizedException(ErrorCodes.AUTH.REFRESH_TOKEN_INVALID, "Token in black list");
         }
 
-        // 6. Tạo cặp token mới
         var newAccessToken = _token.GenerateAccessToken(userId, email);
 
-        // 8. Trả về kết quả thành công
         return new TokenResponse
         {
             AccessToken = newAccessToken,

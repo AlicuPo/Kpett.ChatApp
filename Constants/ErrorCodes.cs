@@ -1,4 +1,4 @@
-﻿namespace Kpett.ChatApp.Contants
+﻿namespace Kpett.ChatApp.Constants
 {
     public static class ErrorCodes
     {
@@ -98,3 +98,4 @@
         }
     }
 }
+

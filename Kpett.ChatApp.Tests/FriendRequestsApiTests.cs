@@ -1,6 +1,6 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
-using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Request.Friend;
 using Kpett.ChatApp.DTOs.Response.Friend;
 using Kpett.ChatApp.Enums;
@@ -343,3 +343,4 @@ public class FriendRequestsApiTests
         Assert.Equal(1, await dbContext.FriendRequests.CountAsync());
     }
 }
+

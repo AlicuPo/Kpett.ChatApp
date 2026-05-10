@@ -1,6 +1,6 @@
 ﻿using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
-using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response.Media;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Models;
@@ -8,7 +8,7 @@ using Kpett.ChatApp.Options;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using static Kpett.ChatApp.Contants.ErrorCodes;
+using static Kpett.ChatApp.Constants.ErrorCodes;
 
 namespace Kpett.ChatApp.Services.Impls
 {
@@ -216,3 +216,4 @@ namespace Kpett.ChatApp.Services.Impls
         }
     }
 }
+

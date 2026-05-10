@@ -1,7 +1,7 @@
 ﻿using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Helper;
 
-namespace Kpett.ChatApp.Contants
+namespace Kpett.ChatApp.Constants
 {
     public class MessageActionTypeConstants
     {
@@ -25,3 +25,4 @@ namespace Kpett.ChatApp.Contants
         public const string CallMissed = nameof(CallMissed);
     }
 }
+

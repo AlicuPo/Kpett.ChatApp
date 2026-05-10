@@ -1,5 +1,5 @@
-using System.Security.Claims;
-using Kpett.ChatApp.Contants;
+﻿using System.Security.Claims;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.Exceptions;
 
 namespace Kpett.ChatApp.Helper
@@ -19,3 +19,4 @@ namespace Kpett.ChatApp.Helper
         }
     }
 }
+

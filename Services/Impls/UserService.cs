@@ -1,11 +1,11 @@
-using Hangfire;
-using Kpett.ChatApp.Contants;
+﻿using Hangfire;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Request.User;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
-using Kpett.ChatApp.Extentions;
+using Kpett.ChatApp.Extensions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
@@ -454,3 +454,4 @@ namespace Kpett.ChatApp.Services.Impls
         }
     }
 }
+

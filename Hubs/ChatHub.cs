@@ -1,3 +1,4 @@
+using Kpett.ChatApp.DTOs.Response.Conversation;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -8,35 +9,34 @@ namespace Kpett.ChatApp.Hubs
     [Authorize]
     public class ChatHub : Hub
     {
-        private readonly IRedisService _redis;
-        //private readonly IMessageService _messageService;
+        private readonly IRedisService _redisService;
+        private readonly ITypingService _typingService;
         private readonly IConversationAccessService _conversationAccessService;
-        private readonly IConversationPresenceService _conversationPresenceService;
 
         public ChatHub(
-            IRedisService redis,
-            IConversationAccessService conversationAccessService,
-            IConversationPresenceService conversationPresenceService)
+            IRedisService redisService,
+            ITypingService typingService,
+            IConversationAccessService conversationAccessService)
         {
-            _redis = redis;
-            //_messageService = messageService;
+            _redisService = redisService;
+            _typingService = typingService;
             _conversationAccessService = conversationAccessService;
-            _conversationPresenceService = conversationPresenceService;
         }
 
+        // LIFECYCLE
         public override async Task OnConnectedAsync()
         {
             var userId = Context.UserIdentifier;
             if (string.IsNullOrEmpty(userId)) return;
 
-            var wasOnline = await _redis.IsUserOnlineAsync(userId);
-            await _redis.AddConnectionAsync(userId, Context.ConnectionId);
+            var wasOnline = await _redisService.IsUserOnlineAsync(userId);
+            await _redisService.AddConnectionAsync(userId, Context.ConnectionId);
 
             if (!wasOnline)
             {
                 await Clients.Group($"presence_watcher_{userId}").SendAsync("UserStatusChanged", new
                 {
-                    userId = userId,
+                    userId,
                     isOnline = true
                 });
             }
@@ -49,272 +49,214 @@ namespace Kpett.ChatApp.Hubs
             var userId = Context.UserIdentifier;
             if (string.IsNullOrEmpty(userId)) return;
 
-            await _redis.RemoveConnectionAsync(userId, Context.ConnectionId);
-            var isStillOnline = await _redis.IsUserOnlineAsync(userId);
+            // 1. Presence: cập nhật online status
+            await _redisService.RemoveConnectionAsync(userId, Context.ConnectionId);
+            var isStillOnline = await _redisService.IsUserOnlineAsync(userId);
 
             if (!isStillOnline)
             {
                 await Clients.Group($"presence_watcher_{userId}").SendAsync("UserStatusChanged", new
                 {
-                    userId = userId,
+                    userId,
                     isOnline = false
                 });
             }
 
-            // Dọn dẹp Redis presence tracking khi mất kết nối đột ngột:
-            // Xóa mapping connection→conversations và conversation→users
+            // 2. Typing cleanup: broadcast stop cho mọi conversation user đang typing
             try
             {
-                await _conversationPresenceService.CleanupConnectionAsync(userId, Context.ConnectionId);
+                var stoppedTyping = await _typingService.CleanupConnectionTypingAsync(Context.ConnectionId);
+                foreach (var (conversationId, typingUserId) in stoppedTyping)
+                {
+                    // Chỉ broadcast nếu user không có tab khác đang typing
+                    var hasOtherConnections = await _redisService.HasOtherTypingConnectionsAsync(conversationId, typingUserId, Context.ConnectionId);
+
+                    if (!hasOtherConnections)
+                    {
+                        var payload = new TypingEventPayload
+                        {
+                            UserId = typingUserId,
+                            ConversationId = conversationId,
+                            IsTyping = false,
+                            Timestamp = DateTime.UtcNow
+                        };
+                        await Clients.Group($"conversation_{conversationId}")
+                            .SendAsync("UserTyping", payload);
+                    }
+                }
             }
             catch
             {
-                // Không nên fail toàn bộ disconnect vì cleanup thất bại
+                // Không để lỗi cleanup ảnh hưởng đến disconnect lifecycle
             }
+
+            // 3. Remove khỏi tất cả SignalR conversation groups
+            var conversations = await _redisService.GetConnectionConversationsAsync(Context.ConnectionId);
+            foreach (var convId in conversations)
+            {
+                await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"conversation_{convId}");
+            }
+            await _redisService.ClearConnectionConversationsAsync(Context.ConnectionId);
 
             await base.OnDisconnectedAsync(exception);
         }
 
-        // Subscribe friend status change
+        // =====================================================================
+        // PRESENCE (Friend status)
+        // =====================================================================
+
         public async Task SubscribeToPresence(List<string> targetUserIds)
         {
-            // Đưa ConnectionId của người này vào Group mang tên người họ muốn theo dõi
             foreach (var targetId in targetUserIds)
-            {
                 await Groups.AddToGroupAsync(Context.ConnectionId, $"presence_watcher_{targetId}");
-            }
         }
 
         public async Task UnsubscribeFromPresence(List<string> targetUserIds)
         {
             foreach (var targetId in targetUserIds)
-            {
                 await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"presence_watcher_{targetId}");
-            }
         }
 
+        // CONVERSATION (Join / Leave)
         /// <summary>
-        /// Join a user to a conversation group
+        /// Client gọi khi mở màn hình chat của 1 conversation.
+        /// Kiểm tra quyền, thêm vào SignalR Group và track trong Redis.
         /// </summary>
         public async Task JoinConversation(string conversationId)
         {
             var userId = Context.UserIdentifier;
-
             if (string.IsNullOrEmpty(userId))
             {
-                await Clients.Caller.SendAsync("Error", "User ID not found.");
+                await Clients.Caller.SendAsync("Error", "Unauthorized.");
                 return;
             }
-
-            if (string.IsNullOrWhiteSpace(conversationId))
-            {
-                await Clients.Caller.SendAsync("Error", "Conversation ID is required.");
-                return;
-            }
-
-            var presenceTracked = false;
-            var addedToGroup = false;
 
             try
             {
-                await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, userId, Context.ConnectionAborted);
-
-                await _conversationPresenceService.TrackConversationConnectionAsync(conversationId, userId, Context.ConnectionId);
-                presenceTracked = true;
-
-                await Groups.AddToGroupAsync(Context.ConnectionId, conversationId);
-                addedToGroup = true;
-
-                await Clients.OthersInGroup(conversationId).SendAsync("UserJoined", new
+                // Kiểm tra quyền truy cập (có cache Redis 5 phút)
+                var isCached = await _redisService.GetConversationAccessCacheAsync(userId, conversationId);
+                if (!isCached)
                 {
-                    userId,
-                    conversationId,
-                    timestamp = DateTime.UtcNow
-                });
-            }
-            catch (AppException appEx)
-            {
-                if (presenceTracked)
-                {
-                    try
-                    {
-                        await _conversationPresenceService.UntrackConversationConnectionAsync(conversationId, userId, Context.ConnectionId);
-                    }
-                    catch
-                    {
-                    }
+                    await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, userId, Context.ConnectionAborted);
+                    await _redisService.SetConversationAccessCacheAsync(userId, conversationId, TimeSpan.FromMinutes(5));
                 }
 
-                if (addedToGroup)
-                {
-                    try
-                    {
-                        await Groups.RemoveFromGroupAsync(Context.ConnectionId, conversationId);
-                    }
-                    catch
-                    {
-                    }
-                }
+                // Tham gia SignalR Group
+                await Groups.AddToGroupAsync(Context.ConnectionId, $"conversation_{conversationId}");
 
-                await Clients.Caller.SendAsync("Error", appEx.Message);
+                // Track connection → conversation trong Redis (dùng cho cleanup khi disconnect)
+                await _redisService.TrackConnectionConversationAsync(Context.ConnectionId, conversationId);
+
+                await Clients.Caller.SendAsync("JoinedConversation", new { conversationId });
             }
             catch (Exception ex)
             {
-                if (presenceTracked)
-                {
-                    try
-                    {
-                        await _conversationPresenceService.UntrackConversationConnectionAsync(conversationId, userId, Context.ConnectionId);
-                    }
-                    catch
-                    {
-                    }
-                }
-
-                if (addedToGroup)
-                {
-                    try
-                    {
-                        await Groups.RemoveFromGroupAsync(Context.ConnectionId, conversationId);
-                    }
-                    catch
-                    {
-                    }
-                }
-
-                await Clients.Caller.SendAsync("Error", $"Failed to join conversation: {ex.Message}");
+                await Clients.Caller.SendAsync("Error", ex.Message);
             }
         }
 
         /// <summary>
-        /// Leave a conversation group
+        /// Client gọi khi đóng màn hình chat của 1 conversation.
         /// </summary>
         public async Task LeaveConversation(string conversationId)
         {
             var userId = Context.UserIdentifier;
 
-            if (string.IsNullOrWhiteSpace(conversationId))
+            // Dừng typing (nếu đang gõ) trước khi rời phòng
+            if (!string.IsNullOrEmpty(userId))
             {
-                await Clients.Caller.SendAsync("Error", "Conversation ID is required.");
-                return;
-            }
+                var shouldBroadcastStop = await _typingService.StopTypingAsync(conversationId, userId, Context.ConnectionId, Context.ConnectionAborted);
 
-            try
-            {
-                await Groups.RemoveFromGroupAsync(Context.ConnectionId, conversationId);
-
-                if (string.IsNullOrEmpty(userId))
+                if (shouldBroadcastStop)
                 {
-                    return;
+                    var payload = new TypingEventPayload
+                    {
+                        UserId = userId,
+                        ConversationId = conversationId,
+                        IsTyping = false,
+                        Timestamp = DateTime.UtcNow
+                    };
+                    await Clients.Group($"conversation_{conversationId}").SendAsync("UserTyping", payload);
                 }
-
-                await _conversationPresenceService.UntrackConversationConnectionAsync(conversationId, userId, Context.ConnectionId);
-
-                await Clients.OthersInGroup(conversationId).SendAsync("UserLeft", new
-                {
-                    userId,
-                    conversationId,
-                    timestamp = DateTime.UtcNow
-                });
             }
-            catch (Exception ex)
-            {
-                await Clients.Caller.SendAsync("Error", $"Failed to leave conversation: {ex.Message}");
-            }
+
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"conversation_{conversationId}");
+            await _redisService.UntrackConnectionConversationAsync(Context.ConnectionId, conversationId);
+            await Clients.Caller.SendAsync("LeftConversation", new { conversationId });
         }
 
+        // TYPING
         /// <summary>
-        /// Send a message in real-time
+        /// Client gọi khi bắt đầu/tiếp tục gõ (isTyping=true) hoặc dừng gõ (isTyping=false).
+        /// - Server tự động broadcast stop sau 5 giây nếu không nhận thêm event (server-side debounce).
+        /// - Hỗ trợ multi-tab: mỗi connectionId là 1 session typing riêng.
+        /// - Access check được cache trong Redis 5 phút.
         /// </summary>
-        //public async Task SendMessage(string conversationId, SendMessageRequest request, CancellationToken cancel)
-        //{
-        //    var userId = Context.UserIdentifier;
-
-        //    if (string.IsNullOrEmpty(userId))
-        //    {
-        //        await Clients.Caller.SendAsync("Error", "User ID not found.");
-        //        return;
-        //    }
-
-        //    if (string.IsNullOrEmpty(conversationId))
-        //    {
-        //        await Clients.Caller.SendAsync("Error", "Conversation ID is required.");
-        //        return;
-        //    }
-
-        //    try
-        //    {
-        //        // Send message to database
-        //        //var message = await _messageService.SendMessageAsync(conversationId, userId, request, cancel);
-
-        //        // Create message DTO for broadcast but DO NOT broadcast here manually
-        //        // _messageService.SendMessageAsync already handles broadcasting via RealtimeService
-
-        //        // Send confirmation to sender
-        //        await Clients.Caller.SendAsync("MessageSent", new
-        //        {
-        //            clientMessageId = request.ClientMessageId,
-        //            messageId = message.Id,
-        //            success = true,
-        //            timestamp = DateTime.UtcNow
-        //        });
-        //    }
-        //    catch (AppException appEx)
-        //    {
-        //        await Clients.Caller.SendAsync("Error", appEx.Message);
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        await Clients.Caller.SendAsync("Error", $"Failed to send message: {ex.Message}");
-        //    }
-        //}
-
-        /// <summary>
-        /// Send typing indicator.
-        /// Access check được cache trong Redis (TTL 5 phút) để tránh DB hit mỗi lần gõ phím.
-        /// </summary>
-        public async Task SendTyping(string conversationId, bool isTyping)
+        public async Task SendTyping(string conversationId, TypingEventPayload userTypingPayload, bool isTyping)
         {
             var userId = Context.UserIdentifier;
-
             if (string.IsNullOrEmpty(userId))
             {
-                await Clients.Caller.SendAsync("Error", "User ID not found.");
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(conversationId))
-            {
-                await Clients.Caller.SendAsync("Error", "Conversation ID is required.");
+                await Clients.Caller.SendAsync("Error", "Unauthorized.");
                 return;
             }
 
             try
             {
-                // Kiểm tra cache Redis trước để tránh query DB mỗi lần gõ phím
-                var isCached = await _redis.GetConversationAccessCacheAsync(userId, conversationId);
+                // Access check với Redis cache (tránh DB hit mỗi lần gõ phím)
+                var isCached = await _redisService.GetConversationAccessCacheAsync(userId, conversationId);
                 if (!isCached)
                 {
-                    // Chưa có trong cache → query DB và cache lại kết quả trong 5 phút
                     await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, userId, Context.ConnectionAborted);
-                    await _redis.SetConversationAccessCacheAsync(userId, conversationId, TimeSpan.FromMinutes(5));
+                    await _redisService.SetConversationAccessCacheAsync(userId, conversationId, TimeSpan.FromMinutes(5));
                 }
 
-                await Clients.OthersInGroup(conversationId).SendAsync("UserTyping", new
+                if (isTyping)
                 {
-                    userId,
-                    conversationId,
-                    isTyping,
-                    timestamp = DateTime.UtcNow
-                });
-            }
-            catch (AppException appEx)
-            {
-                await Clients.Caller.SendAsync("Error", appEx.Message);
+                    // StartTyping: returns true nếu cần broadcast (chưa typing từ bất kỳ tab nào)
+                    var shouldBroadcast = await _typingService.StartTypingAsync(conversationId, userId, Context.ConnectionId, Context.ConnectionAborted);
+
+                    if (shouldBroadcast)
+                    {
+                        // Query user info đầy đủ cho payload (chỉ query 1 lần khi bắt đầu)
+                        var payload = new TypingEventPayload
+                        {
+                            UserId = userId,
+                            DisplayName = userTypingPayload.DisplayName,
+                            Username = userTypingPayload.Username,
+                            AvatarUrl = userTypingPayload.AvatarUrl,
+                            ConversationId = conversationId,
+                            IsTyping = true,
+                            Timestamp = DateTime.UtcNow
+                        };
+                        // Broadcast đến tất cả OTHERS trong conversation group
+                        await Clients.OthersInGroup($"conversation_{conversationId}")
+                            .SendAsync("UserTyping", payload);
+                    }
+                }
+                else
+                {
+                    // StopTyping: returns true nếu không còn tab nào typing
+                    var shouldBroadcast = await _typingService.StopTypingAsync(conversationId, userId, Context.ConnectionId, Context.ConnectionAborted);
+
+                    if (shouldBroadcast)
+                    {
+                        var payload = new TypingEventPayload
+                        {
+                            UserId = userId,
+                            ConversationId = conversationId,
+                            IsTyping = false,
+                            Timestamp = DateTime.UtcNow
+                        };
+                        await Clients.OthersInGroup($"conversation_{conversationId}")
+                            .SendAsync("UserTyping", payload);
+                    }
+                }
             }
             catch (Exception ex)
             {
-                await Clients.Caller.SendAsync("Error", $"Typing indicator error: {ex.Message}");
+                Console.WriteLine(ex.Message);
+                await Clients.Caller.SendAsync("Error", ex.Message);
             }
         }
     }

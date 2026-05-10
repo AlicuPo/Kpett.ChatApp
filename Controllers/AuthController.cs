@@ -1,4 +1,4 @@
-﻿using Kpett.ChatApp.DTOs.Request.Auth;
+using Kpett.ChatApp.DTOs.Request.Auth;
 using Kpett.ChatApp.DTOs.Response.Auth;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Models;
@@ -77,7 +77,7 @@ namespace Kpett.ChatApp.Controllers
         [HttpPost("revoke")]
         public async Task<IActionResult> Revoke()
         {
-            // Extract JTI from current token to revoke
+            // Trích xuất JTI và exp từ token hiện tại
             var jtiClaim = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
             if (string.IsNullOrEmpty(jtiClaim))
             {
@@ -89,8 +89,22 @@ namespace Kpett.ChatApp.Controllers
                 });
             }
 
-            // Blacklist the access token
-            await _redisService.BlacklistAccessTokenAsync(jtiClaim, TimeSpan.FromMinutes(30));
+            // Tính TTL chính xác từ exp claim thực tế của token
+            // tránh trường hợp token còn nhiều giờ nhưng chỉ blacklist 30 phút
+            var expClaim = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Exp)?.Value;
+            var ttl = TimeSpan.FromMinutes(15); // Fallback an toàn
+
+            if (!string.IsNullOrEmpty(expClaim) && long.TryParse(expClaim, out long expSeconds))
+            {
+                var expirationTime = DateTimeOffset.FromUnixTimeSeconds(expSeconds).UtcDateTime;
+                var remaining = expirationTime - DateTime.UtcNow;
+                if (remaining > TimeSpan.Zero)
+                {
+                    ttl = remaining;
+                }
+            }
+
+            await _redisService.BlacklistAccessTokenAsync(jtiClaim, ttl);
 
             return Ok(new GeneralResponse
             {

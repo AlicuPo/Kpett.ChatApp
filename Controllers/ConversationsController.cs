@@ -1,5 +1,5 @@
 using Kpett.ChatApp.DTOs.Request.Conversation;
-using Kpett.ChatApp.DTOs.Request.Firend;
+using Kpett.ChatApp.DTOs.Request.Friend;
 using Kpett.ChatApp.DTOs.Response.Conversation;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
@@ -30,7 +30,13 @@ namespace Kpett.ChatApp.Controllers
         {
             var currentUserId = User.GetRequiredUserId();
             var conversation = await _conversationService.CreateConversationAsync(currentUserId, request, cancel);
-            return Created($"/api/conversations/{conversation.Id}", conversation);
+            return Created($"/api/conversations/{conversation.Id}", new GeneralResponse<ConversationResponse>
+            {
+                IsSuccess = true,
+                Message = "Create conversation successfully",
+                Data = conversation,
+                StatusCode = StatusCodes.Status201Created
+            });
         }
 
         [HttpGet]
@@ -65,7 +71,6 @@ namespace Kpett.ChatApp.Controllers
         }
 
         /// <summary>
-        /// Thêm 1 người vào nhóm chat
         /// POST /api/conversations/conv_123/members
         /// </summary>
         [HttpPost("{id}/members")]
@@ -86,7 +91,6 @@ namespace Kpett.ChatApp.Controllers
         }
 
         /// <summary>
-        /// Xóa 1 người khỏi nhóm, hoặc tự rời nhóm
         /// DELETE /api/conversations/conv_123/members/user_456
         /// </summary>
         [HttpDelete("{id}/members/{userIdToRemove}")]
@@ -105,7 +109,6 @@ namespace Kpett.ChatApp.Controllers
         }
 
         /// <summary>
-        /// Lấy danh sách tin nhắn của một cuộc hội thoại (Phân trang ngược)
         /// GET: api/v1/conversations/{conversationId}/messages?limit=20&cursor=xxx
         /// </summary>
         [HttpGet("{conversationId}/messages")]
@@ -125,17 +128,11 @@ namespace Kpett.ChatApp.Controllers
         }
 
         /// <summary>
-        /// Gửi một tin nhắn mới vào cuộc hội thoại (Hỗ trợ text, ảnh, video, file đính kèm)
         /// POST: api/v1/conversations/{conversationId}/messages
         /// </summary>
-        /// <param name="conversationId">ID của cuộc hội thoại (Lấy từ URL)</param>
-        /// <param name="request">Payload chứa ClientMessageId, Nội dung và mảng Attachments</param>
-        /// <param name="cancel">Cancellation Token</param>
-        /// <returns>Đối tượng MessageResponse vừa được tạo hoặc đã tồn tại</returns>
         [HttpPost("{conversationId}/messages")]
         public async Task<IActionResult> SendMessage([FromRoute] string conversationId, [FromBody] SendMessageRequest request, CancellationToken cancel)
         {
-            // Lấy ID của người dùng đang gọi API từ JWT Token
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (string.IsNullOrWhiteSpace(currentUserId))
@@ -143,11 +140,8 @@ namespace Kpett.ChatApp.Controllers
                 return Unauthorized(new { Message = "User is not authenticated." });
             }
 
-            // Gọi xuống tầng Service để xử lý logic (Lưu DB, kiểm tra trùng lặp, đẩy SignalR)
             var response = await _conversationService.SendMessageAsync(currentUserId, conversationId, request, cancel);
 
-            // Trả về mã trạng thái HTTP 201 (Created) kèm theo toàn bộ dữ liệu tin nhắn (MessageResponse)
-            // Frontend sẽ nhận cục JSON này để cập nhật UI nếu cần (hoặc đợi qua SignalR)
             return StatusCode(StatusCodes.Status201Created, new GeneralResponse<MessageResponse>
             {
                 IsSuccess = true,
@@ -158,14 +152,12 @@ namespace Kpett.ChatApp.Controllers
         }
 
         /// <summary>
-        /// Đánh dấu toàn bộ tin nhắn trong phòng là đã đọc
         /// </summary>
         [HttpPut("{conversationId}/read")]
         public async Task<IActionResult> MarkAsRead(string conversationId, CancellationToken cancel)
         {
             var currentUserId = User.GetRequiredUserId();
 
-            // ĐỔI TỪ _messageService SANG _conversationService
             await _conversationService.MarkAsReadAsync(conversationId, currentUserId, cancel);
 
             return Ok(new GeneralResponse
@@ -177,7 +169,6 @@ namespace Kpett.ChatApp.Controllers
         }
 
         /// <summary>
-        /// Lấy thông tin chi tiết của một nhóm chat/cuộc hội thoại
         /// GET: api/conversations/{id}
         /// </summary>
         [HttpGet("{id}")]
@@ -195,5 +186,26 @@ namespace Kpett.ChatApp.Controllers
                 StatusCode = StatusCodes.Status200OK
             });
         }
+
+        /// <summary>
+        /// GET: api/conversations/direct/{userId}
+        /// Get or create a direct conversation with a specific user.
+        /// </summary>
+        [HttpGet("direct/{userId}")]
+        public async Task<ActionResult<GeneralResponse<ConversationResponse>>> GetOrCreateDirectConversation([FromRoute] string userId, CancellationToken cancel)
+        {
+            var currentUserId = User.GetRequiredUserId();
+
+            var conversation = await _conversationService.GetOrCreateDirectConversationAsync(currentUserId, userId, cancel);
+
+            return Ok(new GeneralResponse<ConversationResponse>
+            {
+                IsSuccess = true,
+                Data = conversation,
+                Message = "Get or create direct conversation successfully",
+                StatusCode = StatusCodes.Status200OK
+            });
+        }
     }
 }
+

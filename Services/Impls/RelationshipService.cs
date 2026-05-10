@@ -1,13 +1,12 @@
-using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Payload.Cursor;
-using Kpett.ChatApp.DTOs.Request.Firend;
 using Kpett.ChatApp.DTOs.Request.Friend;
 using Kpett.ChatApp.DTOs.Response.Friend;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
-using Kpett.ChatApp.Extentions;
+using Kpett.ChatApp.Extensions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
@@ -68,13 +67,16 @@ namespace Kpett.ChatApp.Services.Impls
                 }
             }
 
+            // Canonical order để đảm bảo unique index (UserLowId, UserHighId) hoạt động đúng
+            // và tránh race condition khi 2 user gửi request đồng thời
+            var isOrderCorrect = string.CompareOrdinal(senderId, receiverId) < 0;
             var request = new FriendRequest
             {
                 Id = Guid.NewGuid().ToString(),
                 SenderId = senderId,
                 ReceiverId = receiverId,
-                UserLowId = senderId,
-                UserHighId = receiverId,
+                UserLowId = isOrderCorrect ? senderId : receiverId,
+                UserHighId = isOrderCorrect ? receiverId : senderId,
                 Status = pendingStatus,
                 CreatedAt = DateTime.UtcNow,
             };
@@ -124,11 +126,17 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new NotFoundException(ErrorCodes.FRIEND.FRIEND_REQUEST_NOT_FOUND, "Friend request not found or not pending.");
             }
 
-            // Cập nhật trạng thái Request
+            // Chỉ người nhận mới được phép accept lời mời
+            if (request.ReceiverId != currentUserId)
+            {
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You are not authorized to accept this friend request.");
+            }
+
+            // Cáº­p nháº­t tráº¡ng thÃ¡i Request
             request.Status = FriendRequestStatus.Accepted.GetDescription();
             request.UpdatedAt = DateTime.UtcNow;
 
-            // Cập nhật hoặc tạo mới Friendship
+            // Cáº­p nháº­t hoáº·c táº¡o má»›i Friendship
             var friendship = await _context.Friendships
                  .FirstOrDefaultAsync(f => (f.UserLowId == request.SenderId && f.UserHighId == request.ReceiverId) || (f.UserLowId == request.ReceiverId && f.UserHighId == request.SenderId));
 
@@ -178,7 +186,19 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new NotFoundException(ErrorCodes.FRIEND.FRIEND_REQUEST_NOT_FOUND, "Friend request not found.");
             }
 
+            if (request.ReceiverId != currentUserId)
+            {
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You are not authorized to decline this friend request.");
+            }
+
             request.Status = FriendRequestStatus.Declined.GetDescription();
+
+            var follow = await _context.Follows
+                .FirstOrDefaultAsync(f => f.FollowerId == request.SenderId && f.FolloweeId == request.ReceiverId);
+            if (follow != null)
+            {
+                _context.Follows.Remove(follow);
+            }
 
             await _context.SaveChangesAsync();
         }
@@ -196,7 +216,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             request.Status = FriendRequestStatus.Cancelled.GetDescription();
 
-            // Hủy Follow
+            // Há»§y Follow
             var follow = await _context.Follows.FirstOrDefaultAsync(f => f.FollowerId == request.SenderId && f.FolloweeId == request.ReceiverId);
             if (follow != null)
             {
@@ -211,17 +231,18 @@ namespace Kpett.ChatApp.Services.Impls
             var activeStatus = FriendshipStatus.Active.GetDescription();
             var acceptedStatus = FriendRequestStatus.Accepted.GetDescription();
             var friendship = await _context.Friendships
-                .FirstOrDefaultAsync(f => (f.UserLowId == currentUserId && f.UserHighId == targetUserId) || (f.UserLowId == targetUserId && f.UserHighId == currentUserId) && f.Status == activeStatus);
+                .FirstOrDefaultAsync(f =>
+                    ((f.UserLowId == currentUserId && f.UserHighId == targetUserId) ||
+                     (f.UserLowId == targetUserId && f.UserHighId == currentUserId))
+                    && f.Status == activeStatus);
 
             if (friendship == null)
             {
                 throw new NotFoundException(ErrorCodes.FRIEND.FRIENDSHIP_NOT_FOUND, "Friendship not found or not active.");
             }
 
-            // Xóa quan hệ bạn bè 
             _context.Friendships.Remove(friendship);
 
-            // Hủy bạn bè = Unfollow lẫn nhau
             var follows = await _context.Follows
                 .Where(f => (f.FollowerId == currentUserId && f.FolloweeId == targetUserId) ||
                             (f.FollowerId == targetUserId && f.FolloweeId == currentUserId))
@@ -293,7 +314,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             var normalizedLimit = request.Limit <= 0 ? 20 : Math.Min(request.Limit, 50);
             var normalizedSearch = request.Search?.Trim();
-            var activeStatus = FriendshipStatus.Active.GetDescription(); // Sửa lại: Lấy bạn bè phải là Active, không phải Pending
+            var activeStatus = FriendshipStatus.Active.GetDescription();
 
             DateTime? cursorFriendedAt = null;
             string? cursorFriendId = null;
@@ -307,7 +328,6 @@ namespace Kpett.ChatApp.Services.Impls
                 }
             }
 
-            // Tối ưu Query: Không cần Concat, chỉ cần OR điều kiện do chúng ta lưu 1 bản ghi duy nhất
             var friendLinksQuery = _context.Friendships
                 .AsNoTracking()
                 .Where(f => (f.UserLowId == currentUserId || f.UserHighId == currentUserId) && f.Status == activeStatus)
@@ -402,16 +422,13 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<PaginatedData<UserResponse>> GetFriendsNotInGroupAsync(string currentUserId, GetFriendsNotInGroupRequest request, CancellationToken cancel)
         {
-            // =========================================================================
-            // PHASE 1: VALIDATION & SECURITY CHECK
-            // =========================================================================
+            // VALIDATION & SECURITY CHECK
             if (string.IsNullOrWhiteSpace(currentUserId))
                 throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
 
             if (string.IsNullOrWhiteSpace(request.ConversationId))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Conversation ID is required.");
 
-            // Kiểm tra xem user hiện tại có thực sự nằm trong Group này không (Security)
             var isMember = await _context.ConversationParticipants
                 .AnyAsync(cp => cp.ConversationId == request.ConversationId && cp.UserId == currentUserId, cancel);
 
@@ -435,16 +452,12 @@ namespace Kpett.ChatApp.Services.Impls
                 }
             }
 
-            // =========================================================================
-            // PHASE 2: DATABASE QUERY (ANTI-JOIN)
-            // =========================================================================
+            // DATABASE QUERY (ANTI-JOIN)
 
-            // A. Query lấy danh sách User đang ở trong nhóm
             var participantsInGroupQuery = _context.ConversationParticipants.AsNoTracking()
-                .Where(cp => cp.ConversationId == request.ConversationId)
+                .Where(cp => cp.ConversationId == request.ConversationId && !cp.IsKicked)
                 .Select(cp => cp.UserId);
 
-            // B. Query lấy danh sách bạn bè của Current User
             var myFriendsQuery = _context.Friendships.AsNoTracking()
                 .Where(f => (f.UserLowId == currentUserId || f.UserHighId == currentUserId) && f.Status == activeStatus)
                 .Select(f => new
@@ -453,11 +466,9 @@ namespace Kpett.ChatApp.Services.Impls
                     FriendedAt = f.CreatedAt
                 });
 
-            // C. KẾT HỢP: Lấy bạn bè NHƯNG KHÔNG NẰM TRONG danh sách nhóm (SQL: NOT EXISTS)
             var eligibleFriendsQuery = myFriendsQuery
                 .Where(f => !participantsInGroupQuery.Contains(f.FriendId));
 
-            // D. Join với bảng Users để lấy thông tin và tìm kiếm
             var query = from f in eligibleFriendsQuery
                         join u in _context.Users.AsNoTracking() on f.FriendId equals u.Id
                         where u.IsActive
@@ -469,7 +480,6 @@ namespace Kpett.ChatApp.Services.Impls
                             u.DisplayName
                         };
 
-            // Áp dụng tìm kiếm
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 query = query.Where(x =>
@@ -477,7 +487,6 @@ namespace Kpett.ChatApp.Services.Impls
                     (x.Username != null && x.Username.Contains(searchTerm)));
             }
 
-            // Áp dụng Cursor (Sắp xếp theo thời gian kết bạn giảm dần)
             if (cursorFriendedAt.HasValue && !string.IsNullOrWhiteSpace(cursorFriendId))
             {
                 query = query.Where(x =>
@@ -491,9 +500,7 @@ namespace Kpett.ChatApp.Services.Impls
                 .Take(limit + 1)
                 .ToListAsync(cancel);
 
-            // =========================================================================
-            // PHASE 3: CURSOR PREPARATION
-            // =========================================================================
+            // CURSOR PREPARATION
             string? nextCursor = null;
             var itemsToProcess = rawFriends;
 
@@ -508,9 +515,7 @@ namespace Kpett.ChatApp.Services.Impls
                 itemsToProcess = rawFriends.Take(limit).ToList();
             }
 
-            // =========================================================================
-            // PHASE 4: POST-PROCESSING (FETCH AVATAR BULK)
-            // =========================================================================
+            // POST-PROCESSING (FETCH AVATAR BULK)
             var friendIds = itemsToProcess.Select(i => i.FriendId).ToList();
             var avatarsDict = new Dictionary<string, string>();
 
@@ -521,9 +526,7 @@ namespace Kpett.ChatApp.Services.Impls
                     .ToDictionaryAsync(m => m.UserId, m => m.MediaUrl, cancel);
             }
 
-            // =========================================================================
-            // PHASE 5: FINAL MAPPING
-            // =========================================================================
+            // FINAL MAPPING
             var items = itemsToProcess.Select(f => new UserResponse
             {
                 Id = f.FriendId,
@@ -542,5 +545,62 @@ namespace Kpett.ChatApp.Services.Impls
                 }
             };
         }
+
+        public async Task<List<UserResponse>> GetFriendSuggestionsAsync(string currentUserId, int limit, CancellationToken cancel)
+        {
+            if (string.IsNullOrWhiteSpace(currentUserId))
+                throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
+
+            var limitToFetch = limit <= 0 ? 10 : Math.Min(limit, 20);
+
+            // Get users I am already friends with
+            var activeStatus = FriendshipStatus.Active.GetDescription();
+            var friendIds = await _context.Friendships.AsNoTracking()
+                .Where(f => (f.UserLowId == currentUserId || f.UserHighId == currentUserId) && f.Status == activeStatus)
+                .Select(f => f.UserLowId == currentUserId ? f.UserHighId : f.UserLowId)
+                .ToListAsync(cancel);
+
+            // Get users I have pending requests with
+            var pendingStatus = FriendRequestStatus.Pending.GetDescription();
+            var pendingUserIds = await _context.FriendRequests.AsNoTracking()
+                .Where(fr => (fr.SenderId == currentUserId || fr.ReceiverId == currentUserId) && fr.Status == pendingStatus)
+                .Select(fr => fr.SenderId == currentUserId ? fr.ReceiverId : fr.SenderId)
+                .ToListAsync(cancel);
+
+            var excludedUserIds = new HashSet<string>(friendIds);
+            excludedUserIds.UnionWith(pendingUserIds);
+            excludedUserIds.Add(currentUserId);
+
+            var query = _context.Users.AsNoTracking()
+                .Where(u => u.IsActive && !excludedUserIds.Contains(u.Id))
+                .OrderBy(u => Guid.NewGuid()) // Random order
+                .Take(limitToFetch);
+
+            var suggestedUsers = await query.Select(u => new
+            {
+                u.Id,
+                u.Username,
+                u.DisplayName
+            }).ToListAsync(cancel);
+
+            var suggestedUserIds = suggestedUsers.Select(u => u.Id).ToList();
+
+            var avatarsDict = new Dictionary<string, string>();
+            if (suggestedUserIds.Any())
+            {
+                avatarsDict = await _context.UserMedias.AsNoTracking()
+                    .Where(m => suggestedUserIds.Contains(m.UserId) && m.IsPrimary == true && m.MediaType == UserMediaType.Avatar.GetDescription())
+                    .ToDictionaryAsync(m => m.UserId, m => m.MediaUrl, cancel);
+            }
+
+            return suggestedUsers.Select(u => new UserResponse
+            {
+                Id = u.Id,
+                Username = u.Username,
+                DisplayName = u.DisplayName ?? u.Username,
+                AvatarUrl = avatarsDict.GetValueOrDefault(u.Id)
+            }).ToList();
+        }
     }
 }
+

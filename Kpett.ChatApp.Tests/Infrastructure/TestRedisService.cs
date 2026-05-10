@@ -151,4 +151,95 @@ public class TestRedisService : IRedisService
     {
         return Task.FromResult(0L);
     }
+
+    // Presence helpers còn thiếu
+    public Task<bool> IsUserOnlineAsync(string userId)
+    {
+        return Task.FromResult(_connections.TryGetValue(userId, out var c) && c.Count > 0);
+    }
+
+    public Task<Dictionary<string, bool>> GetUsersOnlineStatusAsync(IEnumerable<string> userIds)
+    {
+        var result = userIds.ToDictionary(
+            id => id,
+            id => _connections.TryGetValue(id, out var c) && c.Count > 0);
+        return Task.FromResult(result);
+    }
+
+    // Conversation access cache (in-memory for tests)
+    private readonly HashSet<string> _conversationAccessCache = new(StringComparer.Ordinal);
+    private static string ConvAccessKey(string userId, string convId) => $"{userId}::{convId}";
+
+    public Task SetConversationAccessCacheAsync(string userId, string conversationId, TimeSpan ttl)
+    {
+        _conversationAccessCache.Add(ConvAccessKey(userId, conversationId));
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> GetConversationAccessCacheAsync(string userId, string conversationId)
+    {
+        return Task.FromResult(_conversationAccessCache.Contains(ConvAccessKey(userId, conversationId)));
+    }
+
+    // ========== Typing Tracking (in-memory stubs) ==========
+    private readonly Dictionary<string, (string UserId, string ConnectionId, DateTime Expiry)>
+        _typing = new(StringComparer.Ordinal);
+    private static string TypingKey(string convId, string userId, string connId) => $"{convId}|{userId}|{connId}";
+
+    public Task SetUserTypingAsync(string conversationId, string userId, string connectionId, TimeSpan ttl)
+    {
+        _typing[TypingKey(conversationId, userId, connectionId)] =
+            (userId, connectionId, DateTime.UtcNow.Add(ttl));
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> IsUserConnectionTypingAsync(string conversationId, string userId, string connectionId)
+    {
+        var key = TypingKey(conversationId, userId, connectionId);
+        return Task.FromResult(_typing.TryGetValue(key, out var v) && v.Expiry > DateTime.UtcNow);
+    }
+
+    public Task RemoveUserTypingAsync(string conversationId, string userId, string connectionId)
+    {
+        _typing.Remove(TypingKey(conversationId, userId, connectionId));
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> HasOtherTypingConnectionsAsync(string conversationId, string userId, string excludeConnectionId)
+    {
+        var now = DateTime.UtcNow;
+        var prefix = $"{conversationId}|{userId}|";
+        var excludeKey = TypingKey(conversationId, userId, excludeConnectionId);
+        return Task.FromResult(_typing.Any(kv =>
+            kv.Key.StartsWith(prefix, StringComparison.Ordinal) &&
+            kv.Key != excludeKey &&
+            kv.Value.Expiry > now));
+    }
+
+    public Task<List<(string UserId, string ConnectionId)>> GetTypingUsersInConversationAsync(string conversationId)
+    {
+        var now = DateTime.UtcNow;
+        var prefix = $"{conversationId}|";
+        var result = _typing
+            .Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal) && kv.Value.Expiry > now)
+            .Select(kv => (kv.Value.UserId, kv.Value.ConnectionId))
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task<List<(string ConversationId, string UserId)>> RemoveAllTypingForConnectionAsync(string connectionId)
+    {
+        var toRemove = _typing
+            .Where(kv => kv.Key.EndsWith($"|{connectionId}", StringComparison.Ordinal))
+            .ToList();
+        var result = new List<(string, string)>();
+        foreach (var kv in toRemove)
+        {
+            _typing.Remove(kv.Key);
+            var parts = kv.Key.Split('|');
+            if (parts.Length == 3) result.Add((parts[0], parts[1]));
+        }
+        return Task.FromResult(result);
+    }
+
 }

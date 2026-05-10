@@ -1,5 +1,5 @@
 using Hangfire;
-using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Request.Shared;
@@ -9,10 +9,9 @@ using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
-using Kpett.ChatApp.Extentions;
+using Kpett.ChatApp.Extensions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,17 +20,11 @@ namespace Kpett.ChatApp.Services.Impls
     public class PostService : IPostService
     {
         private readonly AppDbContext _dbContext;
-        private readonly IRealtimeService _realtimeService;
-        private readonly INotificationService _notificationService;
-        private readonly IMediaService _mediaService;
 
         private readonly string avatarType = UserMediaType.Avatar.GetDescription();
-        public PostService(AppDbContext dbContext, IRealtimeService realtimeService, INotificationService notificationService, IMediaService mediaService)
+        public PostService(AppDbContext dbContext)
         {
             _dbContext = dbContext;
-            _realtimeService = realtimeService;
-            _notificationService = notificationService;
-            _mediaService = mediaService;
         }
 
         /// <summary>
@@ -253,7 +246,7 @@ namespace Kpett.ChatApp.Services.Impls
         /// </summary>
         public async Task<PaginatedData<PostFeedResponse>> GetFeedAsync(string? currentUserId, string? cursor = null, int limit = 10, CancellationToken cancel = default)
         {
-            // Giải mã Cursor
+            // Giáº£i mÃ£ Cursor
             DateTime? cursorDate = null;
             string? cursorId = null;
 
@@ -761,7 +754,7 @@ namespace Kpett.ChatApp.Services.Impls
         // Helper method to sync media with a post during creation or update
         private async Task SyncPostMediaAsync(string postId, IEnumerable<MediaRequest>? requestedMedia, CancellationToken cancel)
         {
-            // Lấy danh sách Media hiện tại từ DB
+            // Láº¥y danh sÃ¡ch Media hiá»‡n táº¡i tá»« DB
             var currentMedias = await _dbContext.PostMedia
                 .Where(m => m.PostId == postId)
                 .ToListAsync(cancel);
@@ -840,3 +833,5 @@ namespace Kpett.ChatApp.Services.Impls
         }
     }
 }
+
+
