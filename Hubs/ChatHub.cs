@@ -1,4 +1,4 @@
-﻿using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
@@ -59,6 +59,17 @@ namespace Kpett.ChatApp.Hubs
                     userId = userId,
                     isOnline = false
                 });
+            }
+
+            // Dọn dẹp Redis presence tracking khi mất kết nối đột ngột:
+            // Xóa mapping connection→conversations và conversation→users
+            try
+            {
+                await _conversationPresenceService.CleanupConnectionAsync(userId, Context.ConnectionId);
+            }
+            catch
+            {
+                // Không nên fail toàn bộ disconnect vì cleanup thất bại
             }
 
             await base.OnDisconnectedAsync(exception);
@@ -259,7 +270,8 @@ namespace Kpett.ChatApp.Hubs
         //}
 
         /// <summary>
-        /// Send typing indicator
+        /// Send typing indicator.
+        /// Access check được cache trong Redis (TTL 5 phút) để tránh DB hit mỗi lần gõ phím.
         /// </summary>
         public async Task SendTyping(string conversationId, bool isTyping)
         {
@@ -279,7 +291,14 @@ namespace Kpett.ChatApp.Hubs
 
             try
             {
-                await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, userId, Context.ConnectionAborted);
+                // Kiểm tra cache Redis trước để tránh query DB mỗi lần gõ phím
+                var isCached = await _redis.GetConversationAccessCacheAsync(userId, conversationId);
+                if (!isCached)
+                {
+                    // Chưa có trong cache → query DB và cache lại kết quả trong 5 phút
+                    await _conversationAccessService.EnsureCanAccessConversationAsync(conversationId, userId, Context.ConnectionAborted);
+                    await _redis.SetConversationAccessCacheAsync(userId, conversationId, TimeSpan.FromMinutes(5));
+                }
 
                 await Clients.OthersInGroup(conversationId).SendAsync("UserTyping", new
                 {
