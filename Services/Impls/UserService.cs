@@ -1,7 +1,9 @@
 ﻿using Hangfire;
 using Kpett.ChatApp.Constants;
+using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Request.User;
+using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
@@ -450,6 +452,89 @@ namespace Kpett.ChatApp.Services.Impls
                 },
 
                 IsOnline = isOnline
+            };
+        }
+
+        public async Task<PaginatedData<UserResponse>> SearchUsersAsync(string currentUserId, string keyword, int limit, string? cursor, CancellationToken cancel)
+        {
+            limit = limit <= 0 ? 20 : Math.Min(limit, 50);
+            var searchTerm = keyword?.Trim() ?? string.Empty;
+
+            // Khởi tạo Query cơ bản (Bỏ qua tracking để tối ưu tốc độ đọc)
+            var query = _dbcontext.Users.AsNoTracking().AsQueryable();
+
+            // Lọc theo từ khóa (Tìm trong DisplayName hoặc Username)
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                query = query.Where(u =>
+                    (u.DisplayName != null && u.DisplayName.Contains(searchTerm)) ||
+                    (u.Username != null && u.Username.Contains(searchTerm))
+                );
+            }
+
+            // Loại trừ người đang thực hiện tìm kiếm
+            if (!string.IsNullOrWhiteSpace(currentUserId))
+            {
+                query = query.Where(u => u.Id != currentUserId);
+            }
+
+            // Giải mã Cursor
+            string? cursorId = null;
+            if (!string.IsNullOrWhiteSpace(cursor))
+            {
+                var decoded = CursorHelper.Decode<UserSearchCursorPayload>(cursor);
+                if (decoded != null) cursorId = decoded.UserId;
+            }
+
+            // Áp dụng Cursor Pagination (Sắp xếp tăng dần theo Id)
+            if (!string.IsNullOrWhiteSpace(cursorId))
+            {
+                query = query.Where(u => string.Compare(u.Id, cursorId) > 0);
+            }
+
+            // Truy vấn dữ liệu từ DB (Dư 1 record để check NextCursor)
+            var rawUsers = await query
+                .OrderBy(u => u.Id)
+                .Take(limit + 1)
+                .Select(u => new
+                {
+                    u.Id,
+                    u.DisplayName,
+                    u.Username,
+                    // Sub-query để lấy Avatar một cách tối ưu
+                    AvatarUrl = _dbcontext.UserMedias
+                        .Where(um => um.UserId == u.Id && um.IsPrimary && um.MediaType == "Avatar")
+                        .Select(um => um.MediaUrl)
+                        .FirstOrDefault()
+                })
+                .ToListAsync(cancel);
+
+            // Xử lý phân trang
+            string? nextCursor = null;
+            if (rawUsers.Count > limit)
+            {
+                var lastItem = rawUsers[limit - 1];
+                nextCursor = CursorHelper.Encode(new UserSearchCursorPayload { UserId = lastItem.Id });
+                rawUsers.RemoveAt(limit);
+            }
+
+            // Mapping sang DTO trả về
+            var items = rawUsers.Select(u => new UserResponse
+            {
+                Id = u.Id,
+                DisplayName = u.DisplayName ?? u.Username,
+                Username = u.Username,
+                AvatarUrl = u.AvatarUrl
+            }).ToList();
+
+            return new PaginatedData<UserResponse>
+            {
+                Items = items,
+                Pagination = new CursorPaginationMeta
+                {
+                    NextCursor = nextCursor,
+                    Limit = limit
+                }
             };
         }
     }

@@ -2,7 +2,7 @@ using Kpett.ChatApp.DTOs.Response.Conversation;
 
 namespace Kpett.ChatApp.Services.Interfaces
 {
-    public interface ITypingService
+    public interface IConversationTypingService
     {
         /// <summary>
         /// Bắt đầu hoặc refresh typing session cho 1 connection.

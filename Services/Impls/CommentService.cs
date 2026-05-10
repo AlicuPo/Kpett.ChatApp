@@ -1,13 +1,16 @@
-﻿using Kpett.ChatApp.Constants;
+﻿using Azure.Core;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Response.Post;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Enums;
+using Kpett.ChatApp.Events.Comment;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Extensions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
 
@@ -20,9 +23,13 @@ namespace Kpett.ChatApp.Services.Impls
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         private readonly AppDbContext _dbContext;
-        public CommentService(AppDbContext dbContext)
+        private readonly IMediator _mediator;
+        private readonly ILogger<CommentService> _logger;
+        public CommentService(AppDbContext dbContext, IMediator mediator, ILogger<CommentService> logger)
         {
             _dbContext = dbContext;
+            _mediator = mediator;
+            _logger = logger;
         }
 
         public async Task<CommentListItemDTO> AddCommentAsync(string postId, string userId, string content, string? parentCommentId, CancellationToken cancel)
@@ -111,10 +118,28 @@ namespace Kpett.ChatApp.Services.Impls
                     .AsNoTracking()
                     .FirstOrDefault(um => um.UserId == userId && um.MediaType == UserMediaType.Avatar.GetDescription() && um.IsPrimary);
 
-                return MapCommentListItem(comment, user, userMedia ,mentions, false, user.Id);
+                if (mentionIds.Any())
+                {
+                    // Trích xuất đoạn snippet (50 ký tự) từ Content để hiển thị tóm tắt trên UI Thông báo
+                    string snippet = comment.Content.Length > 50
+                        ? comment.Content.Substring(0, 50) + "..."
+                        : comment.Content;
+
+                    await _mediator.Publish(new CommentMentionedEvent
+                    {
+                        PostId = comment.PostId,
+                        CommentId = comment.Id,
+                        ActorId = userId,
+                        MentionedUserIds = mentionIds,
+                        CommentSnippet = snippet
+                    }, cancel);
+                }
+
+                return MapCommentListItem(comment, user, userMedia, mentions, false, user.Id);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Error");
                 await transaction.RollbackAsync();
                 throw;
             }
@@ -277,7 +302,7 @@ namespace Kpett.ChatApp.Services.Impls
                                 .AsNoTracking()
                                 .FirstOrDefault(um => um.UserId == userId && um.MediaType == UserMediaType.Avatar.GetDescription() && um.IsPrimary);
 
-            return MapCommentListItem(comment, user ,userMedia, mentions, false, user.Id);
+            return MapCommentListItem(comment, user, userMedia, mentions, false, user.Id);
         }
 
         public async Task DeleteCommentAsync(string commentId, string userId, CancellationToken cancel)
@@ -415,7 +440,7 @@ namespace Kpett.ChatApp.Services.Impls
         private static CommentListItemDTO MapCommentListItem(
             Comment comment,
             User userInfo,
-            UserMedia? userMedia, 
+            UserMedia? userMedia,
             List<CommentMentionSummaryDTO> mentions,
             bool isLiked,
             string currentUserId)
@@ -433,7 +458,7 @@ namespace Kpett.ChatApp.Services.Impls
                     Id = userInfo.Id,
                     Username = userInfo.Username,
                     DisplayName = userInfo.DisplayName,
-                    AvatarUrl = userMedia.MediaUrl,
+                    AvatarUrl = userMedia?.MediaUrl,
                     IsVerified = userInfo.IsVerified
                 },
                 Content = comment.Content,

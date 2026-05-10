@@ -7,15 +7,15 @@ using Microsoft.AspNetCore.SignalR;
 namespace Kpett.ChatApp.Hubs
 {
     [Authorize]
-    public class ChatHub : Hub
+    public class AppHub : Hub
     {
         private readonly IRedisService _redisService;
-        private readonly ITypingService _typingService;
+        private readonly IConversationTypingService _typingService;
         private readonly IConversationAccessService _conversationAccessService;
 
-        public ChatHub(
+        public AppHub(
             IRedisService redisService,
-            ITypingService typingService,
+            IConversationTypingService typingService,
             IConversationAccessService conversationAccessService)
         {
             _redisService = redisService;

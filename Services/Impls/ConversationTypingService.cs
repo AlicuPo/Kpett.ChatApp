@@ -11,10 +11,10 @@ using System.Collections.Concurrent;
 
 namespace Kpett.ChatApp.Services.Impls
 {
-    public class ConversationTypingService : ITypingService
+    public class ConversationTypingService : IConversationTypingService
     {
         private readonly IRedisService _redis;
-        private readonly IHubContext<ChatHub> _hubContext;
+        private readonly IHubContext<AppHub> _hubContext;
         private readonly AppDbContext _dbContext;
 
         // Thời gian tự động dừng typing nếu không nhận được event mới
@@ -26,7 +26,7 @@ namespace Kpett.ChatApp.Services.Impls
 
         public ConversationTypingService(
             IRedisService redis,
-            IHubContext<ChatHub> hubContext,
+            IHubContext<AppHub> hubContext,
             AppDbContext dbContext)
         {
             _redis = redis;

@@ -156,5 +156,26 @@ namespace Kpett.ChatApp.Controllers
                 Data = result
             });
         }
+
+        [HttpGet("search")]
+        [OptionalAuthorize]
+        public async Task<IActionResult> SearchUsers(
+            [FromQuery] string keyword,
+            [FromQuery] int limit = 20,
+            [FromQuery] string? cursor = null,
+            CancellationToken cancel = default)
+        {
+            var currentUserId = User.GetRequiredUserId();
+
+            var result = await _userService.SearchUsersAsync(currentUserId, keyword, limit, cursor, cancel);
+
+            return Ok(new GeneralResponse<PaginatedData<UserResponse>>
+            {
+                IsSuccess = true,
+                Data = result,
+                Message = "Tìm kiếm người dùng thành công",
+                StatusCode = 200
+            });
+        }
     }
 }

@@ -17,6 +17,7 @@ using StackExchange.Redis;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using System.Text.Json;
+using Kpett.ChatApp.Be.Services.Impls;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -79,6 +80,12 @@ builder.Services.AddHangfire(config => config
 // Add the Hangfire server to process background jobs
 builder.Services.AddHangfireServer();
 
+// MediatR
+builder.Services.AddMediatR(cfg =>
+{
+    cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
+});
+
 var account = new Account(
     builder.Configuration["CloudinarySettings:CloudName"],
     builder.Configuration["CloudinarySettings:ApiKey"],
@@ -131,12 +138,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
 
-                // Xá»­ lÃ½ token cho káº¿t ná»‘i WebSockets / SignalR
-                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/chat-Hub"))
+                if (!string.IsNullOrEmpty(accessToken) && (path.StartsWithSegments("/hubs/app")))
                 {
+                    // Đọc token từ query string cho SignalR
                     context.Token = accessToken;
                 }
-
                 return Task.CompletedTask;
             },
 
@@ -213,7 +219,7 @@ builder.Services.AddScoped<IPostService, PostService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddScoped<IMediaService, MediaService>();
 builder.Services.AddScoped<IConversationAccessService, ConversationAccessService>();
-builder.Services.AddScoped<ITypingService, ConversationTypingService>();
+builder.Services.AddScoped<IConversationTypingService, ConversationTypingService>();
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
@@ -246,7 +252,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
-app.MapHub<ChatHub>("/chat-Hub").RequireCors("ClientCors");
+app.MapHub<AppHub>("/hubs/app").RequireCors("ClientCors");
 
 app.Run();
 

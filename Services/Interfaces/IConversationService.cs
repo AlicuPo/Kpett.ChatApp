@@ -1,4 +1,5 @@
 using Kpett.ChatApp.DTOs.Request.Conversation;
+using Kpett.ChatApp.DTOs.Request.Shared;
 using Kpett.ChatApp.DTOs.Response.Conversation;
 using Kpett.ChatApp.DTOs.Response.Shared;
 
@@ -15,5 +16,6 @@ namespace Kpett.ChatApp.Services.Interfaces
         Task MarkAsReadAsync(string conversationId, string currentUserId, CancellationToken cancel);
         Task<ConversationResponse> GetConversationByIdAsync(string currentUserId, string conversationId, CancellationToken cancel);
         Task<ConversationResponse> GetOrCreateDirectConversationAsync(string currentUserId, string otherUserId, CancellationToken cancel);
+        Task<PaginatedData<ParticipantResponse>> GetGroupMembersAsync(string currentUserId, string conversationId, CursorPaginationRequest request, CancellationToken cancel);
     }
 }

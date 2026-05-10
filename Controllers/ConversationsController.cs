@@ -1,5 +1,6 @@
 using Kpett.ChatApp.DTOs.Request.Conversation;
 using Kpett.ChatApp.DTOs.Request.Friend;
+using Kpett.ChatApp.DTOs.Request.Shared;
 using Kpett.ChatApp.DTOs.Response.Conversation;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
@@ -204,6 +205,21 @@ namespace Kpett.ChatApp.Controllers
                 Data = conversation,
                 Message = "Get or create direct conversation successfully",
                 StatusCode = StatusCodes.Status200OK
+            });
+        }
+
+        [HttpGet("{conversationId}/members")]
+        public async Task<IActionResult> GetGroupMembers([FromRoute] string conversationId, [FromQuery] CursorPaginationRequest request, CancellationToken cancel)
+        {
+            var currentUserId = User.GetRequiredUserId();
+
+            var paginatedMembers = await _conversationService.GetGroupMembersAsync(currentUserId, conversationId, request, cancel);
+
+            return Ok(new GeneralResponse<PaginatedData<ParticipantResponse>>
+            {
+                Data = paginatedMembers,
+                Message = "Get paticipant successfully",
+                StatusCode = 200
             });
         }
     }

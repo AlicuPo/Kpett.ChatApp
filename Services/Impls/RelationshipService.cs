@@ -5,13 +5,16 @@ using Kpett.ChatApp.DTOs.Response.Friend;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
+using Kpett.ChatApp.Events.Friend;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Extensions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Threading.Channels;
 
 namespace Kpett.ChatApp.Services.Impls
 {
@@ -19,11 +22,13 @@ namespace Kpett.ChatApp.Services.Impls
     {
         private readonly AppDbContext _context;
         private readonly IRedisService _redisService;
+        private readonly IMediator _mediator;
 
-        public RelationshipService(AppDbContext context, IRedisService redisService)
+        public RelationshipService(AppDbContext context, IRedisService redisService, IMediator mediator)
         {
             _context = context;
             _redisService = redisService;
+            _mediator = mediator;
         }
 
         // Friend request
@@ -98,6 +103,13 @@ namespace Kpett.ChatApp.Services.Impls
 
             await _context.SaveChangesAsync();
 
+            await _mediator.Publish(new FriendRequestSentEvent
+            {
+                RequestId = request.Id,
+                SenderId = senderId,
+                ReceiverId = receiverId
+            });
+
             return new FriendRequestResponse
             {
                 RequestId = request.Id,
@@ -132,11 +144,9 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You are not authorized to accept this friend request.");
             }
 
-            // Cáº­p nháº­t tráº¡ng thÃ¡i Request
             request.Status = FriendRequestStatus.Accepted.GetDescription();
             request.UpdatedAt = DateTime.UtcNow;
 
-            // Cáº­p nháº­t hoáº·c táº¡o má»›i Friendship
             var friendship = await _context.Friendships
                  .FirstOrDefaultAsync(f => (f.UserLowId == request.SenderId && f.UserHighId == request.ReceiverId) || (f.UserLowId == request.ReceiverId && f.UserHighId == request.SenderId));
 
@@ -172,7 +182,21 @@ namespace Kpett.ChatApp.Services.Impls
                 });
             }
 
+            var notifiRequest = await _context.Notifications.FirstOrDefaultAsync(n => n.ReferenceId == request.Id);
+            if(notifiRequest != null)
+            {
+                _context.Notifications.Remove(notifiRequest);
+            }
+
             await _context.SaveChangesAsync();
+
+            await _mediator.Publish(new FriendRequestAcceptedEvent
+            {
+                RequestId = request.Id,
+                AccepterId = currentUserId,
+                RequesterId = request.SenderId
+            });
+
         }
 
         public async Task DeclineFriendRequestAsync(string currentUserId, string requestId)
@@ -200,6 +224,12 @@ namespace Kpett.ChatApp.Services.Impls
                 _context.Follows.Remove(follow);
             }
 
+            var notifiRequest = await _context.Notifications.FirstOrDefaultAsync(n => n.ReferenceId == request.Id);
+            if (notifiRequest != null)
+            {
+                _context.Notifications.Remove(notifiRequest);
+            }
+
             await _context.SaveChangesAsync();
         }
 
@@ -216,11 +246,16 @@ namespace Kpett.ChatApp.Services.Impls
 
             request.Status = FriendRequestStatus.Cancelled.GetDescription();
 
-            // Há»§y Follow
             var follow = await _context.Follows.FirstOrDefaultAsync(f => f.FollowerId == request.SenderId && f.FolloweeId == request.ReceiverId);
             if (follow != null)
             {
                 _context.Follows.Remove(follow);
+            }
+
+            var notifiRequest = await _context.Notifications.FirstOrDefaultAsync(n => n.ReferenceId == request.Id);
+            if (notifiRequest != null)
+            {
+                _context.Notifications.Remove(notifiRequest);
             }
 
             await _context.SaveChangesAsync();

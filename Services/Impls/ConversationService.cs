@@ -1,6 +1,7 @@
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Request.Conversation;
+using Kpett.ChatApp.DTOs.Request.Shared;
 using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.DTOs.Response.Conversation;
 using Kpett.ChatApp.DTOs.Response.Conversation.Metadata;
@@ -23,13 +24,13 @@ namespace Kpett.ChatApp.Services.Impls
     {
         private readonly AppDbContext _context;
         private readonly IRedisService _redisService;
-        private readonly IHubContext<ChatHub> _chatHubContext;
+        private readonly IHubContext<AppHub> _chatHubContext;
         private readonly ILogger<ConversationService> _logger;
 
         private static readonly JsonSerializerOptions _jsonCamelCase = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
         private static readonly JsonSerializerOptions _jsonCaseInsensitive = new() { PropertyNameCaseInsensitive = true };
 
-        public ConversationService(AppDbContext dbContext, IRedisService redisService, IHubContext<ChatHub> chatHubContext, ILogger<ConversationService> logger)
+        public ConversationService(AppDbContext dbContext, IRedisService redisService, IHubContext<AppHub> chatHubContext, ILogger<ConversationService> logger)
         {
             _context = dbContext;
             _redisService = redisService;
@@ -1037,6 +1038,103 @@ namespace Kpett.ChatApp.Services.Impls
                 IsActive = newConversation.IsActive,
                 LastMessage = null,
                 Participants = participants.Select(p => MapParticipant(usersInfo[p.UserId], p.Role, p.LastReadMessageId, p.UserId == otherUserId ? onlineStatuses.GetValueOrDefault(otherUserId) : true)).ToList()
+            };
+        }
+
+        public async Task<PaginatedData<ParticipantResponse>> GetGroupMembersAsync(string currentUserId, string conversationId, CursorPaginationRequest request, CancellationToken cancel)
+        {
+            // Validate đầu vào cơ bản
+            if (string.IsNullOrWhiteSpace(currentUserId))
+            {
+                throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
+            }
+
+            if (string.IsNullOrWhiteSpace(conversationId))
+            {
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Conversation ID is required.");
+            }
+
+            var limit = request.Limit <= 0 ? 20 : Math.Min(request.Limit, 50);
+
+            // Kiểm tra quyền truy cập (Chỉ dùng 1 Query AnyAsync tối ưu)
+            var isMember = await _context.ConversationParticipants
+                .AnyAsync(cp => cp.ConversationId == conversationId && cp.UserId == currentUserId && !cp.IsKicked, cancel);
+
+            if (!isMember)
+            {
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You are not an active member of this group.");
+            }
+
+            // Giải mã Cursor lấy ID làm mốc
+            string? cursorId = null;
+            if (!string.IsNullOrWhiteSpace(request.Cursor))
+            {
+                var decoded = CursorHelper.Decode<GroupMemberCursorPayload>(request.Cursor);
+                if (decoded != null)
+                {
+                    cursorId = decoded.ParticipantId;
+                }
+            }
+
+            // Xây dựng truy vấn cơ sở
+            var baseQuery = _context.ConversationParticipants.AsNoTracking()
+                .Where(p => p.ConversationId == conversationId && !p.IsKicked);
+
+            // Lọc theo Cursor: Lấy các phần tử có Id lớn hơn cursorId hiện tại (Sắp xếp tăng dần A-Z)
+            if (!string.IsNullOrWhiteSpace(cursorId))
+            {
+                baseQuery = baseQuery.Where(p => string.Compare(p.Id, cursorId) > 0);
+            }
+
+            // Lấy dữ liệu + Dư 1 record để kiểm tra xem còn trang tiếp theo không
+            var rawParticipants = await baseQuery
+                .OrderBy(p => p.Id)
+                .Take(limit + 1)
+                .Select(p => new { p.Id, p.UserId, p.Role, p.LastReadMessageId })
+                .ToListAsync(cancel);
+
+            // Xử lý phân trang
+            string? nextCursor = null;
+            if (rawParticipants.Count > limit)
+            {
+                var lastItem = rawParticipants[limit - 1];
+                nextCursor = CursorHelper.Encode(new GroupMemberCursorPayload
+                {
+                    ParticipantId = lastItem.Id
+                });
+                rawParticipants.RemoveAt(limit);
+            }
+
+            // Tối ưu: Chỉ fetch thông tin User hiển thị ra màn hình
+            var userIdsToFetch = rawParticipants.Select(p => p.UserId).ToList();
+
+            var usersDict = userIdsToFetch.Any()
+                ? await BaseUserProjectionQuery()
+                    .Where(u => userIdsToFetch.Contains(u.Id))
+                    .ToDictionaryAsync(u => u.Id, u => u, cancel)
+                : new Dictionary<string, UserResponse>();
+
+            var onlineStatuses = await _redisService.GetUsersOnlineStatusAsync(userIdsToFetch);
+
+            // Map dữ liệu sang chuẩn DTO trả về (Sử dụng hàm helper DRY)
+            var items = rawParticipants
+                .Where(p => usersDict.ContainsKey(p.UserId))
+                .Select(p => MapParticipant(
+                    usersDict[p.UserId],
+                    p.Role,
+                    p.LastReadMessageId,
+                    onlineStatuses.GetValueOrDefault(p.UserId)
+                ))
+                .ToList();
+
+            return new PaginatedData<ParticipantResponse>
+            {
+                Items = items,
+                Pagination = new CursorPaginationMeta
+                {
+                    NextCursor = nextCursor,
+                    Limit = limit
+                }
             };
         }
 
