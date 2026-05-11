@@ -56,4 +56,8 @@
     <Folder Include="DTOs\Response\Comment\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include=".github\workflows\prod-kpett-chatapp.yml" />
+  </ItemGroup>
+
 </Project>
