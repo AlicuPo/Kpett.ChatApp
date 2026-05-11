@@ -24,14 +24,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+var corsSettings = builder.Configuration.GetSection("Cors").Get<CorsOptions>();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("ClientCors", policy =>
     {
         policy
-            .WithOrigins(
-                "http://localhost:3000",
-                "http://localhost:5173")
+            .WithOrigins(corsSettings?.AllowedOrigins ?? new[] { "http://localhost:3000" })
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
