@@ -1,29 +1,31 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
 namespace Kpett.ChatApp.Models;
 
-public partial class Notification
+public class Notification
 {
     public string Id { get; set; } = null!;
 
-    public string UserId { get; set; } = null!;
+    [Required]
+    [MaxLength(450)]
+    public string RecipientId { get; set; } = null!;
 
-    public string? Type { get; set; }
+    [Required]
+    [MaxLength(450)]
+    public string ActorId { get; set; } = null!;
 
-    public string? Title { get; set; }
+    [Required]
+    [MaxLength(50)]
+    public string Type { get; set; } = null!;
 
-    public string? Content { get; set; }
+    [MaxLength(450)]
+    public string? ReferenceId { get; set; }
 
-    public string? Data { get; set; }
+    public string? Metadata { get; set; }
 
-    public bool? IsRead { get; set; }
+    public bool IsRead { get; set; } = false;
 
-    public bool? IsArchived { get; set; }
-
-    public DateTime? CreatedAt { get; set; }
-
-    public DateTime? ReadAt { get; set; }
-
-    public string? SenderId { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

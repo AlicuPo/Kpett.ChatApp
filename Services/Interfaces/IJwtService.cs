@@ -7,8 +7,8 @@ namespace Kpett.ChatApp.Services.Interfaces
     public interface IJwtService
     {
         UserClaims? GetUserClaims();
-        string GenerateAccessToken(string userId, string UserName, string? email = null, string? displayName = null);
-        string GenerateRefreshToken(string userId, string UserName, string? email = null);
+        string GenerateAccessToken(string userId, string email);
+        string GenerateRefreshToken(string userId, string email);
         ClaimsPrincipal? GetPrincipalFromExpiredToken(string token, bool isRefresh = false);
     }
 }

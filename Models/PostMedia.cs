@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
 namespace Kpett.ChatApp.Models;
 
@@ -7,7 +8,8 @@ public partial class PostMedia
 {
     public string Id { get; set; } = null!;
 
-    public long PostId { get; set; }
+    [MaxLength(450)]
+    public string? PostId { get; set; }
 
     public string? MediaUrl { get; set; }
 
@@ -22,4 +24,8 @@ public partial class PostMedia
     public int? Duration { get; set; }
 
     public int? SortOrder { get; set; }
+
+    public bool IsTemporary { get; set; } = true;
+
+    public DateTime CreatedAt { get; set; }
 }

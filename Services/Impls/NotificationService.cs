@@ -1,46 +1,136 @@
-﻿using Kpett.ChatApp.Contants;
-using Kpett.ChatApp.DTOs;
-using Kpett.ChatApp.Exceptions;
+﻿using Kpett.ChatApp.DTOs.Payload.Cursor;
+using Kpett.ChatApp.DTOs.Request.Shared;
+using Kpett.ChatApp.DTOs.Response.Notidication;
+using Kpett.ChatApp.DTOs.Response.Shared;
+using Kpett.ChatApp.Extensions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Receive;
-using Kpett.ChatApp.Services;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
-namespace Kpett.ChatApp.Services.Impls
+using System.Text.Json;
+
+namespace Kpett.ChatApp.Be.Services.Impls
 {
     public class NotificationService : INotificationService
     {
-        private readonly AppDbContext _dbContext;
-        public NotificationService(AppDbContext dbContext)
-        { 
-            _dbContext = dbContext;
+        private readonly AppDbContext _context;
+
+        public NotificationService(AppDbContext context)
+        {
+            _context = context;
         }
 
-        public Task CreateMessageNotificationsAsync(string conversationId, string senderId, MessageDTO dto)
+        public async Task<PaginatedData<NotificationResponse>> GetUserNotificationsAsync(string currentUserId, CursorPaginationRequest request, CancellationToken cancel)
         {
-            if (string.IsNullOrEmpty(conversationId))
+            var limit = request.Limit <= 0 ? 20 : Math.Min(request.Limit, 50);
+
+            DateTime? cursorDate = null;
+            string? cursorId = null;
+
+            if (!string.IsNullOrWhiteSpace(request.Cursor))
             {
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED,"conversationId not null or empty");
-            }
-            if (string.IsNullOrEmpty(senderId))
-            {
-                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "senderId not null or empty");
-            }
-            return Task.Run(async () =>
-            {
-                var participants = await _dbContext.ConversationParticipants
-                    .Where(cp => cp.ConversationId == conversationId && cp.UserId != senderId)
-                    .ToListAsync();
-                var notifications = participants.Select(participant => new Notification
+                var decoded = CursorHelper.Decode<NotificationCursorPayload>(request.Cursor);
+                if (decoded != null)
                 {
-                    UserId = participant.UserId,
-                    //MessageId = dto.Id!.Value,
-                    IsRead = false,
-                    CreatedAt = DateTime.UtcNow
-                }).ToList();
-                await _dbContext.Notifications.AddRangeAsync(notifications);
-                await _dbContext.SaveChangesAsync();
-            });
+                    cursorDate = decoded.CreatedAt;
+                    cursorId = decoded.NotificationId;
+                }
+            }
+
+            var query = _context.Notifications.AsNoTracking()
+                .Where(n => n.RecipientId == currentUserId);
+
+            // Phân trang bằng Cursor (Cũ hơn mốc Cursor)
+            if (cursorDate.HasValue && !string.IsNullOrWhiteSpace(cursorId))
+            {
+                query = query.Where(n => n.CreatedAt < cursorDate.Value ||
+                                        (n.CreatedAt == cursorDate.Value && string.Compare(n.Id, cursorId) < 0));
+            }
+
+            var rawData = await query
+                .OrderByDescending(n => n.CreatedAt)
+                .ThenByDescending(n => n.Id)
+                .Take(limit + 1)
+                .Select(n => new
+                {
+                    n.Id,
+                    n.Type,
+                    n.ReferenceId,
+                    n.Metadata,
+                    n.IsRead,
+                    n.CreatedAt,
+                    ActorInfo = _context.Users
+                        .Where(u => u.Id == n.ActorId)
+                        .Select(u => new
+                        {
+                            u.Id,
+                            DisplayName = u.DisplayName ?? u.Username,
+                            u.Username,
+                            AvatarUrl = _context.UserMedias
+                                .Where(um => um.UserId == u.Id && um.IsPrimary && um.MediaType == "Avatar")
+                                .Select(um => um.MediaUrl)
+                                .FirstOrDefault()
+                        })
+                        .FirstOrDefault()
+                })
+                .ToListAsync(cancel);
+
+            string? nextCursor = null;
+            if (rawData.Count > limit)
+            {
+                var lastItem = rawData[limit - 1];
+                nextCursor = CursorHelper.Encode(new NotificationCursorPayload
+                {
+                    NotificationId = lastItem.Id,
+                    CreatedAt = lastItem.CreatedAt
+                });
+                rawData.RemoveAt(limit);
+            }
+
+            var items = rawData.Select(n => new NotificationResponse
+            {
+                Id = n.Id,
+                Type = n.Type,
+                ReferenceId = n.ReferenceId,
+                Metadata = string.IsNullOrWhiteSpace(n.Metadata) ? null : JsonSerializer.Deserialize<object>(n.Metadata),
+                IsRead = n.IsRead,
+                CreatedAt = n.CreatedAt.ToUtc(),
+                Actor = n.ActorInfo == null ? null : new ActorSnippetResponse
+                {
+                    Id = n.ActorInfo.Id,
+                    DisplayName = n.ActorInfo.DisplayName,
+                    Username = n.ActorInfo.Username,
+                    AvatarUrl = n.ActorInfo.AvatarUrl
+                }
+            }).ToList();
+
+            return new PaginatedData<NotificationResponse>
+            {
+                Items = items,
+                Pagination = new CursorPaginationMeta { NextCursor = nextCursor, Limit = limit }
+            };
+        }
+
+        public async Task<int> GetUnreadCountAsync(string currentUserId, CancellationToken cancel)
+        {
+            return await _context.Notifications
+                .CountAsync(n => n.RecipientId == currentUserId && !n.IsRead, cancel);
+        }
+
+        public async Task MarkAsReadAsync(string currentUserId, string notificationId, CancellationToken cancel)
+        {
+            // Tối ưu hóa: Dùng ExecuteUpdateAsync ghi trực tiếp xuống SQL Server không cần Load Entity
+            await _context.Notifications
+                .Where(n => n.Id == notificationId && n.RecipientId == currentUserId && !n.IsRead)
+                .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true), cancel);
+        }
+
+        public async Task MarkAllAsReadAsync(string currentUserId, CancellationToken cancel)
+        {
+            // Tối ưu hóa: Đánh dấu tất cả đã đọc chỉ với 1 câu lệnh SQL
+            await _context.Notifications
+                .Where(n => n.RecipientId == currentUserId && !n.IsRead)
+                .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true), cancel);
         }
     }
 }

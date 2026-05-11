@@ -1,16 +1,10 @@
-﻿using Kpett.ChatApp.DTOs.Request;
-using Kpett.ChatApp.DTOs.Response;
+using Kpett.ChatApp.DTOs.Request.Auth;
+using Kpett.ChatApp.DTOs.Response.Auth;
+using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using StackExchange.Redis;
-using System.Net;
-using System.Security.Claims;
-using System.Threading.Tasks;
-using IRedisService = Kpett.ChatApp.Services.Interfaces.IRedisService;
 
 namespace Kpett.ChatApp.Controllers
 {
@@ -18,29 +12,24 @@ namespace Kpett.ChatApp.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly IJwtService _token;
-        private readonly IRedisService _redis;
-        private readonly IAuthService _loginRepository;
-        private readonly AppDbContext _dbContext;
-        public AuthController(IAuthService loginRepository, IRedisService redis, IJwtService token, AppDbContext dbContext)
+        private readonly IRedisService _redisService;
+        private readonly IAuthService _authService;
+        public AuthController(IAuthService authService, IRedisService redisService)
         {
-            _loginRepository = loginRepository;
-            _redis = redis;
-            _token = token;
-            _dbContext = dbContext;
-
+            _authService = authService;
+            _redisService = redisService;
         }
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
-            var result = await _loginRepository.LoginAsync(request);
+            var result = await _authService.LoginAsync(request);
             return Ok(new GeneralResponse<LoginResponse>
             {
                 StatusCode = 200,
                 IsSuccess = true,
                 Data = result,
-                Message = "Đăng nhập thành công."
+                Message = "Login successfully."
             });
         }
 
@@ -48,150 +37,38 @@ namespace Kpett.ChatApp.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancel = default)
         {
-            var result = await _loginRepository.RegisterAsync(request, cancel);
-            return Ok(new
+            var result = await _authService.RegisterAsync(request, cancel);
+            return Ok(new GeneralResponse()
             {
-                Return = true,
-                message = "Đăng ký tài khoản thành công.",
-                StatusCode = StatusCode(StatusCodes.Status201Created)
+                IsSuccess = true,
+                Message = "Register successfully.",
+                StatusCode = StatusCodes.Status201Created
             });
         }
 
         [Authorize]
         [HttpPost("logout")]
-        public async Task<IActionResult> Logout(CancellationToken cancel = default)
+        public async Task<IActionResult> Logout([FromBody] LogoutRequest logoutRequest, CancellationToken cancel = default)
         {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || string.IsNullOrWhiteSpace(userIdClaim.Value))
-            {
-                return Unauthorized(new { message = "Invalid user." });
-            }
-            var userId = userIdClaim.Value;
+            await _authService.LogoutAsync(logoutRequest, User, cancel);
 
-            // Extract JTI from current access token to blacklist it
-            var jtiClaim = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
-            if (!string.IsNullOrEmpty(jtiClaim))
+            return Ok(new GeneralResponse
             {
-                // Blacklist the current access token (30 min expiry)
-                await _redis.BlacklistAccessTokenAsync(jtiClaim, TimeSpan.FromMinutes(30));
-            }
-
-            // Blacklist refresh token
-            var refreshToken = await _redis.GetRefreshTokenAsync(userId);
-            if (!string.IsNullOrEmpty(refreshToken))
-            {
-                await _redis.BlacklistRefreshTokenAsync(refreshToken, TimeSpan.FromDays(30));
-                await _redis.RemoveRefreshTokenAsync(userId);
-            }
-
-            var result = await _loginRepository.LogoutAsync(userId, cancel);
-            if (result)
-            {
-                return Ok(new GeneralResponse
-                {
-                    IsSuccess = true,
-                    Message = "Logout successful.",
-                    StatusCode = 200
-                });
-            } 
-            else
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new GeneralResponse
-                {
-                    IsSuccess = false,
-                    Message = "Logout failed."
-                });
-            }
+                IsSuccess = true,
+                Message = "Logout successful.",
+                StatusCode = 200
+            });
         }
 
         [HttpPost("refresh")]
-        public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
+        [HttpPost("refresh-token")]
+        public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
         {
-            if (request == null || string.IsNullOrEmpty(request.RefreshToken))
-            {
-                return BadRequest(new ErrorResponse
-                {
-                    IsSuccess = false,
-                    Message = "Refresh token is required.",
-                    ErrorCode = "AUTH.REFRESH_TOKEN_MISSING"
-                });
-            }
-
-            // Validate refresh token signature and extract claims
-            var principal = _token.GetPrincipalFromExpiredToken(request.RefreshToken, true);
-            if (principal == null)
-            {
-                return Unauthorized(new ErrorResponse
-                {
-                    IsSuccess = false,
-                    Message = "Invalid refresh token.",
-                    ErrorCode = "AUTH.INVALID_REFRESH_TOKEN"
-                });
-            }
-
-            var userId = principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                         ?? principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.NameId)?.Value;
-
-            var username = principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Name)?.Value
-                           ?? principal.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? string.Empty;
-
-            var email = principal.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
-
-            if (string.IsNullOrEmpty(userId))
-            {
-                return Unauthorized(new ErrorResponse
-                {
-                    IsSuccess = false,
-                    Message = "Invalid token claims.",
-                    ErrorCode = "AUTH.INVALID_TOKEN_CLAIMS"
-                });
-            }
-
-            // Check blacklist
-            if (await _redis.IsRefreshTokenBlacklistedAsync(request.RefreshToken))
-            {
-                return Unauthorized(new ErrorResponse
-                {
-                    IsSuccess = false,
-                    Message = "Refresh token revoked.",
-                    ErrorCode = "AUTH.REFRESH_TOKEN_REVOKED"
-                });
-            }
-
-            // Ensure refresh token matches stored value
-            var saved = await _redis.GetRefreshTokenAsync(userId);
-            if (string.IsNullOrEmpty(saved) || saved != request.RefreshToken)
-            {
-                return Unauthorized(new ErrorResponse
-                {
-                    IsSuccess = false,
-                    Message = "Refresh token does not match.",
-                    ErrorCode = "AUTH.REFRESH_TOKEN_MISMATCH"
-                });
-            }
-
-            // Generate new tokens
-            var newAccessToken = _token.GenerateAccessToken(userId, username, email);
-            var newRefreshToken = _token.GenerateRefreshToken(userId, username, email);
-
-            // Blacklist old refresh token and save new one
-            await _redis.BlacklistRefreshTokenAsync(request.RefreshToken, TimeSpan.FromDays(30));
-            await _redis.SaveRefreshTokenAsync(userId, newRefreshToken, TimeSpan.FromDays(30));
-
-            var response = new TokenResponse
-            {
-                AccessToken = newAccessToken,
-                RefreshToken = newRefreshToken,
-                ExpiresIn = 30 * 60,
-                IssuedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddMinutes(30)
-            };
-
             return Ok(new GeneralResponse<TokenResponse>
             {
-                StatusCode = 200,
                 IsSuccess = true,
-                Data = response,
+                StatusCode = 200,
+                Data = await _authService.RefreshTokenAsync(request),
                 Message = "Token refreshed successfully."
             });
         }
@@ -200,7 +77,7 @@ namespace Kpett.ChatApp.Controllers
         [HttpPost("revoke")]
         public async Task<IActionResult> Revoke()
         {
-            // Extract JTI from current token to revoke
+            // Trích xuất JTI và exp từ token hiện tại
             var jtiClaim = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
             if (string.IsNullOrEmpty(jtiClaim))
             {
@@ -212,8 +89,22 @@ namespace Kpett.ChatApp.Controllers
                 });
             }
 
-            // Blacklist the access token
-            await _redis.BlacklistAccessTokenAsync(jtiClaim, TimeSpan.FromMinutes(30));
+            // Tính TTL chính xác từ exp claim thực tế của token
+            // tránh trường hợp token còn nhiều giờ nhưng chỉ blacklist 30 phút
+            var expClaim = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Exp)?.Value;
+            var ttl = TimeSpan.FromMinutes(15); // Fallback an toàn
+
+            if (!string.IsNullOrEmpty(expClaim) && long.TryParse(expClaim, out long expSeconds))
+            {
+                var expirationTime = DateTimeOffset.FromUnixTimeSeconds(expSeconds).UtcDateTime;
+                var remaining = expirationTime - DateTime.UtcNow;
+                if (remaining > TimeSpan.Zero)
+                {
+                    ttl = remaining;
+                }
+            }
+
+            await _redisService.BlacklistAccessTokenAsync(jtiClaim, ttl);
 
             return Ok(new GeneralResponse
             {

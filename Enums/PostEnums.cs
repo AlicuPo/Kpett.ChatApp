@@ -10,9 +10,11 @@ namespace Kpett.ChatApp.Enums
     {
 
         [Description("Public")]
-        Public,
+        Public, 
+
         [Description("Friends")]
         Friends,
+
         [Description("Private")]
         Private
     }
@@ -48,5 +50,6 @@ namespace Kpett.ChatApp.Enums
         [Description("GIF")]
         GIF = 2,
     }
+
 
 }

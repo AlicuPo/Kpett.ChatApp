@@ -1,11 +1,13 @@
-﻿using Kpett.ChatApp.Models;
-using System.IdentityModel.Tokens.Jwt;
+﻿using Kpett.ChatApp.Configs;
+using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Models;
+using Kpett.ChatApp.Services.Interfaces;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using Kpett.ChatApp.Helper;
-using Kpett.ChatApp.Services.Interfaces;
 
 
 namespace Kpett.ChatApp.Services.Impls
@@ -13,19 +15,19 @@ namespace Kpett.ChatApp.Services.Impls
     public class JwtService : IJwtService
     {
 
-        private readonly AppDbContext _configuration;
         private readonly IHttpContextAccessor _contextAccessor;
+        private readonly JwtOptions _jwtOptions;
         private readonly IConfiguration _config;
-        public JwtService(IHttpContextAccessor contextAccessor, AppDbContext configuration, IConfiguration config)
+        public JwtService(IHttpContextAccessor contextAccessor, IOptions<JwtOptions> options, IConfiguration config)
         {
             _contextAccessor = contextAccessor;
-            _configuration = configuration;
+            _jwtOptions = options.Value;
             _config = config;
         }
 
-        public string GenerateAccessToken(string userId, string UserName, string? email = null, string? displayName = null)
+        public string GenerateAccessToken(string userId, string email)
         {
-            var jwtKey = _config["JwtSection:KeyAccess"];
+            var jwtKey = _jwtOptions.KeyAccess;
             if (string.IsNullOrEmpty(jwtKey))
             {
                 throw new InvalidOperationException("JwtSection KeyAccess is not configured.");
@@ -43,30 +45,23 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 new Claim(JwtRegisteredClaimNames.NameId, userId),
                 new Claim(JwtRegisteredClaimNames.Jti, jti),
-                new Claim(JwtRegisteredClaimNames.Name, UserName),
                 new Claim(ClaimTypes.NameIdentifier, userId),
+                new Claim(ClaimTypes.Email, email),
             };
 
-            // Add optional claims
-            if (!string.IsNullOrEmpty(email))
-                claims.Add(new Claim(ClaimTypes.Email, email));
-
-            if (!string.IsNullOrEmpty(displayName))
-                claims.Add(new Claim("DisplayName", displayName));
-
             var token = new JwtSecurityToken(
-                issuer: _config["JwtSection:Issuer"],
-                audience: _config["JwtSection:Audience"],
+                issuer: _jwtOptions.Issuer,
+                audience: _jwtOptions.Audience,
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(30),
+                expires: DateTime.UtcNow.AddMinutes(_jwtOptions.AccessTokenExpireMinutes),
                 signingCredentials: creds
             );
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
-        public string GenerateRefreshToken(string userId, string UserName, string? email = null)
+        public string GenerateRefreshToken(string userId, string email)
         {
-            var jwtKey = _config["JwtSection:KeyRefres"];
+            var jwtKey = _jwtOptions.KeyRefres;
             if (string.IsNullOrEmpty(jwtKey))
             {
                 throw new InvalidOperationException("JwtSection KeyRefres is not configured.");
@@ -84,19 +79,15 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 new Claim(JwtRegisteredClaimNames.NameId, userId),
                 new Claim(JwtRegisteredClaimNames.Jti, jti),
-                new Claim(JwtRegisteredClaimNames.Name, UserName),
+                new Claim(ClaimTypes.Email, email),
                 new Claim(ClaimTypes.NameIdentifier, userId)
             };
 
-            // Add optional email claim
-            if (!string.IsNullOrEmpty(email))
-                claims.Add(new Claim(ClaimTypes.Email, email));
-
             var token = new JwtSecurityToken(
-                issuer: _config["JwtSection:Issuer"],
-                audience: _config["JwtSection:Audience"],
+                issuer: _jwtOptions.Issuer,
+                audience: _jwtOptions.Audience,
                 claims: claims,
-                expires: DateTime.UtcNow.AddDays(30),
+                expires: DateTime.UtcNow.AddDays(_jwtOptions.RefreshTokenExpireDays),
                 signingCredentials: creds
             );
 
@@ -118,8 +109,8 @@ namespace Kpett.ChatApp.Services.Impls
                 ValidateIssuer = true,
                 ValidateIssuerSigningKey = true,
                 ValidateLifetime = false, // ignore exp
-                ValidIssuer = _config["JwtSection:Issuer"],
-                ValidAudience = _config["JwtSection:Audience"],
+                ValidIssuer = _jwtOptions.Issuer,
+                ValidAudience = _jwtOptions.Audience,
                 IssuerSigningKey = new SymmetricSecurityKey(
                     Encoding.UTF8.GetBytes(jwtKey)
                 )

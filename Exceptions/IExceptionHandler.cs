@@ -1,8 +1,10 @@
-﻿using Kpett.ChatApp.Contants;
+﻿using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response;
+using Kpett.ChatApp.DTOs.Response.Shared;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
+using System.Text.Json;
 
 namespace Kpett.ChatApp.Helper
 {
@@ -42,13 +44,19 @@ namespace Kpett.ChatApp.Helper
                 StackTrace = _env.IsDevelopment() ? exception.StackTrace : null
             };
 
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            };
+
             httpContext.Response.StatusCode = statusCode;
             httpContext.Response.ContentType = "application/json";
 
-            await httpContext.Response.WriteAsJsonAsync(response, cancellationToken);
+            await httpContext.Response.WriteAsJsonAsync(response, jsonOptions, cancellationToken);
 
             return true;
         }
     }
 
 }
+
