@@ -15,9 +15,7 @@ namespace Kpett.ChatApp.Services.Impls
     public class MediaService : IMediaService
     {
         private readonly Cloudinary _cloudinary;
-        private readonly CloudinaryOptions _cloudinarySettings;
         private readonly MediaOptions _mediaSettings;
-        private readonly AppDbContext _context;
         private readonly ILogger<MediaService> _logger;
 
         public MediaService(
@@ -34,10 +32,7 @@ namespace Kpett.ChatApp.Services.Impls
             _cloudinary = new Cloudinary(acc);
             _cloudinary.Api.Secure = true;
 
-            _cloudinarySettings = cloudinaryConfig.Value;
-
             _mediaSettings = mediaConfig.Value;
-            _context = context;
             _logger = logger;
         }
 

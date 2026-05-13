@@ -202,6 +202,7 @@ namespace Kpett.ChatApp.Services.Impls
             // 7. MAP RESPONSE
             SystemMessageMetadata? actionMetadata = ParseSystemMetadata(initialMessage.Type, initialMessage.Metadata);
             var onlineStatuses = await _redisService.GetUsersOnlineStatusAsync(uniqueParticipantIds);
+            var isFriendDictionary = await GetFriendshipStatusesAsync(currentUserId, uniqueParticipantIds);
 
             var newConversationResponse = new ConversationResponse
             {
@@ -223,7 +224,20 @@ namespace Kpett.ChatApp.Services.Impls
                     ActionMetadata = actionMetadata,
                     CreatedAt = initialMessage.CreatedAt
                 },
-                Participants = participants.Select(p => MapParticipant(usersInfo[p.UserId], p.Role, p.LastReadMessageId, onlineStatuses.GetValueOrDefault(p.UserId))).ToList()
+                Participants = participants.Select(p =>
+                {
+                    bool isFriend = isFriendDictionary.GetValueOrDefault(p.UserId);
+                    bool isOnline = isFriend && onlineStatuses.GetValueOrDefault(p.UserId);
+
+                    return MapParticipant(
+                         usersInfo[p.UserId],
+                         p.Role,
+                         p.LastReadMessageId,
+                         isOnline,
+                         isFriend
+                     );
+                })
+                .ToList()
             };
 
             // [SIGNALR PUSH] Bắn bất đồng bộ
@@ -343,6 +357,8 @@ namespace Kpett.ChatApp.Services.Impls
 
             var onlineStatuses = await _redisService.GetUsersOnlineStatusAsync(userIdsToFetch);
 
+            var isFriendDictionary = await GetFriendshipStatusesAsync(currentUserId, userIdsToFetch);
+
             var items = rawConversations.Select(c =>
             {
                 bool isDirect = c.Type == "Direct";
@@ -354,13 +370,31 @@ namespace Kpett.ChatApp.Services.Impls
                 {
                     displayName = otherUser.DisplayName;
                     avatarUrl = otherUser.AvatarUrl;
-                    participants.Add(MapParticipant(otherUser, c.OtherParticipant.Role, c.OtherParticipant.LastReadMessageId, onlineStatuses.GetValueOrDefault(otherUser.Id)));
+
+                    bool isFriend = isFriendDictionary.GetValueOrDefault(otherUser.Id);
+                    bool isOnline = isFriend && onlineStatuses.GetValueOrDefault(otherUser.Id);
+
+                    participants.Add(MapParticipant(
+                            otherUser,
+                            c.OtherParticipant.Role,
+                            c.OtherParticipant.LastReadMessageId,
+                            isOnline,
+                            isFriend
+                        ));
                 }
                 else if (!isDirect && groupMembersDict.TryGetValue(c.Id, out var members))
                 {
                     participants.AddRange(members.Where(m => usersDict.ContainsKey(m.UserId))
-                        .Select(m => MapParticipant(usersDict[m.UserId], m.Role, m.LastReadMessageId, onlineStatuses.GetValueOrDefault(m.UserId))));
+                        .Select(m =>
+                        {
+                            bool isFriend = isFriendDictionary.GetValueOrDefault(m.UserId);
+
+                            bool isOnline = isFriend && onlineStatuses.GetValueOrDefault(m.UserId);
+
+                            return MapParticipant(usersDict[m.UserId], m.Role, m.LastReadMessageId, isOnline, isFriend);
+                        }));
                 }
+
 
                 MessageSnippetResponse? lastMessageResponse = null;
                 if (c.LastMessage != null)
@@ -757,8 +791,10 @@ namespace Kpett.ChatApp.Services.Impls
 
             // Cập nhật Database bằng Tracker EF thông thường
             conversation.LastMessageAt = now;
+            conversation.IsActive = true;
             currentUserParticipant.LastReadAt = now;
             currentUserParticipant.LastReadMessageId = messageId;
+
 
             _context.Conversations.Update(conversation);
             _context.ConversationParticipants.Update(currentUserParticipant);
@@ -915,15 +951,37 @@ namespace Kpett.ChatApp.Services.Impls
             string? displayName = rawData.Name;
             string? avatarUrl = rawData.AvatarUrl;
 
+            var isFriendDictionary = await GetFriendshipStatusesAsync(currentUserId, userIdsToFetch);
+
             if (rawData.Type == "Direct" && rawData.OtherParticipant != null && usersDict.TryGetValue(rawData.OtherParticipant.UserId, out var otherUser))
             {
-                displayName = otherUser.DisplayName; avatarUrl = otherUser.AvatarUrl;
-                participantResponses.Add(MapParticipant(otherUser, rawData.OtherParticipant.Role, rawData.OtherParticipant.LastReadMessageId, onlineStatuses.GetValueOrDefault(otherUser.Id)));
+                displayName = otherUser.DisplayName;
+                avatarUrl = otherUser.AvatarUrl;
+
+                bool isFriend = isFriendDictionary.GetValueOrDefault(otherUser.Id);
+                bool isOnline = isFriend && onlineStatuses.GetValueOrDefault(otherUser.Id);
+
+                participantResponses.Add(MapParticipant(
+                    otherUser,
+                    rawData.OtherParticipant.Role,
+                    rawData.OtherParticipant.LastReadMessageId,
+                    isOnline,
+                    isFriend
+                ));
             }
             else if (rawData.Type == "Group")
             {
-                participantResponses.AddRange(groupMembers.Where(m => usersDict.ContainsKey(m.UserId))
-                    .Select(m => MapParticipant(usersDict[m.UserId], m.Role, m.LastReadMessageId, onlineStatuses.GetValueOrDefault(m.UserId))));
+                participantResponses.AddRange(groupMembers
+                    .Where(m => usersDict.ContainsKey(m.UserId))
+                    .Select(m =>
+                    {
+                        var user = usersDict[m.UserId];
+
+                        bool isFriend = isFriendDictionary.GetValueOrDefault(m.UserId);
+                        bool isOnline = isFriend && onlineStatuses.GetValueOrDefault(m.UserId);
+
+                        return MapParticipant(user, m.Role, m.LastReadMessageId, isOnline, isFriend);
+                    }));
             }
 
             MessageSnippetResponse? lastMessageResponse = null;
@@ -1024,7 +1082,12 @@ namespace Kpett.ChatApp.Services.Impls
             await _context.SaveChangesAsync(cancel);
 
             var otherUserInfo = usersInfo[otherUserId];
+
+            var isFriendDictionary = await GetFriendshipStatusesAsync(currentUserId, new List<string> { otherUserId });
+            bool isFriend = isFriendDictionary.GetValueOrDefault(otherUserId, false);
+
             var onlineStatuses = await _redisService.GetUsersOnlineStatusAsync(new[] { otherUserId });
+            bool isOnline = isFriend && onlineStatuses.GetValueOrDefault(otherUserId);
 
             return new ConversationResponse
             {
@@ -1037,7 +1100,7 @@ namespace Kpett.ChatApp.Services.Impls
                 HasUnread = false,
                 IsActive = newConversation.IsActive,
                 LastMessage = null,
-                Participants = participants.Select(p => MapParticipant(usersInfo[p.UserId], p.Role, p.LastReadMessageId, p.UserId == otherUserId ? onlineStatuses.GetValueOrDefault(otherUserId) : true)).ToList()
+                Participants = participants.Select(p => MapParticipant(usersInfo[p.UserId], p.Role, p.LastReadMessageId, isOnline, isFriend)).ToList()
             };
         }
 
@@ -1114,17 +1177,27 @@ namespace Kpett.ChatApp.Services.Impls
                     .ToDictionaryAsync(u => u.Id, u => u, cancel)
                 : new Dictionary<string, UserResponse>();
 
+            var isFriendDictionary = await GetFriendshipStatusesAsync(currentUserId, userIdsToFetch);
+
             var onlineStatuses = await _redisService.GetUsersOnlineStatusAsync(userIdsToFetch);
+
 
             // Map dữ liệu sang chuẩn DTO trả về (Sử dụng hàm helper DRY)
             var items = rawParticipants
                 .Where(p => usersDict.ContainsKey(p.UserId))
-                .Select(p => MapParticipant(
-                    usersDict[p.UserId],
-                    p.Role,
-                    p.LastReadMessageId,
-                    onlineStatuses.GetValueOrDefault(p.UserId)
-                ))
+                .Select(p =>
+                {
+                    bool isFriend = isFriendDictionary.GetValueOrDefault(p.UserId);
+                    bool isOline = isFriend && onlineStatuses.GetValueOrDefault(p.UserId);
+
+                    return MapParticipant(
+                        usersDict[p.UserId],
+                        p.Role,
+                        p.LastReadMessageId,
+                        isOline,
+                        isFriend
+                    );
+                })
                 .ToList();
 
             return new PaginatedData<ParticipantResponse>
@@ -1156,7 +1229,7 @@ namespace Kpett.ChatApp.Services.Impls
         }
 
         // Helper DRY: Chuyển đổi UserResponse thành ParticipantResponse
-        private ParticipantResponse MapParticipant(UserResponse u, string role, string? lastReadMsgId, bool isOnline)
+        private ParticipantResponse MapParticipant(UserResponse u, string role, string? lastReadMsgId, bool isOnline, bool isFriend)
         {
             return new ParticipantResponse
             {
@@ -1166,7 +1239,8 @@ namespace Kpett.ChatApp.Services.Impls
                 AvatarUrl = u.AvatarUrl,
                 Role = role,
                 LastReadMessageId = lastReadMsgId,
-                IsOnline = isOnline
+                IsOnline = isOnline,
+                IsFriend = isFriend
             };
         }
 
@@ -1185,6 +1259,38 @@ namespace Kpett.ChatApp.Services.Impls
                 }
             }
             return null;
+        }
+
+        /// <summary>
+        /// Kiểm tra danh sách người dùng xem ai là bạn bè của user hiện tại.
+        /// </summary>
+        /// <param name="currentUserId">ID của user đang đăng nhập.</param>
+        /// <param name="userIdsToFetch">Danh sách các User ID cần kiểm tra.</param>
+        /// <returns>Một Dictionary với Key là UserId và Value là true (nếu là bạn) hoặc false (nếu không).</returns>
+        private async Task<Dictionary<string, bool>> GetFriendshipStatusesAsync(string currentUserId, IEnumerable<string> userIdsToFetch)
+        {
+            var distinctUserIds = userIdsToFetch.Distinct().ToList();
+
+            if (!distinctUserIds.Any())
+            {
+                return new Dictionary<string, bool>();
+            }
+
+            var actualFriendIds = await _context.Friendships.AsNoTracking()
+                .Where(fs =>
+                    (fs.UserLowId == currentUserId && distinctUserIds.Contains(fs.UserHighId)) ||
+                    (fs.UserHighId == currentUserId && distinctUserIds.Contains(fs.UserLowId))
+                )
+                .Select(fs => fs.UserLowId == currentUserId ? fs.UserHighId : fs.UserLowId)
+                .ToListAsync();
+
+            var friendIdsSet = actualFriendIds.ToHashSet();
+
+            // 4. Build và trả về Dictionary
+            return distinctUserIds.ToDictionary(
+                userId => userId,
+                userId => friendIdsSet.Contains(userId)
+            );
         }
 
         #endregion
