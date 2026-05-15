@@ -437,6 +437,27 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
+        public async Task<bool> HasUnreadConversationAsync(string currentUserId, CancellationToken cancel)
+        {
+            if (string.IsNullOrWhiteSpace(currentUserId))
+            {
+                throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
+            }
+
+            return await _context.ConversationParticipants.AsNoTracking()
+                .Where(cp => cp.UserId == currentUserId && !cp.IsKicked)
+                .Join(
+                    _context.Conversations.AsNoTracking().Where(c => c.IsActive),
+                    cp => cp.ConversationId,
+                    c => c.Id,
+                    (cp, c) => new { Participant = cp, Conversation = c })
+                .AnyAsync(x =>
+                    !x.Participant.LastReadAt.HasValue ||
+                    x.Participant.LastReadAt.Value == DateTime.MinValue ||
+                    x.Conversation.LastMessageAt > x.Participant.LastReadAt.Value,
+                    cancel);
+        }
+
         public async Task<bool> AddMembersToGroupAsync(string currentUserId, AddMembersRequest request, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(currentUserId))

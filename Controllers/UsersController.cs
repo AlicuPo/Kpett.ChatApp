@@ -165,7 +165,7 @@ namespace Kpett.ChatApp.Controllers
             [FromQuery] string? cursor = null,
             CancellationToken cancel = default)
         {
-            var currentUserId = User.GetRequiredUserId();
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             var result = await _userService.SearchUsersAsync(currentUserId, keyword, limit, cursor, cancel);
 

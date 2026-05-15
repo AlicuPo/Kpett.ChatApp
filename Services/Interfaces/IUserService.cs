@@ -17,6 +17,6 @@ namespace Kpett.ChatApp.Services.Interfaces
         Task<UserResponse> AccountSetup(string userId, AccountSetupRequest accountSetupRequest, CancellationToken cancel);
         Task<UserWithStatResponse> GetUserStatsAsync(string userId, CancellationToken cancel);
         Task<UserProfileResponse> GetUserProfileAsync(string targetUsername, string? currentUserId, CancellationToken cancel);
-        Task<PaginatedData<UserResponse>> SearchUsersAsync(string currentUserId, string keyword, int limit, string? cursor, CancellationToken cancel);
+        Task<PaginatedData<UserResponse>> SearchUsersAsync(string? currentUserId, string keyword, int limit, string? cursor, CancellationToken cancel);
     }
 }

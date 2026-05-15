@@ -455,7 +455,7 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
-        public async Task<PaginatedData<UserResponse>> SearchUsersAsync(string currentUserId, string keyword, int limit, string? cursor, CancellationToken cancel)
+        public async Task<PaginatedData<UserResponse>> SearchUsersAsync(string? currentUserId, string keyword, int limit, string? cursor, CancellationToken cancel)
         {
             limit = limit <= 0 ? 20 : Math.Min(limit, 50);
             var searchTerm = keyword?.Trim() ?? string.Empty;
