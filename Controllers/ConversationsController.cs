@@ -55,6 +55,21 @@ namespace Kpett.ChatApp.Controllers
 
         }
 
+        [HttpGet("has-unread")]
+        public async Task<ActionResult<GeneralResponse<bool>>> HasUnread(CancellationToken cancel)
+        {
+            var currentUserId = User.GetRequiredUserId();
+            var hasUnread = await _conversationService.HasUnreadConversationAsync(currentUserId, cancel);
+
+            return Ok(new GeneralResponse<bool>
+            {
+                IsSuccess = true,
+                Data = hasUnread,
+                Message = "Get conversation unread status successfully",
+                StatusCode = StatusCodes.Status200OK
+            });
+        }
+
         [HttpGet("{id}/friends-not-in-group")]
         public async Task<ActionResult<GeneralResponse<PaginatedData<UserResponse>>>> GetFriendsNotInGroup([FromRoute] string id, [FromQuery] GetFriendsNotInGroupRequest request, CancellationToken cancel)
         {
