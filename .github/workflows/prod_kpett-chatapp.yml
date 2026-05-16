@@ -1,4 +1,4 @@
-﻿name: Build and deploy ASP.Net Core app to Azure Web App
+﻿name: Deploy Production API
 
 on:
   push:
@@ -24,6 +24,9 @@ jobs:
 
       - name: Build project
         run: dotnet build --configuration Release --no-restore
+
+      - name: Test project
+        run: dotnet test --configuration Release --no-build --verbosity normal
 
       - name: Publish project
         run: dotnet publish --configuration Release --no-build -o ${{ env.DOTNET_ROOT }}/myapp
