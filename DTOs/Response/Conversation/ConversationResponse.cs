@@ -15,5 +15,6 @@ namespace Kpett.ChatApp.DTOs.Response.Conversation
         public List<ParticipantResponse> Participants { get; set; } = new();
         public bool IsActive { get; set; } = false;
         public bool HasUnread { get; set; }
+        public ConversationViewerContextResponse? ViewerContext { get; set; }
     }
 }

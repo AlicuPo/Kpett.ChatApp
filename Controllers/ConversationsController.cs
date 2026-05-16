@@ -149,12 +149,7 @@ namespace Kpett.ChatApp.Controllers
         [HttpPost("{conversationId}/messages")]
         public async Task<IActionResult> SendMessage([FromRoute] string conversationId, [FromBody] SendMessageRequest request, CancellationToken cancel)
         {
-            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-            if (string.IsNullOrWhiteSpace(currentUserId))
-            {
-                return Unauthorized(new { Message = "User is not authenticated." });
-            }
+            var currentUserId = User.GetRequiredUserId();
 
             var response = await _conversationService.SendMessageAsync(currentUserId, conversationId, request, cancel);
 
@@ -167,8 +162,42 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        /// <summary>
-        /// </summary>
+        [HttpPut("{conversationId}/messages/{messageId}")]
+        public async Task<IActionResult> UpdateMessage(
+            [FromRoute] string conversationId,
+            [FromRoute] string messageId,
+            [FromBody] UpdateMessageRequest request,
+            CancellationToken cancel)
+        {
+            var currentUserId = User.GetRequiredUserId();
+            var response = await _conversationService.UpdateMessageAsync(currentUserId, conversationId, messageId, request, cancel);
+
+            return Ok(new GeneralResponse<MessageResponse>
+            {
+                IsSuccess = true,
+                Message = "Update message successfully",
+                Data = response,
+                StatusCode = StatusCodes.Status200OK
+            });
+        }
+
+        [HttpDelete("{conversationId}/messages/{messageId}")]
+        public async Task<IActionResult> DeleteMessage(
+            [FromRoute] string conversationId,
+            [FromRoute] string messageId,
+            CancellationToken cancel)
+        {
+            var currentUserId = User.GetRequiredUserId();
+            await _conversationService.DeleteMessageAsync(currentUserId, conversationId, messageId, cancel);
+
+            return Ok(new GeneralResponse
+            {
+                IsSuccess = true,
+                Message = "Delete message successfully",
+                StatusCode = StatusCodes.Status200OK
+            });
+        }
+
         [HttpPut("{conversationId}/read")]
         public async Task<IActionResult> MarkAsRead(string conversationId, CancellationToken cancel)
         {
@@ -181,6 +210,24 @@ namespace Kpett.ChatApp.Controllers
                 IsSuccess = true,
                 StatusCode = 200,
                 Message = "Đánh dấu đã đọc thành công"
+            });
+        }
+
+        [HttpPut("{conversationId}/settings")]
+        public async Task<IActionResult> UpdateConversationSettings(
+            [FromRoute] string conversationId,
+            [FromBody] UpdateConversationSettingsRequest request,
+            CancellationToken cancel)
+        {
+            var currentUserId = User.GetRequiredUserId();
+            var result = await _conversationService.UpdateConversationSettingsAsync(currentUserId, conversationId, request, cancel);
+
+            return Ok(new GeneralResponse<ConversationViewerContextResponse>
+            {
+                IsSuccess = true,
+                Data = result,
+                Message = "Update conversation settings successfully",
+                StatusCode = StatusCodes.Status200OK
             });
         }
 
@@ -232,6 +279,7 @@ namespace Kpett.ChatApp.Controllers
 
             return Ok(new GeneralResponse<PaginatedData<ParticipantResponse>>
             {
+                IsSuccess = true,
                 Data = paginatedMembers,
                 Message = "Get paticipant successfully",
                 StatusCode = 200

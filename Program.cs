@@ -217,7 +217,6 @@ builder.Services.AddScoped<IRelationshipService, RelationshipService>();
 builder.Services.AddScoped<IPostService, PostService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddScoped<IMediaService, MediaService>();
-builder.Services.AddScoped<IConversationAccessService, ConversationAccessService>();
 builder.Services.AddScoped<IConversationTypingService, ConversationTypingService>();
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -234,20 +233,26 @@ app.UseCors("ClientCors");
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Enable Hangfire Dashboard (optional, for monitoring background jobs)
-app.UseHangfireDashboard();
-
 // Schedule a recurring job to clean up orphaned images daily at 2 AM
-RecurringJob.AddOrUpdate<IMediaService>(
-    "cleanup-temp-images",
-    service => service.CleanUpOrphanedImagesAsync(),
-    Cron.Daily(2)
-);
+// Tạo một Service Scope để lấy các service từ DI Container
+using (var scope = app.Services.CreateScope())
+{
+    var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+
+    recurringJobManager.AddOrUpdate<IMediaService>(
+        "cleanup-temp-images",
+        service => service.CleanUpOrphanedImagesAsync(),
+        Cron.Daily(2)
+    );
+}
 
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+
+    // Expose Hangfire Dashboard only in development unless an authorization policy is added.
+    app.UseHangfireDashboard();
 }
 
 app.MapControllers();
