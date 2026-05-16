@@ -57,6 +57,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<None Include=".github\workflows\dev_kpett-chatapp.yml" />
 		<None Include=".github\workflows\prod_kpett-chatapp.yml" />
 	</ItemGroup>
 
