@@ -90,5 +90,37 @@ namespace Kpett.ChatApp.Controllers
                 StatusCode = 200
             });
         }
+
+        [HttpPut("{commentId}/likes")]
+        [Authorize]
+        public async Task<ActionResult<GeneralResponse<CommentListItemDTO>>> LikeComment(string commentId, CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _commentService.LikeCommentAsync(commentId, userId, cancel);
+
+            return Ok(new GeneralResponse<CommentListItemDTO>
+            {
+                IsSuccess = true,
+                Message = "Like comment successfully",
+                Data = result,
+                StatusCode = StatusCodes.Status200OK
+            });
+        }
+
+        [HttpDelete("{commentId}/likes")]
+        [Authorize]
+        public async Task<ActionResult<GeneralResponse<CommentListItemDTO>>> UnlikeComment(string commentId, CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _commentService.UnlikeCommentAsync(commentId, userId, cancel);
+
+            return Ok(new GeneralResponse<CommentListItemDTO>
+            {
+                IsSuccess = true,
+                Message = "Unlike comment successfully",
+                Data = result,
+                StatusCode = StatusCodes.Status200OK
+            });
+        }
     }
 }

@@ -91,7 +91,7 @@ namespace Kpett.ChatApp.Services.Impls
                 Path = parentPath == null ? commentId : $"{parentPath}/{commentId}"
             };
 
-            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            using var transaction = await _dbContext.Database.BeginTransactionAsync(cancel);
 
             try
             {
@@ -112,7 +112,7 @@ namespace Kpett.ChatApp.Services.Impls
 
                 await _dbContext.SaveChangesAsync(cancel);
 
-                await transaction.CommitAsync();
+                await transaction.CommitAsync(cancel);
 
                 var userMedia = _dbContext.UserMedias
                     .AsNoTracking()
@@ -140,7 +140,7 @@ namespace Kpett.ChatApp.Services.Impls
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error");
-                await transaction.RollbackAsync();
+                await transaction.RollbackAsync(cancel);
                 throw;
             }
         }
@@ -349,6 +349,98 @@ namespace Kpett.ChatApp.Services.Impls
             }
         }
 
+        public async Task<CommentListItemDTO> LikeCommentAsync(string commentId, string userId, CancellationToken cancel)
+        {
+            if (string.IsNullOrWhiteSpace(commentId))
+            {
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Comment ID is required");
+            }
+
+            var commentExists = await _dbContext.Comments
+                .AnyAsync(c => c.Id == commentId && c.DeletedAt == null, cancel);
+
+            if (!commentExists)
+            {
+                throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");
+            }
+
+            var alreadyLiked = await _dbContext.CommentLikes
+                .AnyAsync(cl => cl.CommentId == commentId && cl.UserId == userId, cancel);
+
+            if (!alreadyLiked)
+            {
+                await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancel);
+                try
+                {
+                    await _dbContext.CommentLikes.AddAsync(new CommentLike
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        CommentId = commentId,
+                        UserId = userId,
+                        CreatedAt = DateTime.UtcNow
+                    }, cancel);
+
+                    await _dbContext.Comments
+                        .Where(c => c.Id == commentId)
+                        .ExecuteUpdateAsync(c => c.SetProperty(x => x.LikeCount, x => x.LikeCount + 1), cancel);
+
+                    await _dbContext.SaveChangesAsync(cancel);
+                    await transaction.CommitAsync(cancel);
+                }
+                catch
+                {
+                    await transaction.RollbackAsync(cancel);
+                    throw;
+                }
+            }
+
+            return await MapCommentListItemByIdAsync(commentId, userId, true, cancel);
+        }
+
+        public async Task<CommentListItemDTO> UnlikeCommentAsync(string commentId, string userId, CancellationToken cancel)
+        {
+            if (string.IsNullOrWhiteSpace(commentId))
+            {
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Comment ID is required");
+            }
+
+            var like = await _dbContext.CommentLikes
+                .FirstOrDefaultAsync(cl => cl.CommentId == commentId && cl.UserId == userId, cancel);
+
+            if (like != null)
+            {
+                await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancel);
+                try
+                {
+                    _dbContext.CommentLikes.Remove(like);
+
+                    await _dbContext.Comments
+                        .Where(c => c.Id == commentId && c.LikeCount > 0)
+                        .ExecuteUpdateAsync(c => c.SetProperty(x => x.LikeCount, x => x.LikeCount - 1), cancel);
+
+                    await _dbContext.SaveChangesAsync(cancel);
+                    await transaction.CommitAsync(cancel);
+                }
+                catch
+                {
+                    await transaction.RollbackAsync(cancel);
+                    throw;
+                }
+            }
+            else
+            {
+                var commentExists = await _dbContext.Comments
+                    .AnyAsync(c => c.Id == commentId && c.DeletedAt == null, cancel);
+
+                if (!commentExists)
+                {
+                    throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");
+                }
+            }
+
+            return await MapCommentListItemByIdAsync(commentId, userId, false, cancel);
+        }
+
         private async Task<CommentDTO> MapCommentAsync(Comment comment, CancellationToken cancel)
         {
             var userInfo = await _dbContext.Users
@@ -362,6 +454,39 @@ namespace Kpett.ChatApp.Services.Impls
                 userInfo,
                 GetMentions(mentionLookup, comment.Id),
                 new List<CommentDTO>());
+        }
+
+        private async Task<CommentListItemDTO> MapCommentListItemByIdAsync(
+            string commentId,
+            string currentUserId,
+            bool isLiked,
+            CancellationToken cancel)
+        {
+            var row = await (
+                from c in _dbContext.Comments.AsNoTracking()
+                join u in _dbContext.Users.AsNoTracking() on c.UserId equals u.Id
+                join a in _dbContext.UserMedias.AsNoTracking()
+                        .Where(m => m.MediaType == UserMediaType.Avatar.GetDescription() && m.IsPrimary)
+                    on u.Id equals a.UserId into avatarGroup
+                from userAvatar in avatarGroup.DefaultIfEmpty()
+                where c.Id == commentId && c.DeletedAt == null
+                select new CommentRow(c, u, userAvatar)
+            ).FirstOrDefaultAsync(cancel);
+
+            if (row == null)
+            {
+                throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");
+            }
+
+            var mentionLookup = await GetCommentMentionsLookupAsync(new[] { commentId }, cancel);
+
+            return MapCommentListItem(
+                row.Comment,
+                row.User,
+                row.UserMedia,
+                GetMentionSummaries(mentionLookup, commentId),
+                isLiked,
+                currentUserId);
         }
 
         private async Task<Dictionary<string, List<CommentMentionDTO>>> GetCommentMentionsLookupAsync(IReadOnlyCollection<string> commentIds, CancellationToken cancel)

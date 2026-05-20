@@ -197,7 +197,41 @@ namespace Kpett.ChatApp.Services.Impls
                 });
             }
 
-            await _context.SaveChangesAsync(cancel);
+            try
+            {
+                await _context.SaveChangesAsync(cancel);
+            }
+            catch (DbUpdateException) when (isDirect)
+            {
+                foreach (var entry in _context.ChangeTracker.Entries().Where(e => e.State != EntityState.Unchanged))
+                {
+                    entry.State = EntityState.Detached;
+                }
+
+                var participantsArray = uniqueParticipantIds.ToArray();
+                bool isOrderCorrect = string.CompareOrdinal(participantsArray[0], participantsArray[1]) < 0;
+                var userLow = isOrderCorrect ? participantsArray[0] : participantsArray[1];
+                var userHigh = isOrderCorrect ? participantsArray[1] : participantsArray[0];
+
+                var existingConversationId = await _context.ConversationKeys.AsNoTracking()
+                    .Where(k => k.UserLowId == userLow && k.UserHighId == userHigh && k.ConversationId != null)
+                    .Select(k => k.ConversationId)
+                    .FirstOrDefaultAsync(cancel);
+
+                if (string.IsNullOrWhiteSpace(existingConversationId))
+                {
+                    throw;
+                }
+
+                await SendMessageAsync(currentUserId, existingConversationId, new SendMessageRequest
+                {
+                    ClientMessageId = Guid.NewGuid().ToString(),
+                    Content = request.InitialMessage,
+                    Type = MessageType.Text.GetDescription()
+                }, cancel);
+
+                return await GetConversationByIdAsync(currentUserId, existingConversationId, cancel);
+            }
 
             // 7. MAP RESPONSE
             SystemMessageMetadata? actionMetadata = ParseSystemMetadata(initialMessage.Type, initialMessage.Metadata);
@@ -241,20 +275,17 @@ namespace Kpett.ChatApp.Services.Impls
             };
 
             // [SIGNALR PUSH] Bắn bất đồng bộ
-            _ = Task.Run(async () =>
+            try
             {
-                try
+                foreach (var userId in uniqueParticipantIds)
                 {
-                    foreach (var userId in uniqueParticipantIds)
-                    {
-                        await _chatHubContext.Clients.User(userId).SendAsync("NewConversationCreated", newConversationResponse);
-                    }
+                    await _chatHubContext.Clients.User(userId).SendAsync("NewConversationCreated", newConversationResponse, cancel);
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error pushing NewConversationCreated");
-                }
-            });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error pushing NewConversationCreated");
+            }
 
             return newConversationResponse;
         }
@@ -558,18 +589,15 @@ namespace Kpett.ChatApp.Services.Impls
             var activeIds = await _context.ConversationParticipants.AsNoTracking().Where(p => p.ConversationId == request.ConversationId && !p.IsKicked).Select(p => p.UserId).ToListAsync(cancel);
             var msgResponse = await MapToMessageResponseAsync(systemMessage.Id, currentUserId, cancel);
 
-            _ = Task.Run(async () =>
+            try
             {
-                try
-                {
-                    await _chatHubContext.Clients.Users(activeIds).SendAsync("ReceiveNewMessage", msgResponse);
-                    await _chatHubContext.Clients.Users(userIdsToProcess).SendAsync("AddedToConversation", request.ConversationId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "SignalR Error AddMembersToGroupAsync");
-                }
-            });
+                await _chatHubContext.Clients.Users(activeIds).SendAsync("ReceiveNewMessage", msgResponse, cancel);
+                await _chatHubContext.Clients.Users(userIdsToProcess).SendAsync("AddedToConversation", request.ConversationId, cancel);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR Error AddMembersToGroupAsync");
+            }
 
             return true;
         }
@@ -664,15 +692,12 @@ namespace Kpett.ChatApp.Services.Impls
             var activeIds = await _context.ConversationParticipants.AsNoTracking().Where(p => p.ConversationId == conversationId && !p.IsKicked).Select(p => p.UserId).ToListAsync(cancel);
             var msgResponse = await MapToMessageResponseAsync(systemMessage.Id, currentUserId, cancel);
 
-            _ = Task.Run(async () =>
+            try
             {
-                try
-                {
-                    await _chatHubContext.Clients.User(userIdToRemove).SendAsync("RemovedFromConversation", conversationId);
-                    await _chatHubContext.Clients.Users(activeIds).SendAsync("ReceiveNewMessage", msgResponse);
-                }
-                catch (Exception ex) { _logger.LogError(ex, "SignalR Error RemoveMemberFromGroupAsync"); }
-            });
+                await _chatHubContext.Clients.User(userIdToRemove).SendAsync("RemovedFromConversation", conversationId, cancel);
+                await _chatHubContext.Clients.Users(activeIds).SendAsync("ReceiveNewMessage", msgResponse, cancel);
+            }
+            catch (Exception ex) { _logger.LogError(ex, "SignalR Error RemoveMemberFromGroupAsync"); }
 
             return true;
         }
@@ -719,10 +744,13 @@ namespace Kpett.ChatApp.Services.Impls
                 .Select(m => new
                 {
                     m.Id,
+                    m.ConversationId,
                     m.SenderId,
                     m.Type,
                     m.Content,
                     m.CreatedAt,
+                    m.UpdatedAt,
+                    m.IsDeleted,
                     m.Metadata,
                     m.ClientMessageId,
                     m.ReplyToMessageId,
@@ -743,12 +771,15 @@ namespace Kpett.ChatApp.Services.Impls
                 return new MessageResponse
                 {
                     Id = m.Id,
+                    ConversationId = m.ConversationId,
                     SenderId = m.SenderId,
                     SenderName = m.SenderName ?? "Unknown User",
                     SenderAvatarUrl = m.SenderAvatarUrl,
                     Type = m.Type,
-                    Content = m.Content,
+                    Content = m.IsDeleted ? null : m.Content,
                     CreatedAt = m.CreatedAt.ToUtc(),
+                    UpdatedAt = m.UpdatedAt?.ToUtc(),
+                    IsDeleted = m.IsDeleted,
                     ClientMessageId = m.ClientMessageId,
                     ReplyToMessageId = m.ReplyToMessageId,
                     ActionMetadata = ParseSystemMetadata(m.Type, m.Metadata)
@@ -825,19 +856,145 @@ namespace Kpett.ChatApp.Services.Impls
             var responseDto = await MapToMessageResponseAsync(messageId, currentUserId, cancel);
             var participantIds = await _context.ConversationParticipants.AsNoTracking().Where(p => p.ConversationId == conversationId && !p.IsKicked).Select(p => p.UserId).ToListAsync(cancel);
 
-            _ = Task.Run(async () =>
+            try
             {
-                try
-                {
-                    await _chatHubContext.Clients.Users(participantIds).SendAsync("ReceiveNewMessage", responseDto);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "SignalR Error SendMessageAsync");
-                }
-            });
+                await _chatHubContext.Clients.Users(participantIds).SendAsync("ReceiveNewMessage", responseDto, cancel);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR Error SendMessageAsync");
+            }
 
             return responseDto;
+        }
+
+        public async Task<MessageResponse> UpdateMessageAsync(string currentUserId, string conversationId, string messageId, UpdateMessageRequest request, CancellationToken cancel)
+        {
+            if (string.IsNullOrWhiteSpace(currentUserId))
+            {
+                throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
+            }
+
+            if (string.IsNullOrWhiteSpace(conversationId) || string.IsNullOrWhiteSpace(messageId))
+            {
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Conversation ID and message ID are required.");
+            }
+
+            if (request == null || string.IsNullOrWhiteSpace(request.Content))
+            {
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Message content is required.");
+            }
+
+            var isParticipant = await _context.ConversationParticipants
+                .AnyAsync(p => p.ConversationId == conversationId && p.UserId == currentUserId && !p.IsKicked, cancel);
+
+            if (!isParticipant)
+            {
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You are not a participant of this conversation.");
+            }
+
+            var message = await _context.Messages
+                .FirstOrDefaultAsync(m => m.Id == messageId && m.ConversationId == conversationId, cancel);
+
+            if (message == null)
+            {
+                throw new NotFoundException(ErrorCodes.CONVERSATION.NOT_FOUND, "Message not found.");
+            }
+
+            if (message.SenderId != currentUserId)
+            {
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You can only update your own messages.");
+            }
+
+            if (message.IsDeleted || message.Type == MessageType.System.GetDescription())
+            {
+                throw new BadRequestException(ErrorCodes.CONVERSATION.INVALID_MESSAGE, "This message cannot be updated.");
+            }
+
+            message.Content = request.Content.Trim();
+            message.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync(cancel);
+
+            var response = await MapToMessageResponseAsync(message.Id, currentUserId, cancel);
+            var participantIds = await _context.ConversationParticipants.AsNoTracking()
+                .Where(p => p.ConversationId == conversationId && !p.IsKicked)
+                .Select(p => p.UserId)
+                .ToListAsync(cancel);
+
+            try
+            {
+                await _chatHubContext.Clients.Users(participantIds).SendAsync("MessageUpdated", response, cancel);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR Error UpdateMessageAsync");
+            }
+
+            return response;
+        }
+
+        public async Task DeleteMessageAsync(string currentUserId, string conversationId, string messageId, CancellationToken cancel)
+        {
+            if (string.IsNullOrWhiteSpace(currentUserId))
+            {
+                throw new UnauthorizedException(ErrorCodes.AUTH.UNAUTHORIZED, "User is not authenticated.");
+            }
+
+            if (string.IsNullOrWhiteSpace(conversationId) || string.IsNullOrWhiteSpace(messageId))
+            {
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Conversation ID and message ID are required.");
+            }
+
+            var isParticipant = await _context.ConversationParticipants
+                .AnyAsync(p => p.ConversationId == conversationId && p.UserId == currentUserId && !p.IsKicked, cancel);
+
+            if (!isParticipant)
+            {
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You are not a participant of this conversation.");
+            }
+
+            var message = await _context.Messages
+                .FirstOrDefaultAsync(m => m.Id == messageId && m.ConversationId == conversationId, cancel);
+
+            if (message == null)
+            {
+                throw new NotFoundException(ErrorCodes.CONVERSATION.NOT_FOUND, "Message not found.");
+            }
+
+            if (message.SenderId != currentUserId)
+            {
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You can only delete your own messages.");
+            }
+
+            if (message.Type == MessageType.System.GetDescription())
+            {
+                throw new BadRequestException(ErrorCodes.CONVERSATION.INVALID_MESSAGE, "System messages cannot be deleted.");
+            }
+
+            if (!message.IsDeleted)
+            {
+                message.IsDeleted = true;
+                message.Content = null;
+                message.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync(cancel);
+            }
+
+            var response = await MapToMessageResponseAsync(message.Id, currentUserId, cancel);
+            var participantIds = await _context.ConversationParticipants.AsNoTracking()
+                .Where(p => p.ConversationId == conversationId && !p.IsKicked)
+                .Select(p => p.UserId)
+                .ToListAsync(cancel);
+
+            try
+            {
+                await _chatHubContext.Clients.Users(participantIds).SendAsync("MessageDeleted", new { conversationId, messageId }, cancel);
+                await _chatHubContext.Clients.Users(participantIds).SendAsync("MessageUpdated", response, cancel);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SignalR Error DeleteMessageAsync");
+            }
         }
 
         public async Task MarkAsReadAsync(string conversationId, string currentUserId, CancellationToken cancel)
@@ -870,20 +1027,69 @@ namespace Kpett.ChatApp.Services.Impls
 
                     if (otherUserIds.Any())
                     {
-                        _ = Task.Run(async () =>
+                        try
                         {
-                            try
-                            {
-                                await _chatHubContext.Clients.Users(otherUserIds).SendAsync("UserReadMessage", conversationId, currentUserId, latestMessageId);
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, "Error when send UserReadMessage");
-                            }
-                        });
+                            await _chatHubContext.Clients.Users(otherUserIds).SendAsync("UserReadMessage", conversationId, currentUserId, latestMessageId, cancel);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Error when send UserReadMessage");
+                        }
                     }
                 }
             }
+        }
+
+        public async Task<ConversationViewerContextResponse> UpdateConversationSettingsAsync(string currentUserId, string conversationId, UpdateConversationSettingsRequest request, CancellationToken cancel)
+        {
+            if (string.IsNullOrWhiteSpace(currentUserId) || string.IsNullOrWhiteSpace(conversationId))
+            {
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Conversation ID and user ID are required.");
+            }
+
+            if (request == null || (!request.IsMuted.HasValue && !request.IsArchived.HasValue))
+            {
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "At least one setting value is required.");
+            }
+
+            var participant = await _context.ConversationParticipants
+                .FirstOrDefaultAsync(p => p.ConversationId == conversationId && p.UserId == currentUserId && !p.IsKicked, cancel);
+
+            if (participant == null)
+            {
+                throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You are not an active member of this conversation.");
+            }
+
+            if (request.IsMuted.HasValue)
+            {
+                participant.IsMuted = request.IsMuted.Value;
+            }
+
+            if (request.IsArchived.HasValue)
+            {
+                participant.IsArchived = request.IsArchived.Value;
+            }
+
+            await _context.SaveChangesAsync(cancel);
+
+            return new ConversationViewerContextResponse
+            {
+                IsMuted = participant.IsMuted,
+                IsArchived = participant.IsArchived,
+                LastReadMessageId = participant.LastReadMessageId,
+                Permissions = new ConversationPermissionsResponse
+                {
+                    CanSendMessage = true,
+                    CanAddParticipants = participant.Role == ConversationRole.Owner.GetDescription() ||
+                                         participant.Role == ConversationRole.Moderator.GetDescription(),
+                    CanRemoveParticipants = participant.Role == ConversationRole.Owner.GetDescription() ||
+                                            participant.Role == ConversationRole.Moderator.GetDescription(),
+                    CanChangeName = participant.Role == ConversationRole.Owner.GetDescription() ||
+                                    participant.Role == ConversationRole.Moderator.GetDescription(),
+                    CanModerateMessages = participant.Role == ConversationRole.Owner.GetDescription() ||
+                                          participant.Role == ConversationRole.Moderator.GetDescription()
+                }
+            };
         }
 
         private async Task<MessageResponse> MapToMessageResponseAsync(string messageId, string currentUserId, CancellationToken cancel)
@@ -898,6 +1104,8 @@ namespace Kpett.ChatApp.Services.Impls
                     m.Type,
                     m.Content,
                     m.CreatedAt,
+                    m.UpdatedAt,
+                    m.IsDeleted,
                     m.Metadata,
                     m.ReplyToMessageId,
                     SenderName = _context.Users.Where(u => u.Id == m.SenderId).Select(u => u.DisplayName ?? u.Username).FirstOrDefault(),
@@ -913,8 +1121,10 @@ namespace Kpett.ChatApp.Services.Impls
                 SenderName = messageData.SenderName ?? "Unknown User",
                 SenderAvatarUrl = messageData.SenderAvatarUrl,
                 Type = messageData.Type,
-                Content = messageData.Content,
+                Content = messageData.IsDeleted ? null : messageData.Content,
                 CreatedAt = messageData.CreatedAt.ToUtc(),
+                UpdatedAt = messageData.UpdatedAt?.ToUtc(),
+                IsDeleted = messageData.IsDeleted,
                 ReplyToMessageId = messageData.ReplyToMessageId,
                 ActionMetadata = ParseSystemMetadata(messageData.Type, messageData.Metadata)
             };
@@ -1100,7 +1310,29 @@ namespace Kpett.ChatApp.Services.Impls
             _context.ConversationParticipants.AddRange(participants);
             _context.ConversationKeys.Add(new ConversationKey { Id = Guid.NewGuid().ToString(), ConversationId = conversationId, UserLowId = userLow, UserHighId = userHigh });
 
-            await _context.SaveChangesAsync(cancel);
+            try
+            {
+                await _context.SaveChangesAsync(cancel);
+            }
+            catch (DbUpdateException)
+            {
+                foreach (var entry in _context.ChangeTracker.Entries().Where(e => e.State != EntityState.Unchanged))
+                {
+                    entry.State = EntityState.Detached;
+                }
+
+                var existingConversationId = await _context.ConversationKeys.AsNoTracking()
+                    .Where(k => k.UserLowId == userLow && k.UserHighId == userHigh && k.ConversationId != null)
+                    .Select(k => k.ConversationId)
+                    .FirstOrDefaultAsync(cancel);
+
+                if (!string.IsNullOrWhiteSpace(existingConversationId))
+                {
+                    return await GetConversationByIdAsync(currentUserId, existingConversationId, cancel);
+                }
+
+                throw;
+            }
 
             var otherUserInfo = usersInfo[otherUserId];
 

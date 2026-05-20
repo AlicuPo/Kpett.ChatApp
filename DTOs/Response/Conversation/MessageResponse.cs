@@ -11,8 +11,10 @@ namespace Kpett.ChatApp.DTOs.Response.Conversation
         public string SenderName { get; set; } = null!;
         public string? SenderAvatarUrl { get; set; }
         public string Type { get; set; } = null!;
-        public string Content { get; set; } = null!;
+        public string? Content { get; set; }
         public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+        public bool IsDeleted { get; set; }
         public SystemMessageMetadata? ActionMetadata { get; set; }
         public string? ReplyToMessageId { get; set; }
         public List<MessageAttachmentResponse>? Attachments { get; set; }

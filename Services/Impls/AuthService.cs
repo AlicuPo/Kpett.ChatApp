@@ -18,18 +18,15 @@ namespace Kpett.ChatApp.Services.Impls;
 
 public class AuthService : IAuthService
 {
-    private readonly ICloudinaryService _cloudinary;
-
     private readonly AppDbContext _dbContext;
     private readonly IRedisService _redis;
     private readonly IJwtService _token;
 
-    public AuthService(AppDbContext context, IJwtService token, IRedisService redis, ICloudinaryService cloudinary)
+    public AuthService(AppDbContext context, IJwtService token, IRedisService redis)
     {
         _dbContext = context;
         _token = token;
         _redis = redis;
-        _cloudinary = cloudinary;
     }
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancel = default)
@@ -67,9 +64,9 @@ public class AuthService : IAuthService
             throw new ForbiddenException(ErrorCodes.USER.INACTIVE, "User inactive");
         }
 
-        // Táº¡o JWT Token
         var accessToken = _token.GenerateAccessToken(user.Id, user.Email);
         var refreshToken = _token.GenerateRefreshToken(user.Id, user.Email);
+        await _redis.SaveRefreshTokenAsync(user.Id, refreshToken, GetTokenRemainingTtl(refreshToken, TimeSpan.FromDays(30)));
 
         var userRes = new UserResponse()
         {
@@ -80,7 +77,7 @@ public class AuthService : IAuthService
             AvatarUrl = user.AvatarUrl,
             IsVerified = user.IsVerified,
             IsProfileCompleted = !string.IsNullOrEmpty(user.DisplayName) && !string.IsNullOrEmpty(user.Username),
-            CreatedAt = user.CreatedAt // Dùng CreatedAt thực tế từ DB, không phải thời điểm đăng nhập
+            CreatedAt = user.CreatedAt
         };
 
         var tokenRes = new TokenResponse()
@@ -139,7 +136,6 @@ public class AuthService : IAuthService
         }
         var userId = userIdClaim.Value;
 
-        // THU Há»’I ACCESS TOKEN (Láº¥y tá»« Header Authorization)
         var jtiClaim = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
         var expClaim = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Exp)?.Value;
 
@@ -154,14 +150,13 @@ public class AuthService : IAuthService
             }
         }
 
-        // THU Há»’I REFRESH TOKEN
+        // THU HỒI REFRESH TOKEN
         if (logoutRequest != null && !string.IsNullOrEmpty(logoutRequest.RefreshToken))
         {
             TimeSpan refreshRemainTtl = TimeSpan.FromDays(30);
 
             var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
 
-            // Kiá»ƒm tra xem token client gá»­i lÃªn cÃ³ pháº£i JWT há»£p lá»‡ khÃ´ng
             if (handler.CanReadToken(logoutRequest.RefreshToken))
             {
                 var jwtToken = handler.ReadJwtToken(logoutRequest.RefreshToken);
@@ -175,6 +170,8 @@ public class AuthService : IAuthService
 
             await _redis.BlacklistRefreshTokenAsync(logoutRequest.RefreshToken, refreshRemainTtl);
         }
+
+        await _redis.RemoveRefreshTokenAsync(userId);
 
         return true;
     }
@@ -221,12 +218,36 @@ public class AuthService : IAuthService
             throw new UnauthorizedException(ErrorCodes.AUTH.REFRESH_TOKEN_INVALID, "Token in black list");
         }
 
+        var storedRefreshToken = await _redis.GetRefreshTokenAsync(userId);
+        if (!string.Equals(storedRefreshToken, request.RefreshToken, StringComparison.Ordinal))
+        {
+            throw new UnauthorizedException(ErrorCodes.AUTH.REFRESH_TOKEN_INVALID, "Refresh token has been revoked or rotated");
+        }
+
         var newAccessToken = _token.GenerateAccessToken(userId, email);
+        var newRefreshToken = _token.GenerateRefreshToken(userId, email);
+
+        await _redis.BlacklistRefreshTokenAsync(request.RefreshToken, GetTokenRemainingTtl(request.RefreshToken, TimeSpan.FromDays(30)));
+        await _redis.SaveRefreshTokenAsync(userId, newRefreshToken, GetTokenRemainingTtl(newRefreshToken, TimeSpan.FromDays(30)));
 
         return new TokenResponse
         {
             AccessToken = newAccessToken,
-            RefreshToken = request.RefreshToken
+            RefreshToken = newRefreshToken
         };
+    }
+
+    private static TimeSpan GetTokenRemainingTtl(string token, TimeSpan fallback)
+    {
+        var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+        if (!handler.CanReadToken(token))
+        {
+            return fallback;
+        }
+
+        var jwtToken = handler.ReadJwtToken(token);
+        var ttl = jwtToken.ValidTo - DateTime.UtcNow;
+
+        return ttl > TimeSpan.Zero ? ttl : fallback;
     }
 }
