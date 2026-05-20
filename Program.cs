@@ -61,7 +61,6 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
 
     var configuration = ConfigurationOptions.Parse(redisConnectionString);
-    // Cho phÃ©p káº¿t ná»‘i láº¡i khi Redis sáºµn sÃ ng
     configuration.AbortOnConnectFail = false;
     configuration.ConnectRetry = 3;
     configuration.ConnectTimeout = 5000;
@@ -223,6 +222,24 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<AppDbContext>();
+
+        context.Database.Migrate();
+
+        Console.WriteLine("Azure SQL Database Migration applied successfully.");
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while migrating the database.");
+    }
+}
 
 JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
 
