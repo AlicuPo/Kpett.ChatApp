@@ -16,6 +16,7 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly IRedisService _redis;
         private readonly IHubContext<AppHub> _hubContext;
         private readonly AppDbContext _dbContext;
+        private readonly ILogger<ConversationTypingService> _logger;
 
         // Thời gian tự động dừng typing nếu không nhận được event mới
         private static readonly TimeSpan TypingTtl = TimeSpan.FromSeconds(5);
@@ -27,11 +28,13 @@ namespace Kpett.ChatApp.Services.Impls
         public ConversationTypingService(
             IRedisService redis,
             IHubContext<AppHub> hubContext,
-            AppDbContext dbContext)
+            AppDbContext dbContext,
+            ILogger<ConversationTypingService> logger)
         {
             _redis = redis;
             _hubContext = hubContext;
             _dbContext = dbContext;
+            _logger = logger;
         }
 
         public async Task<bool> StartTypingAsync(string conversationId, string userId, string connectionId, CancellationToken ct = default)
@@ -52,6 +55,12 @@ namespace Kpett.ChatApp.Services.Impls
             // Broadcast start chỉ khi: connection này chưa typing VÀ không có tab nào khác đang typing
             // (tránh broadcast trùng khi user mở nhiều tab)
             var shouldBroadcastStart = !thisConnectionAlreadyTyping && !userAlreadyTypingFromOtherTab;
+            _logger.LogDebug(
+                "Start typing for user {UserId}, connection {ConnectionId}, conversation {ConversationId}. ShouldBroadcast: {ShouldBroadcast}",
+                userId,
+                connectionId,
+                conversationId,
+                shouldBroadcastStart);
             return shouldBroadcastStart;
         }
 
@@ -64,7 +73,14 @@ namespace Kpett.ChatApp.Services.Impls
 
             // Chỉ broadcast stop nếu không còn tab nào khác của user này đang typing
             var hasOtherConnections = await _redis.HasOtherTypingConnectionsAsync(conversationId, userId, connectionId);
-            return !hasOtherConnections;
+            var shouldBroadcastStop = !hasOtherConnections;
+            _logger.LogDebug(
+                "Stop typing for user {UserId}, connection {ConnectionId}, conversation {ConversationId}. ShouldBroadcast: {ShouldBroadcast}",
+                userId,
+                connectionId,
+                conversationId,
+                shouldBroadcastStop);
+            return shouldBroadcastStop;
         }
 
         public Task<List<(string UserId, string ConnectionId)>> GetTypingUsersAsync(string conversationId)
@@ -86,7 +102,9 @@ namespace Kpett.ChatApp.Services.Impls
                 }
             }
 
-            return await _redis.RemoveAllTypingForConnectionAsync(connectionId);
+            var removedEntries = await _redis.RemoveAllTypingForConnectionAsync(connectionId);
+            _logger.LogDebug("Cleaned up {TypingEntryCount} typing entries for connection {ConnectionId}", removedEntries.Count, connectionId);
+            return removedEntries;
         }
 
         // Private helpers
@@ -109,6 +127,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             // Fire-and-forget: chạy auto-expire sau TTL
             _ = RunAutoExpireAsync(conversationId, userId, connectionId, newCts.Token);
+            _logger.LogDebug("Refreshed typing auto-expire timer for user {UserId}, connection {ConnectionId}, conversation {ConversationId}", userId, connectionId, conversationId);
         }
 
         private void CancelExpireTimer(string conversationId, string userId, string connectionId)
@@ -118,6 +137,7 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 cts.Cancel();
                 cts.Dispose();
+                _logger.LogDebug("Cancelled typing auto-expire timer for user {UserId}, connection {ConnectionId}, conversation {ConversationId}", userId, connectionId, conversationId);
             }
         }
 
@@ -133,7 +153,14 @@ namespace Kpett.ChatApp.Services.Impls
             }
 
             // Timer hết hạn một cách tự nhiên → auto-expire
-            await AutoExpireTypingAsync(conversationId, userId, connectionId);
+            try
+            {
+                await AutoExpireTypingAsync(conversationId, userId, connectionId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error while auto-expiring typing state for user {UserId}, connection {ConnectionId}, conversation {ConversationId}", userId, connectionId, conversationId);
+            }
         }
 
         /// <summary>
@@ -170,6 +197,7 @@ namespace Kpett.ChatApp.Services.Impls
             await _hubContext.Clients
                 .Group($"conversation_{conversationId}")
                 .SendAsync("UserTyping", payload);
+            _logger.LogDebug("Auto-expired typing state for user {UserId}, connection {ConnectionId}, conversation {ConversationId}", userId, connectionId, conversationId);
         }
 
         private static string TimerKey(string conversationId, string userId, string connectionId)

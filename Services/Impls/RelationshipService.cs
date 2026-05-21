@@ -23,25 +23,31 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly AppDbContext _context;
         private readonly IRedisService _redisService;
         private readonly IMediator _mediator;
+        private readonly ILogger<RelationshipService> _logger;
 
-        public RelationshipService(AppDbContext context, IRedisService redisService, IMediator mediator)
+        public RelationshipService(AppDbContext context, IRedisService redisService, IMediator mediator, ILogger<RelationshipService> logger)
         {
             _context = context;
             _redisService = redisService;
             _mediator = mediator;
+            _logger = logger;
         }
 
         // Friend request
         public async Task<FriendRequestResponse> SendFriendRequestAsync(string senderId, string receiverId)
         {
+            _logger.LogInformation("User {SenderId} is sending friend request to user {ReceiverId}", senderId, receiverId);
+
             if (senderId == receiverId)
             {
+                _logger.LogWarning("User {SenderId} attempted to send friend request to self", senderId);
                 throw new BadRequestException(ErrorCodes.FRIEND.SELF_REFERENCE, "Cannot send friend requests to myself");
             }
 
             var existingUsersCount = await _context.Users.CountAsync(u => u.Id == senderId || u.Id == receiverId);
             if (existingUsersCount != 2)
             {
+                _logger.LogWarning("Friend request from {SenderId} to {ReceiverId} rejected because sender or receiver was not found", senderId, receiverId);
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "Sender or Receiver not found");
             }
 
@@ -53,7 +59,10 @@ namespace Kpett.ChatApp.Services.Impls
                 .AnyAsync(f => f.UserLowId == senderId && f.UserHighId == receiverId && f.Status == acceptedStatus);
 
             if (isFriend)
+            {
+                _logger.LogWarning("Friend request from {SenderId} to {ReceiverId} rejected because users are already friends", senderId, receiverId);
                 throw new BadRequestException(ErrorCodes.FRIEND.ALREADY_FRIENDS, "You were already friends.");
+            }
 
             // Kiểm tra xem đã có lời mời Pending giữa 2 người chưa
             var existingRequest = await _context.FriendRequests
@@ -64,10 +73,12 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 if (existingRequest.SenderId == senderId)
                 {
+                    _logger.LogWarning("Friend request from {SenderId} to {ReceiverId} rejected because request already exists", senderId, receiverId);
                     throw new BadRequestException(ErrorCodes.FRIEND.REQUEST_ALREADY_SENT, "You have already sent a friend request to this person.");
                 }
                 else
                 {
+                    _logger.LogWarning("Friend request from {SenderId} to {ReceiverId} rejected because receiver already sent a pending request", senderId, receiverId);
                     throw new BadRequestException(ErrorCodes.FRIEND.FRIEND_REQUEST_PENDING, "This person has already sent you a friend request. Please check your pending requests.");
                 }
             }
@@ -110,6 +121,7 @@ namespace Kpett.ChatApp.Services.Impls
                 ReceiverId = receiverId
             });
 
+            _logger.LogInformation("Friend request {RequestId} sent from {SenderId} to {ReceiverId}", request.Id, senderId, receiverId);
             return new FriendRequestResponse
             {
                 RequestId = request.Id,
@@ -124,8 +136,11 @@ namespace Kpett.ChatApp.Services.Impls
         // Accept request
         public async Task AcceptFriendRequestAsync(string currentUserId, string requestId)
         {
+            _logger.LogInformation("User {UserId} is accepting friend request {RequestId}", currentUserId, requestId);
+
             if (!(await _context.Users.AnyAsync(u => u.Id == currentUserId)))
             {
+                _logger.LogWarning("Accept friend request {RequestId} rejected because user {UserId} was not found", requestId, currentUserId);
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "Current user not found");
             }
 
@@ -135,12 +150,14 @@ namespace Kpett.ChatApp.Services.Impls
 
             if (request == null)
             {
+                _logger.LogWarning("Accept friend request {RequestId} rejected because request was not found or not pending", requestId);
                 throw new NotFoundException(ErrorCodes.FRIEND.FRIEND_REQUEST_NOT_FOUND, "Friend request not found or not pending.");
             }
 
             // Chỉ người nhận mới được phép accept lời mời
             if (request.ReceiverId != currentUserId)
             {
+                _logger.LogWarning("User {UserId} attempted to accept unauthorized friend request {RequestId}", currentUserId, requestId);
                 throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You are not authorized to accept this friend request.");
             }
 
@@ -197,21 +214,26 @@ namespace Kpett.ChatApp.Services.Impls
                 RequesterId = request.SenderId
             });
 
+            _logger.LogInformation("Friend request {RequestId} accepted by user {UserId}", request.Id, currentUserId);
         }
 
         public async Task DeclineFriendRequestAsync(string currentUserId, string requestId)
         {
+            _logger.LogInformation("User {UserId} is declining friend request {RequestId}", currentUserId, requestId);
+
             var pendingStatus = FriendRequestStatus.Pending.GetDescription();
             var request = await _context.FriendRequests
                 .FirstOrDefaultAsync(fr => fr.Id == requestId && fr.Status == pendingStatus);
 
             if (request == null)
             {
+                _logger.LogWarning("Decline friend request {RequestId} rejected because request was not found", requestId);
                 throw new NotFoundException(ErrorCodes.FRIEND.FRIEND_REQUEST_NOT_FOUND, "Friend request not found.");
             }
 
             if (request.ReceiverId != currentUserId)
             {
+                _logger.LogWarning("User {UserId} attempted to decline unauthorized friend request {RequestId}", currentUserId, requestId);
                 throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You are not authorized to decline this friend request.");
             }
 
@@ -231,16 +253,20 @@ namespace Kpett.ChatApp.Services.Impls
             }
 
             await _context.SaveChangesAsync();
+            _logger.LogInformation("Friend request {RequestId} declined by user {UserId}", requestId, currentUserId);
         }
 
         public async Task CancelFriendRequestAsync(string currentUserId, string requestId)
         {
+            _logger.LogInformation("User {UserId} is cancelling friend request {RequestId}", currentUserId, requestId);
+
             var pendingStatus = FriendRequestStatus.Pending.GetDescription();
             var request = await _context.FriendRequests
                 .FirstOrDefaultAsync(fr => fr.Id == requestId && fr.Status == pendingStatus);
 
             if (request == null)
             {
+                _logger.LogWarning("Cancel friend request {RequestId} rejected because request was not found", requestId);
                 throw new NotFoundException(ErrorCodes.FRIEND.FRIEND_REQUEST_NOT_FOUND, "Friend request not found.");
             }
 
@@ -259,10 +285,13 @@ namespace Kpett.ChatApp.Services.Impls
             }
 
             await _context.SaveChangesAsync();
+            _logger.LogInformation("Friend request {RequestId} cancelled by user {UserId}", requestId, currentUserId);
         }
 
         public async Task UnfriendAsync(string currentUserId, string targetUserId)
         {
+            _logger.LogInformation("User {UserId} is unfriending user {TargetUserId}", currentUserId, targetUserId);
+
             var activeStatus = FriendshipStatus.Active.GetDescription();
             var acceptedStatus = FriendRequestStatus.Accepted.GetDescription();
             var friendship = await _context.Friendships
@@ -273,6 +302,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             if (friendship == null)
             {
+                _logger.LogWarning("Unfriend rejected because friendship between {UserId} and {TargetUserId} was not found", currentUserId, targetUserId);
                 throw new NotFoundException(ErrorCodes.FRIEND.FRIENDSHIP_NOT_FOUND, "Friendship not found or not active.");
             }
 
@@ -298,12 +328,16 @@ namespace Kpett.ChatApp.Services.Impls
             }
 
             await _context.SaveChangesAsync();
+            _logger.LogInformation("User {UserId} unfriended user {TargetUserId}", currentUserId, targetUserId);
         }
 
         public async Task FollowAsync(string followerId, string followeeId)
         {
+            _logger.LogInformation("User {FollowerId} is following user {FolloweeId}", followerId, followeeId);
+
             if (followerId == followeeId)
             {
+                _logger.LogWarning("User {FollowerId} attempted to follow self", followerId);
                 throw new BadRequestException(ErrorCodes.FOLLOW.SELF_REFERENCE, "Unable to monitor myself");
             }
 
@@ -312,6 +346,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             if (existingFollow != null)
             {
+                _logger.LogWarning("Follow from {FollowerId} to {FolloweeId} rejected because follow already exists", followerId, followeeId);
                 throw new BadRequestException(ErrorCodes.FOLLOW.ALREADY_FOLLOWING, "You are already following this person.");
             }
 
@@ -326,20 +361,25 @@ namespace Kpett.ChatApp.Services.Impls
 
             await _context.Follows.AddAsync(follow);
             await _context.SaveChangesAsync();
+            _logger.LogInformation("User {FollowerId} followed user {FolloweeId}", followerId, followeeId);
         }
 
         public async Task UnfollowAsync(string followerId, string followeeId)
         {
+            _logger.LogInformation("User {FollowerId} is unfollowing user {FolloweeId}", followerId, followeeId);
+
             var follow = await _context.Follows
                 .FirstOrDefaultAsync(f => f.FollowerId == followerId && f.FolloweeId == followeeId);
 
             if (follow == null)
             {
+                _logger.LogWarning("Unfollow from {FollowerId} to {FolloweeId} rejected because follow was not found", followerId, followeeId);
                 throw new NotFoundException(ErrorCodes.FOLLOW.FOLLOW_NOT_FOUND, "Follow relationship not found.");
             }
 
             _context.Follows.Remove(follow);
             await _context.SaveChangesAsync();
+            _logger.LogInformation("User {FollowerId} unfollowed user {FolloweeId}", followerId, followeeId);
         }
 
         public async Task<PaginatedData<FriendListItemDTO>> GetFriendsAsync(string currentUserId, FriendListRequest request, CancellationToken cancel)
@@ -443,6 +483,7 @@ namespace Kpett.ChatApp.Services.Impls
                 })
                 .ToList();
 
+            _logger.LogInformation("User {UserId} retrieved {Count} friends", currentUserId, items.Count);
 
             return new PaginatedData<FriendListItemDTO>
             {
@@ -570,6 +611,8 @@ namespace Kpett.ChatApp.Services.Impls
                 AvatarUrl = avatarsDict.GetValueOrDefault(f.FriendId)
             }).ToList();
 
+            _logger.LogInformation("User {UserId} retrieved {Count} friends not in conversation {ConversationId}", currentUserId, items.Count, request.ConversationId);
+
             return new PaginatedData<UserResponse>
             {
                 Items = items,
@@ -628,13 +671,16 @@ namespace Kpett.ChatApp.Services.Impls
                     .ToDictionaryAsync(m => m.UserId, m => m.MediaUrl, cancel);
             }
 
-            return suggestedUsers.Select(u => new UserResponse
+            var suggestions = suggestedUsers.Select(u => new UserResponse
             {
                 Id = u.Id,
                 Username = u.Username,
                 DisplayName = u.DisplayName ?? u.Username,
                 AvatarUrl = avatarsDict.GetValueOrDefault(u.Id)
             }).ToList();
+
+            _logger.LogInformation("User {UserId} retrieved {Count} friend suggestions", currentUserId, suggestions.Count);
+            return suggestions;
         }
     }
 }

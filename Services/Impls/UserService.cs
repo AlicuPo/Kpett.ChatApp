@@ -19,13 +19,15 @@ namespace Kpett.ChatApp.Services.Impls
     {
         private readonly AppDbContext _dbcontext;
         private readonly IRedisService _redisService;
+        private readonly ILogger<UserService> _logger;
 
         private readonly string AVATAR_TYPE = UserMediaType.Avatar.GetDescription();
         private readonly string COVER_TYPE = UserMediaType.Cover.GetDescription();
-        public UserService(AppDbContext dbContext, IRedisService redisService)
+        public UserService(AppDbContext dbContext, IRedisService redisService, ILogger<UserService> logger)
         {
             _dbcontext = dbContext;
             _redisService = redisService;
+            _logger = logger;
         }
 
         public async Task<UserGeneralInfoResponse> GetMyGeneralInfo(string userId, CancellationToken cancel)
@@ -63,6 +65,8 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You can only access your own profile.");
             }
+
+            _logger.LogInformation("User {userId} get info successfully", userId);
 
             return user;
         }
@@ -103,6 +107,8 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<UserGeneralInfoResponse> UpdateUserGeneralInfo(string currentUserId, UpdateGeneralInfoUserRequest request, CancellationToken cancel)
         {
+            _logger.LogInformation("User {userId} is updating general info", currentUserId);
+
             if (string.IsNullOrEmpty(request.Username))
             {
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Username is required");
@@ -137,6 +143,8 @@ namespace Kpett.ChatApp.Services.Impls
 
             await _dbcontext.SaveChangesAsync();
 
+            _logger.LogInformation("User {userId} updated general info successfully", currentUserId);
+
             return new UserGeneralInfoResponse
             {
                 Id = user.Id,
@@ -153,6 +161,8 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<UserMediaResponse> UpdateUserMedia(string currentUserId, MediaRequest media, string mediaType)
         {
+            _logger.LogInformation("User {userId} is updating media", currentUserId);
+
             if (media == null)
             {
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Media is not null");
@@ -184,6 +194,8 @@ namespace Kpett.ChatApp.Services.Impls
 
             BackgroundJob.Enqueue<IMediaService>(e => e.ConfirmMediaOnCloudinaryAsync(new List<string> { userMedia.Id }));
 
+            _logger.LogInformation("User {userId} updated media successfully", currentUserId);
+
             return new UserMediaResponse
             {
                 Id = userMedia.Id,
@@ -198,6 +210,8 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<bool> DeleteUserMediaPrimaryAsync(string currentUserId, string mediaType)
         {
+            _logger.LogInformation("User {userId} is deleting primary media of type {mediaType}", currentUserId, mediaType);
+
             if (_dbcontext.Users.AnyAsync(u => u.Id == currentUserId).Result == false)
             {
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
@@ -218,6 +232,8 @@ namespace Kpett.ChatApp.Services.Impls
                 _dbcontext.UserMedias.Update(userMedia);
                 await _dbcontext.SaveChangesAsync();
             }
+
+            _logger.LogInformation("User {userId} deleted primary media of type {mediaType} successfully", currentUserId, mediaType);
 
             return true;
         }
@@ -243,6 +259,8 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<UsernameCheckResponse> CheckExistByUsername(string username, CancellationToken cancel)
         {
+            _logger.LogInformation("Checking availability of username {username}", username);
+
             if (string.IsNullOrWhiteSpace(username))
             {
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Username cannot be null or empty");

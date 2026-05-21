@@ -4,6 +4,7 @@ using Kpett.ChatApp.Configs;
 using Kpett.ChatApp.Services.Impls;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Kpett.ChatApp.Tests.Services;
 
@@ -110,6 +111,7 @@ public class JwtServiceTests
         return new JwtService(
             accessor ?? new HttpContextAccessor(),
             global::Microsoft.Extensions.Options.Options.Create(options),
-            configuration);
+            configuration,
+            NullLogger<JwtService>.Instance);
     }
 }
