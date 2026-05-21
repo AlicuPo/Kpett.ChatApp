@@ -14,10 +14,12 @@ namespace Kpett.ChatApp.Be.Services.Impls
     public class NotificationService : INotificationService
     {
         private readonly AppDbContext _context;
+        private readonly ILogger<NotificationService> _logger;
 
-        public NotificationService(AppDbContext context)
+        public NotificationService(AppDbContext context, ILogger<NotificationService> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         public async Task<PaginatedData<NotificationResponse>> GetUserNotificationsAsync(string currentUserId, CursorPaginationRequest request, CancellationToken cancel)
@@ -104,6 +106,7 @@ namespace Kpett.ChatApp.Be.Services.Impls
                 }
             }).ToList();
 
+            _logger.LogInformation("User {UserId} retrieved {Count} notifications", currentUserId, items.Count);
             return new PaginatedData<NotificationResponse>
             {
                 Items = items,
@@ -113,24 +116,28 @@ namespace Kpett.ChatApp.Be.Services.Impls
 
         public async Task<int> GetUnreadCountAsync(string currentUserId, CancellationToken cancel)
         {
-            return await _context.Notifications
+            var count = await _context.Notifications
                 .CountAsync(n => n.RecipientId == currentUserId && !n.IsRead, cancel);
+            _logger.LogInformation("User {UserId} has {UnreadCount} unread notifications", currentUserId, count);
+            return count;
         }
 
         public async Task MarkAsReadAsync(string currentUserId, string notificationId, CancellationToken cancel)
         {
             // Tối ưu hóa: Dùng ExecuteUpdateAsync ghi trực tiếp xuống SQL Server không cần Load Entity
-            await _context.Notifications
+            var affectedRows = await _context.Notifications
                 .Where(n => n.Id == notificationId && n.RecipientId == currentUserId && !n.IsRead)
                 .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true), cancel);
+            _logger.LogInformation("User {UserId} marked notification {NotificationId} as read. Affected rows: {AffectedRows}", currentUserId, notificationId, affectedRows);
         }
 
         public async Task MarkAllAsReadAsync(string currentUserId, CancellationToken cancel)
         {
             // Tối ưu hóa: Đánh dấu tất cả đã đọc chỉ với 1 câu lệnh SQL
-            await _context.Notifications
+            var affectedRows = await _context.Notifications
                 .Where(n => n.RecipientId == currentUserId && !n.IsRead)
                 .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true), cancel);
+            _logger.LogInformation("User {UserId} marked all notifications as read. Affected rows: {AffectedRows}", currentUserId, affectedRows);
         }
     }
 }

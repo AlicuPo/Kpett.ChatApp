@@ -3,6 +3,7 @@ using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Text.Json;
 
@@ -24,7 +25,12 @@ namespace Kpett.ChatApp.Helper
             Exception exception,
             CancellationToken cancellationToken)
         {
-            _logger.LogError(exception, "Exception occurred: {Message}", exception.Message);
+            _logger.LogError(
+                exception,
+                "Unhandled exception. Method: {Method}, Path: {Path}",
+                httpContext.Request.Method,
+                httpContext.Request.Path
+            );
 
             var statusCode = (int)HttpStatusCode.InternalServerError;
             var errorCode = ErrorCodes.SERVER.SYSTEM_ERROR;
@@ -37,7 +43,8 @@ namespace Kpett.ChatApp.Helper
                 message = appEx.Message;
             }
 
-            var response = new ErrorResponse() {
+            var response = new ErrorResponse()
+            {
                 ErrorCode = errorCode,
                 StatusCode = statusCode,
                 Message = message,

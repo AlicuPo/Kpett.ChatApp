@@ -34,8 +34,11 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<CommentListItemDTO> AddCommentAsync(string postId, string userId, string content, string? parentCommentId, CancellationToken cancel)
         {
+            _logger.LogInformation("User {UserId} is adding comment to post {PostId}. HasParent: {HasParent}", userId, postId, !string.IsNullOrWhiteSpace(parentCommentId));
+
             if (string.IsNullOrWhiteSpace(content))
             {
+                _logger.LogWarning("Add comment rejected for user {UserId} on post {PostId} because content is empty", userId, postId);
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Comment content cannot be empty");
             }
 
@@ -54,11 +57,13 @@ namespace Kpett.ChatApp.Services.Impls
 
             if (user == null)
             {
+                _logger.LogWarning("Add comment rejected because user {UserId} was not found", userId);
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
             if (await _dbContext.Posts.AnyAsync(p => p.Id == postId && !p.IsDeleted, cancel) == false)
             {
+                _logger.LogWarning("Add comment rejected because post {PostId} was not found", postId);
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
             }
 
@@ -72,6 +77,7 @@ namespace Kpett.ChatApp.Services.Impls
 
                 if (parentPath == null)
                 {
+                    _logger.LogWarning("Add comment rejected because parent comment {ParentCommentId} was not found on post {PostId}", normalizedParentCommentId, postId);
                     throw new NotFoundException(ErrorCodes.COMMENT.PARENT_COMMENT_NOT_FOUND, "Parent comment not found");
                 }
             }
@@ -135,11 +141,12 @@ namespace Kpett.ChatApp.Services.Impls
                     }, cancel);
                 }
 
+                _logger.LogInformation("User {UserId} added comment {CommentId} to post {PostId}. MentionCount: {MentionCount}", userId, comment.Id, postId, mentionIds.Count);
                 return MapCommentListItem(comment, user, userMedia, mentions, false, user.Id);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error");
+                _logger.LogError(ex, "Error adding comment {CommentId} to post {PostId} by user {UserId}", commentId, postId, userId);
                 await transaction.RollbackAsync(cancel);
                 throw;
             }
@@ -154,11 +161,15 @@ namespace Kpett.ChatApp.Services.Impls
             CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
+            _logger.LogInformation("User {UserId} is retrieving comments for post {PostId}. ParentCommentId: {ParentCommentId}", currentUserId, postId, parentCommentId);
 
             var postExists = await _dbContext.Posts
                 .AnyAsync(p => p.Id == postId && !p.IsDeleted, cancel);
             if (!postExists)
+            {
+                _logger.LogWarning("Get comments rejected because post {PostId} was not found", postId);
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
+            }
 
             // Giải mã Cursor
             DateTime? cursorDate = null;
@@ -244,6 +255,7 @@ namespace Kpett.ChatApp.Services.Impls
                     currentUserId))
                 .ToList();
 
+            _logger.LogInformation("User {UserId} retrieved {Count} comments for post {PostId}", currentUserId, items.Count, postId);
             return new PaginatedData<CommentListItemDTO>
             {
                 Items = items,
@@ -261,8 +273,11 @@ namespace Kpett.ChatApp.Services.Impls
             string content,
             CancellationToken cancel)
         {
+            _logger.LogInformation("User {UserId} is updating comment {CommentId}", userId, commentId);
+
             if (string.IsNullOrWhiteSpace(content))
             {
+                _logger.LogWarning("Update comment {CommentId} rejected for user {UserId} because content is empty", commentId, userId);
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Comment content cannot be empty");
             }
 
@@ -273,11 +288,13 @@ namespace Kpett.ChatApp.Services.Impls
 
             if (comment == null)
             {
+                _logger.LogWarning("Update comment rejected because comment {CommentId} was not found", commentId);
                 throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");
             }
 
             if (comment.UserId != userId)
             {
+                _logger.LogWarning("User {UserId} attempted to update unauthorized comment {CommentId}", userId, commentId);
                 throw new ForbiddenException(ErrorCodes.COMMENT.USER_NOT_AUTHORIZED, "Not authorized to update this comment");
             }
 
@@ -295,6 +312,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             if (user == null)
             {
+                _logger.LogWarning("Update comment {CommentId} failed because author {UserId} was not found", commentId, comment.UserId);
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
@@ -302,12 +320,14 @@ namespace Kpett.ChatApp.Services.Impls
                                 .AsNoTracking()
                                 .FirstOrDefault(um => um.UserId == userId && um.MediaType == UserMediaType.Avatar.GetDescription() && um.IsPrimary);
 
+            _logger.LogInformation("User {UserId} updated comment {CommentId}. MentionCount: {MentionCount}", userId, commentId, mentions.Count);
             return MapCommentListItem(comment, user, userMedia, mentions, false, user.Id);
         }
 
         public async Task DeleteCommentAsync(string commentId, string userId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
+            _logger.LogInformation("User {UserId} is deleting comment {CommentId}", userId, commentId);
 
             var commentInfo = await _dbContext.Comments
                 .Where(c => c.Id == commentId && c.DeletedAt == null)
@@ -315,10 +335,16 @@ namespace Kpett.ChatApp.Services.Impls
                 .FirstOrDefaultAsync(cancel);
 
             if (commentInfo == null)
+            {
+                _logger.LogWarning("Delete comment rejected because comment {CommentId} was not found", commentId);
                 throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");
+            }
 
             if (commentInfo.UserId != userId)
+            {
+                _logger.LogWarning("User {UserId} attempted to delete unauthorized comment {CommentId}", userId, commentId);
                 throw new ForbiddenException(ErrorCodes.COMMENT.USER_NOT_AUTHORIZED, "Not authorized to delete this comment");
+            }
 
             var utcNow = DateTime.UtcNow;
 
@@ -341,9 +367,11 @@ namespace Kpett.ChatApp.Services.Impls
                     .ExecuteUpdateAsync(p => p.SetProperty(x => x.CommentCount, x => x.CommentCount - 1), cancel);
 
                 await transaction.CommitAsync(cancel);
+                _logger.LogInformation("User {UserId} deleted comment {CommentId} from post {PostId}", userId, commentId, commentInfo.PostId);
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Error deleting comment {CommentId} by user {UserId}", commentId, userId);
                 await transaction.RollbackAsync(cancel);
                 throw;
             }
@@ -351,8 +379,11 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<CommentListItemDTO> LikeCommentAsync(string commentId, string userId, CancellationToken cancel)
         {
+            _logger.LogInformation("User {UserId} is liking comment {CommentId}", userId, commentId);
+
             if (string.IsNullOrWhiteSpace(commentId))
             {
+                _logger.LogWarning("Like comment rejected for user {UserId} because comment ID is empty", userId);
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Comment ID is required");
             }
 
@@ -361,6 +392,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             if (!commentExists)
             {
+                _logger.LogWarning("Like comment rejected because comment {CommentId} was not found", commentId);
                 throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");
             }
 
@@ -386,12 +418,18 @@ namespace Kpett.ChatApp.Services.Impls
 
                     await _dbContext.SaveChangesAsync(cancel);
                     await transaction.CommitAsync(cancel);
+                    _logger.LogInformation("User {UserId} liked comment {CommentId}", userId, commentId);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    _logger.LogError(ex, "Error liking comment {CommentId} by user {UserId}", commentId, userId);
                     await transaction.RollbackAsync(cancel);
                     throw;
                 }
+            }
+            else
+            {
+                _logger.LogDebug("User {UserId} already liked comment {CommentId}", userId, commentId);
             }
 
             return await MapCommentListItemByIdAsync(commentId, userId, true, cancel);
@@ -399,8 +437,11 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<CommentListItemDTO> UnlikeCommentAsync(string commentId, string userId, CancellationToken cancel)
         {
+            _logger.LogInformation("User {UserId} is unliking comment {CommentId}", userId, commentId);
+
             if (string.IsNullOrWhiteSpace(commentId))
             {
+                _logger.LogWarning("Unlike comment rejected for user {UserId} because comment ID is empty", userId);
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Comment ID is required");
             }
 
@@ -420,9 +461,11 @@ namespace Kpett.ChatApp.Services.Impls
 
                     await _dbContext.SaveChangesAsync(cancel);
                     await transaction.CommitAsync(cancel);
+                    _logger.LogInformation("User {UserId} unliked comment {CommentId}", userId, commentId);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    _logger.LogError(ex, "Error unliking comment {CommentId} by user {UserId}", commentId, userId);
                     await transaction.RollbackAsync(cancel);
                     throw;
                 }
@@ -434,8 +477,10 @@ namespace Kpett.ChatApp.Services.Impls
 
                 if (!commentExists)
                 {
+                    _logger.LogWarning("Unlike comment rejected because comment {CommentId} was not found", commentId);
                     throw new NotFoundException(ErrorCodes.COMMENT.NOT_FOUND, "Comment not found");
                 }
+                _logger.LogDebug("User {UserId} had not liked comment {CommentId}", userId, commentId);
             }
 
             return await MapCommentListItemByIdAsync(commentId, userId, false, cancel);

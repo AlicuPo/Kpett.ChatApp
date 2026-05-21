@@ -44,6 +44,7 @@ namespace Kpett.ChatApp.Services.Impls
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             string publicId = $"{Guid.NewGuid():N}";
             string cloudName = _cloudinary.Api.Account.Cloud;
+            _logger.LogInformation("Generating Cloudinary upload signature for folder {Folder} with public ID {PublicId}", folder, publicId);
 
             var parametersToSign = new Dictionary<string, object>
             {
@@ -57,6 +58,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             string uploadUrl = $"https://api.cloudinary.com/v1_1/{cloudName}/auto/upload";
 
+            _logger.LogInformation("Generated Cloudinary upload signature for public ID {PublicId}", publicId);
             return new CloudinarySignatureResponse
             {
                 PublicId = publicId,
@@ -74,11 +76,14 @@ namespace Kpett.ChatApp.Services.Impls
         {
             if (publicIds == null || !publicIds.Any())
             {
+                _logger.LogDebug("Skipping Cloudinary media confirmation because public ID list is empty");
                 return;
             }
 
             try
             {
+                _logger.LogInformation("Confirming {MediaCount} Cloudinary media resources", publicIds.Count);
+
                 var removeTagParams = new TagParams()
                 {
                     Command = TagCommand.Remove,
@@ -94,6 +99,7 @@ namespace Kpett.ChatApp.Services.Impls
                     PublicIds = publicIds
                 };
                 await _cloudinary.TagAsync(addTagParams);
+                _logger.LogInformation("Confirmed {MediaCount} Cloudinary media resources", publicIds.Count);
             }
             catch (Exception ex)
             {
@@ -104,6 +110,7 @@ namespace Kpett.ChatApp.Services.Impls
         public async Task<MediaUploadResponse> UploadImageAsync(IFormFile file, string folder = "general")
         {
             ValidateFile(file, _mediaSettings.MaxImageSizeBytes, _mediaSettings.AllowedImageExtensions);
+            _logger.LogInformation("Uploading image {FileName} to Cloudinary folder {Folder}. Size: {FileSize}", file.FileName, folder, file.Length);
 
             var uploadResult = new ImageUploadResult();
             using (var stream = file.OpenReadStream())
@@ -117,8 +124,13 @@ namespace Kpett.ChatApp.Services.Impls
                 uploadResult = await _cloudinary.UploadAsync(uploadParams);
             }
 
-            if (uploadResult.Error != null) throw new Exception(MEDIA.UPLOAD_FAILED);
+            if (uploadResult.Error != null)
+            {
+                _logger.LogError("Cloudinary image upload failed for file {FileName}: {ErrorMessage}", file.FileName, uploadResult.Error.Message);
+                throw new Exception(MEDIA.UPLOAD_FAILED);
+            }
 
+            _logger.LogInformation("Uploaded image {FileName} to Cloudinary with public ID {PublicId}", file.FileName, uploadResult.PublicId);
             return new MediaUploadResponse
             {
                 PublicId = uploadResult.PublicId,
@@ -131,6 +143,7 @@ namespace Kpett.ChatApp.Services.Impls
         public async Task<MediaUploadResponse> UploadVideoAsync(IFormFile file, string folder = "videos")
         {
             ValidateFile(file, _mediaSettings.MaxVideoSizeBytes, _mediaSettings.AllowedVideoExtensions);
+            _logger.LogInformation("Uploading video {FileName} to Cloudinary folder {Folder}. Size: {FileSize}", file.FileName, folder, file.Length);
 
             var uploadResult = new VideoUploadResult();
             using (var stream = file.OpenReadStream())
@@ -144,8 +157,12 @@ namespace Kpett.ChatApp.Services.Impls
             }
 
             if (uploadResult.Error != null)
+            {
+                _logger.LogError("Cloudinary video upload failed for file {FileName}: {ErrorMessage}", file.FileName, uploadResult.Error.Message);
                 throw new Exception($"Lỗi upload video từ Cloudinary: {uploadResult.Error.Message}");
+            }
 
+            _logger.LogInformation("Uploaded video {FileName} to Cloudinary with public ID {PublicId}", file.FileName, uploadResult.PublicId);
             return new MediaUploadResponse
             {
                 PublicId = uploadResult.PublicId,
@@ -158,20 +175,30 @@ namespace Kpett.ChatApp.Services.Impls
         private void ValidateFile(IFormFile file, long maxSize, string[] allowedExtensions)
         {
             if (file == null || file.Length == 0)
+            {
+                _logger.LogWarning("Media validation failed because file is empty");
                 throw new BadRequestException(ErrorCodes.MEDIA.FILE_EMPTY, "File is empty");
+            }
 
             if (file.Length > maxSize)
+            {
+                _logger.LogWarning("Media validation failed for file {FileName}. Size {FileSize} exceeds limit {MaxSize}", file.FileName, file.Length, maxSize);
                 throw new BadRequestException(ErrorCodes.MEDIA.FILE_SIZE_EXCEEDS_LIMIT, "File size exceeds limit");
+            }
 
             var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
             if (string.IsNullOrEmpty(extension) || !allowedExtensions.Contains(extension))
+            {
+                _logger.LogWarning("Media validation failed for file {FileName}. Extension {Extension} is not allowed", file.FileName, extension);
                 throw new BadRequestException(ErrorCodes.MEDIA.INVALID_FILE_EXTENSION, "Invalid file format");
+            }
         }
 
         public async Task<bool> DeleteFileAsync(string publicId, string resourceType)
         {
             if (string.IsNullOrWhiteSpace(publicId) || string.IsNullOrWhiteSpace(resourceType))
             {
+                _logger.LogWarning("Cloudinary delete rejected because public ID or resource type is empty");
                 throw new BadRequestException(VALIDATION.REQUIRED, "Thiếu publicId hoặc resourceType");
             }
 
@@ -193,13 +220,16 @@ namespace Kpett.ChatApp.Services.Impls
 
             var result = await _cloudinary.DestroyAsync(deleteParams);
 
-            return result.Result == "ok" || result.Result == "not found";
+            var deleted = result.Result == "ok" || result.Result == "not found";
+            _logger.LogInformation("Cloudinary delete completed for public ID {PublicId}. ResourceType: {ResourceType}. Result: {Result}", publicId, resourceType, result.Result);
+            return deleted;
         }
 
         public async Task CleanUpOrphanedImagesAsync()
         {
             try
             {
+                _logger.LogInformation("Starting Cloudinary orphaned image cleanup");
                 var result = await _cloudinary.DeleteResourcesByTagAsync("status_temp");
 
                 _logger.LogInformation("Đã xóa {Count} ảnh rác trên Cloudinary.", result.Deleted.Count);

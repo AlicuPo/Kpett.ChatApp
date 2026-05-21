@@ -1,5 +1,6 @@
 using CloudinaryDotNet;
 using Hangfire;
+using Kpett.ChatApp.Be.Services.Impls;
 using Kpett.ChatApp.Configs;
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response.Shared;
@@ -7,17 +8,18 @@ using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Options;
-using Kpett.ChatApp.Services.Interfaces;
 using Kpett.ChatApp.Services.Impls;
+using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Serilog;
+using Serilog.Core;
 using StackExchange.Redis;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using System.Text.Json;
-using Kpett.ChatApp.Be.Services.Impls;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -94,6 +96,12 @@ var jwtSection = builder.Configuration.GetSection("JwtSection");
 var issuer = jwtSection["Issuer"];
 var audience = jwtSection["Audience"];
 var KeyAccess = jwtSection["KeyAccess"];
+
+// Cấu hình Serilog đọc từ appsettings.json
+builder.Host.UseSerilog((context, configuration) =>
+{
+    configuration.ReadFrom.Configuration(context.Configuration);
+});
 
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -226,22 +234,24 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
     try
     {
         var context = services.GetRequiredService<AppDbContext>();
 
         context.Database.Migrate();
 
-        Console.WriteLine("Azure SQL Database Migration applied successfully.");
+        logger.LogInformation("Azure SQL Database Migration applied successfully.");
     }
     catch (Exception ex)
     {
-        var logger = services.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "An error occurred while migrating the database.");
     }
 }
 
 JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
+
+app.UseSerilogRequestLogging();
 
 app.UseExceptionHandler();
 app.UseHttpsRedirection();

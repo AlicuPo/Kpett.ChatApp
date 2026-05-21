@@ -20,11 +20,13 @@ namespace Kpett.ChatApp.Services.Impls
     public class PostService : IPostService
     {
         private readonly AppDbContext _dbContext;
+        private readonly ILogger<PostService> _logger;
 
         private readonly string avatarType = UserMediaType.Avatar.GetDescription();
-        public PostService(AppDbContext dbContext)
+        public PostService(AppDbContext dbContext, ILogger<PostService> logger)
         {
             _dbContext = dbContext;
+            _logger = logger;
         }
 
         /// <summary>
@@ -32,6 +34,8 @@ namespace Kpett.ChatApp.Services.Impls
         /// </summary>
         public async Task<PostFeedResponse> CreatePostAsync(string userId, PostRequest postRequest, CancellationToken cancel)
         {
+            _logger.LogInformation("User {UserId} creating a new post", userId);
+
             if (string.IsNullOrWhiteSpace(userId))
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
 
@@ -90,6 +94,8 @@ namespace Kpett.ChatApp.Services.Impls
                 BackgroundJob.Enqueue<IMediaService>(x => x.ConfirmMediaOnCloudinaryAsync(publicIdsToConfirm));
             }
 
+            _logger.LogInformation("User {UserId} created a new post with ID {PostId}", userId, newPost.Id);
+
             return BuildPostResponse(newPost, user, mediaResponse, isLiked: false);
         }
 
@@ -98,6 +104,8 @@ namespace Kpett.ChatApp.Services.Impls
         /// </summary>
         public async Task<PostFeedResponse> UpdatePostAsync(string postId, string userId, PostRequest postRequest, CancellationToken cancel)
         {
+            _logger.LogInformation("User {UserId} updating post with ID {PostId}", userId, postId);
+
             if (string.IsNullOrWhiteSpace(userId))
             {
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
@@ -171,6 +179,8 @@ namespace Kpett.ChatApp.Services.Impls
 
             bool isLiked = await _dbContext.PostReactions.AnyAsync(pr => pr.PostId == postId && pr.UserId == userId, cancel);
 
+            _logger.LogInformation("User {UserId} updated post with ID {PostId}", userId, postId);
+
             return BuildPostResponse(post, authorResponse, allCurrentMedias, isLiked);
         }
 
@@ -238,6 +248,8 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
             }
 
+            _logger.LogInformation("User {UserId} retrieved post with ID {PostId}", currentUserId ?? "Anonymous", postId);
+
             return post;
         }
 
@@ -246,7 +258,6 @@ namespace Kpett.ChatApp.Services.Impls
         /// </summary>
         public async Task<PaginatedData<PostFeedResponse>> GetFeedAsync(string? currentUserId, string? cursor = null, int limit = 10, CancellationToken cancel = default)
         {
-            // Giáº£i mÃ£ Cursor
             DateTime? cursorDate = null;
             string? cursorId = null;
 
@@ -355,6 +366,8 @@ namespace Kpett.ChatApp.Services.Impls
                 post.CreatedAt = post.CreatedAt.ToUtc();
                 post.UpdatedAt = post.UpdatedAt?.ToUtc();
             }
+
+            _logger.LogInformation("User {UserId} retrieved feed with {Count} posts", currentUserId ?? "Anonymous", fetchedPosts.Count);
 
             return new PaginatedData<PostFeedResponse>
             {
@@ -577,6 +590,8 @@ namespace Kpett.ChatApp.Services.Impls
                 },
             }).ToList();
 
+            _logger.LogInformation("User {UserId} retrieved posts for user {AuthorId} with {Count} posts", currentUserId ?? "Anonymous", userId, mappedPosts.Count);
+
             return new PaginatedData<PostThumbnailResponse>
             {
                 Items = mappedPosts,
@@ -610,6 +625,8 @@ namespace Kpett.ChatApp.Services.Impls
             post.IsDeleted = true;
             post.UpdatedAt = DateTime.UtcNow;
 
+            _logger.LogInformation("User {UserId} deleted post with ID {PostId}", userId, postId);
+
             _dbContext.Posts.Update(post);
             await _dbContext.SaveChangesAsync(cancel);
         }
@@ -629,6 +646,8 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
             }
+
+            _logger.LogInformation("User {UserId} added reaction to post with ID {PostId}", userId, postId);
 
             // Check if already reacted
             var existingReaction = await _dbContext.PostReactions
@@ -691,6 +710,8 @@ namespace Kpett.ChatApp.Services.Impls
         /// </summary>
         public async Task RemoveReactionAsync(string postId, string userId, CancellationToken cancel)
         {
+            _logger.LogInformation("User {UserId} is removing reaction from post with ID {PostId}", userId, postId);
+
             var postExists = await _dbContext.Posts
                 .AnyAsync(p => p.Id == postId && !p.IsDeleted);
             if (!postExists)

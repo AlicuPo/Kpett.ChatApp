@@ -18,11 +18,14 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly IHttpContextAccessor _contextAccessor;
         private readonly JwtOptions _jwtOptions;
         private readonly IConfiguration _config;
-        public JwtService(IHttpContextAccessor contextAccessor, IOptions<JwtOptions> options, IConfiguration config)
+        private readonly ILogger<JwtService> _logger;
+
+        public JwtService(IHttpContextAccessor contextAccessor, IOptions<JwtOptions> options, IConfiguration config, ILogger<JwtService> logger)
         {
             _contextAccessor = contextAccessor;
             _jwtOptions = options.Value;
             _config = config;
+            _logger = logger;
         }
 
         public string GenerateAccessToken(string userId, string email)
@@ -30,6 +33,7 @@ namespace Kpett.ChatApp.Services.Impls
             var jwtKey = _jwtOptions.KeyAccess;
             if (string.IsNullOrEmpty(jwtKey))
             {
+                _logger.LogError("Access token generation failed because JwtSection KeyAccess is not configured");
                 throw new InvalidOperationException("JwtSection KeyAccess is not configured.");
             }
 
@@ -57,6 +61,7 @@ namespace Kpett.ChatApp.Services.Impls
                 signingCredentials: creds
             );
 
+            _logger.LogDebug("Generated access token for user {UserId}", userId);
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
         public string GenerateRefreshToken(string userId, string email)
@@ -64,6 +69,7 @@ namespace Kpett.ChatApp.Services.Impls
             var jwtKey = _jwtOptions.KeyRefres;
             if (string.IsNullOrEmpty(jwtKey))
             {
+                _logger.LogError("Refresh token generation failed because JwtSection KeyRefres is not configured");
                 throw new InvalidOperationException("JwtSection KeyRefres is not configured.");
             }
 
@@ -91,6 +97,7 @@ namespace Kpett.ChatApp.Services.Impls
                 signingCredentials: creds
             );
 
+            _logger.LogDebug("Generated refresh token for user {UserId}", userId);
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
@@ -100,6 +107,7 @@ namespace Kpett.ChatApp.Services.Impls
             var jwtKey = _config[keyName];
             if (string.IsNullOrEmpty(jwtKey))
             {
+                _logger.LogError("JWT principal validation failed because {KeyName} is not configured", keyName);
                 throw new InvalidOperationException("JWT key is not configured.");
             }
 
@@ -116,9 +124,17 @@ namespace Kpett.ChatApp.Services.Impls
                 )
             };
             var tokenHandler = new JwtSecurityTokenHandler();
-            var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out _);
-
-            return principal;
+            try
+            {
+                var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out _);
+                _logger.LogDebug("Validated {TokenType} token principal", isRefresh ? "refresh" : "access");
+                return principal;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to validate {TokenType} token principal", isRefresh ? "refresh" : "access");
+                throw;
+            }
         }
 
         public UserClaims? GetUserClaims()
@@ -126,7 +142,10 @@ namespace Kpett.ChatApp.Services.Impls
             try
             {
                 if (_contextAccessor.HttpContext?.User == null)
+                {
+                    _logger.LogDebug("No HttpContext user is available while extracting user claims");
                     return null;
+                }
 
                 var claims = _contextAccessor.HttpContext.User.Claims;
 
@@ -136,7 +155,10 @@ namespace Kpett.ChatApp.Services.Impls
 
                 // Validate required claims
                 if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(username))
+                {
+                    _logger.LogWarning("Required claims are missing while extracting user claims");
                     return null;
+                }
 
                 // Extract optional claims
                 var displayName = claims.FirstOrDefault(c => c.Type == "DisplayName")?.Value;
@@ -176,8 +198,7 @@ namespace Kpett.ChatApp.Services.Impls
             }
             catch (Exception ex)
             {
-                // Log error but don't throw - return null if extraction fails
-                Console.WriteLine($"Error extracting user claims: {ex.Message}");
+                _logger.LogError(ex, "Error extracting user claims");
                 return null;
             }
         }
