@@ -1,0 +1,65 @@
+﻿name: Deploy Production API
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.x"
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build project
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test project
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+      - name: Publish project
+        run: dotnet publish Kpett.ChatApp.csproj --configuration Release --no-build -o ./publish-output
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: net-app-artifact
+          path: ./publish-output
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+
+    environment:
+      name: production
+      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+
+    env:
+      ASPNETCORE_ENVIRONMENT: Production
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: net-app-artifact
+          path: ./publish-output
+
+      - name: Deploy to Azure Web App
+        id: deploy-to-webapp
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: "kpet-api"
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ./publish-output
+          clean: true

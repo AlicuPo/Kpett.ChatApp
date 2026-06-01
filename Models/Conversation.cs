@@ -8,7 +8,7 @@ public partial class Conversation
 {
     public string Id { get; set; } = null!;
 
-    public string? Type { get; set; }
+    public string Type { get; set; } = null!;
 
     public string? Name { get; set; }
 
@@ -21,7 +21,7 @@ public partial class Conversation
 
     public DateTime? UpdatedAt { get; set; }
 
-    public DateTime? LastMessageAt { get; set; }
+    public DateTime LastMessageAt { get; set; }
 
-    public bool? IsActive { get; set; }
+    public bool IsActive { get; set; } = false;
 }

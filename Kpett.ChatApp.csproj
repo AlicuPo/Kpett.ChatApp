@@ -6,54 +6,69 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>839a13ba-5f5c-49a3-9d0d-8ef29490ffbb</UserSecretsId>
   </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <Compile Remove="Reposoitory\**" />
-    <Content Remove="Reposoitory\**" />
-    <EmbeddedResource Remove="Reposoitory\**" />
-    <None Remove="Reposoitory\**" />
-    <Compile Remove="Kpett.ChatApp.Tests\**" />
-    <Content Remove="Kpett.ChatApp.Tests\**" />
-    <EmbeddedResource Remove="Kpett.ChatApp.Tests\**" />
-    <None Remove="Kpett.ChatApp.Tests\**" />
-  </ItemGroup>
+	<ItemGroup>
+		<Compile Remove="Reposoitory\**" />
+		<Content Remove="Reposoitory\**" />
+		<EmbeddedResource Remove="Reposoitory\**" />
+		<None Remove="Reposoitory\**" />
+		<Compile Remove="Kpett.ChatApp.Tests\**" />
+		<Content Remove="Kpett.ChatApp.Tests\**" />
+		<EmbeddedResource Remove="Kpett.ChatApp.Tests\**" />
+		<None Remove="Kpett.ChatApp.Tests\**" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <None Remove="Properties\launchSettings.json" />
-  </ItemGroup>
+	<ItemGroup>
+		<None Remove="Properties\launchSettings.json" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <Content Include="Properties\launchSettings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-  </ItemGroup>
+	<ItemGroup>
+		<Content Include="Properties\launchSettings.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+		</Content>
+	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
-    <PackageReference Include="CloudinaryDotNet" Version="1.28.0" />
-    <PackageReference Include="dotenv.net" Version="4.0.0" />
-    <PackageReference Include="Hangfire.AspNetCore" Version="1.8.23" />
-    <PackageReference Include="Hangfire.SqlServer" Version="1.8.23" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.2" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.2" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.2">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.5" />
-    <PackageReference Include="StackExchange.Redis" Version="2.12.4" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.0" />
-    <PackageReference Include="UUIDNext" Version="4.2.3" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+		<PackageReference Include="CloudinaryDotNet" Version="1.28.0" />
+		<PackageReference Include="dotenv.net" Version="4.0.0" />
+		<PackageReference Include="Hangfire.AspNetCore" Version="1.8.23" />
+		<PackageReference Include="Hangfire.SqlServer" Version="1.8.23" />
+		<PackageReference Include="MediatR" Version="14.1.0" />
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.2" />
+		<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+			<PrivateAssets>all</PrivateAssets>
+		</PackageReference>
+		<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.2" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.2">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.5" />
+		<PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+		<PackageReference Include="Serilog.Settings.Configuration" Version="10.0.0" />
+		<PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+		<PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+		<PackageReference Include="StackExchange.Redis" Version="2.12.4" />
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.0" />
+		<PackageReference Include="UUIDNext" Version="4.2.3" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="DTOs\Response\Comment\" />
-  </ItemGroup>
+	<ItemGroup>
+		<Folder Include="DTOs\Response\Comment\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include=".github\workflows\dev_kpett-chatapp.yml" />
+		<None Include=".github\workflows\prod_kpett-chatapp.yml" />
+	</ItemGroup>
 
 </Project>

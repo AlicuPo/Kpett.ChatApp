@@ -17,7 +17,6 @@ namespace Kpett.ChatApp.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("KpettChatApp")
                 .HasAnnotation("ProductVersion", "10.0.2")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
@@ -44,7 +43,7 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Blocks", "KpettChatApp");
+                    b.ToTable("Blocks");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.Comment", b =>
@@ -102,7 +101,7 @@ namespace Kpett.ChatApp.Migrations
                     b.HasIndex("PostId")
                         .HasDatabaseName("IX_Comments_PostId");
 
-                    b.ToTable("Comments", "KpettChatApp");
+                    b.ToTable("Comments");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.CommentLike", b =>
@@ -132,7 +131,7 @@ namespace Kpett.ChatApp.Migrations
                     b.HasIndex("CommentId", "UserId")
                         .IsUnique();
 
-                    b.ToTable("CommentLikes", "KpettChatApp");
+                    b.ToTable("CommentLikes");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.Conversation", b =>
@@ -150,16 +149,17 @@ namespace Kpett.ChatApp.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<bool?>("IsActive")
+                    b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
-                    b.Property<DateTime?>("LastMessageAt")
+                    b.Property<DateTime>("LastMessageAt")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Name")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Type")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -167,7 +167,7 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Conversations", "KpettChatApp");
+                    b.ToTable("Conversations");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.ConversationKey", b =>
@@ -189,7 +189,7 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("UserLowId", "UserHighId");
 
-                    b.ToTable("ConversationKeys", "KpettChatApp");
+                    b.ToTable("ConversationKeys");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.ConversationParticipant", b =>
@@ -202,10 +202,13 @@ namespace Kpett.ChatApp.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<bool?>("IsArchived")
+                    b.Property<bool>("IsArchived")
                         .HasColumnType("bit");
 
-                    b.Property<bool?>("IsMuted")
+                    b.Property<bool>("IsKicked")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsMuted")
                         .HasColumnType("bit");
 
                     b.Property<DateTime?>("JoinedAt")
@@ -214,10 +217,12 @@ namespace Kpett.ChatApp.Migrations
                     b.Property<DateTime?>("LastReadAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<long?>("LastReadMessageId")
-                        .HasColumnType("bigint");
+                    b.Property<string>("LastReadMessageId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("Role")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("UserId")
@@ -227,7 +232,7 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ConversationParticipants", "KpettChatApp");
+                    b.ToTable("ConversationParticipants");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.Follow", b =>
@@ -253,7 +258,7 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Follows", "KpettChatApp");
+                    b.ToTable("Follows");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.FriendRequest", b =>
@@ -306,7 +311,7 @@ namespace Kpett.ChatApp.Migrations
                     b.HasIndex("SenderId", "Status", "CreatedAt")
                         .HasDatabaseName("IX_FriendRequests_Sender_Status_CreatedAt");
 
-                    b.ToTable("FriendRequests", "KpettChatApp");
+                    b.ToTable("FriendRequests");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.Friendship", b =>
@@ -340,7 +345,7 @@ namespace Kpett.ChatApp.Migrations
                     b.HasIndex("UserLowId", "Status", "CreatedAt", "UserHighId")
                         .HasDatabaseName("IX_Friendships_UserLow_Status_CreatedAt_UserHigh");
 
-                    b.ToTable("Friendships", "KpettChatApp");
+                    b.ToTable("Friendships");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.Group", b =>
@@ -376,7 +381,7 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Groups", "KpettChatApp");
+                    b.ToTable("Groups");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.GroupMember", b =>
@@ -419,7 +424,7 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("GroupMembers", "KpettChatApp");
+                    b.ToTable("GroupMembers");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.MentionComment", b =>
@@ -464,65 +469,7 @@ namespace Kpett.ChatApp.Migrations
                     b.HasIndex("CommentId", "UserId")
                         .IsUnique();
 
-                    b.ToTable("MentionComments", "KpettChatApp");
-                });
-
-            modelBuilder.Entity("Kpett.ChatApp.Models.Message", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("ClientMessageId")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("ConversationId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool?>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("Metadata")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("SenderId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("Type")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Messages", "KpettChatApp");
-                });
-
-            modelBuilder.Entity("Kpett.ChatApp.Models.MessageDetail", b =>
-                {
-                    b.Property<long>("MessageId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("MessageId"));
-
-                    b.Property<string>("Color")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Content")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("MessageId");
-
-                    b.ToTable("MessageDetails", "KpettChatApp");
+                    b.ToTable("MentionComments");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.Notification", b =>
@@ -530,42 +477,37 @@ namespace Kpett.ChatApp.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<string>("Content")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Data")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool?>("IsArchived")
-                        .HasColumnType("bit");
-
-                    b.Property<bool?>("IsRead")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime?>("ReadAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("SenderId")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("Title")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Type")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("UserId")
+                    b.Property<string>("ActorId")
                         .IsRequired()
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("RecipientId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("ReferenceId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.HasKey("Id");
 
-                    b.ToTable("Notifications", "KpettChatApp");
+                    b.ToTable("Notifications");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.Post", b =>
@@ -607,6 +549,7 @@ namespace Kpett.ChatApp.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Type")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -617,7 +560,7 @@ namespace Kpett.ChatApp.Migrations
                     b.HasIndex("CreatedByUserId", "IsDeleted", "PinnedAt", "CreatedAt", "Id")
                         .HasDatabaseName("IX_Posts_User_Deleted_PinnedAt_CreatedAt_Id");
 
-                    b.ToTable("Posts", "KpettChatApp");
+                    b.ToTable("Posts");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.PostMedia", b =>
@@ -658,7 +601,7 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PostMedia", "KpettChatApp");
+                    b.ToTable("PostMedia");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.PostReaction", b =>
@@ -691,7 +634,7 @@ namespace Kpett.ChatApp.Migrations
                     b.HasIndex("PostId", "UserId")
                         .HasDatabaseName("IX_PostReactions_PostId_UserId");
 
-                    b.ToTable("PostReactions", "KpettChatApp");
+                    b.ToTable("PostReactions");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.PostReactionType", b =>
@@ -704,7 +647,7 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PostReactionTypes", "KpettChatApp");
+                    b.ToTable("PostReactionTypes");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.User", b =>
@@ -778,7 +721,7 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Users", "KpettChatApp");
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.UserDevice", b =>
@@ -802,7 +745,7 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("UserDevices", "KpettChatApp");
+                    b.ToTable("UserDevices");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.UserFeed", b =>
@@ -832,7 +775,7 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("UserFeeds", "KpettChatApp");
+                    b.ToTable("UserFeeds");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.UserMedia", b =>
@@ -871,7 +814,7 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("UserMedias", "KpettChatApp");
+                    b.ToTable("UserMedias");
                 });
 
             modelBuilder.Entity("Kpett.ChatApp.Models.UserSetting", b =>
@@ -898,7 +841,56 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("UserSettings", "KpettChatApp");
+                    b.ToTable("UserSettings");
+                });
+
+            modelBuilder.Entity("Message", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("ClientMessageId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Content")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ConversationId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ReplyToMessageId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("SenderId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Messages");
                 });
 #pragma warning restore 612, 618
         }

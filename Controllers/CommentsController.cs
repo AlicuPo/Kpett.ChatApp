@@ -1,11 +1,13 @@
 using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Response.Post;
 using Kpett.ChatApp.DTOs.Response.Shared;
+using Kpett.ChatApp.Filters;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Impls;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Kpett.ChatApp.Controllers
 {
@@ -41,6 +43,7 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpGet("posts/{postId}")]
+        [OptionalAuthorize]
         public async Task<ActionResult<GeneralResponse<PaginatedData<CommentListItemDTO>>>> GetComments(
             string postId,
             [FromQuery] string parentCommentId,
@@ -48,8 +51,8 @@ namespace Kpett.ChatApp.Controllers
             [FromQuery] int limit = 10,
             CancellationToken cancel = default)
         {
-            var userId = User.GetRequiredUserId();
-            var result = await _commentService.GetCommentsAsync(postId, parentCommentId, userId, cursor, limit, cancel);
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var result = await _commentService.GetCommentsAsync(postId, parentCommentId, currentUserId, cursor, limit, cancel);
             return Ok(new GeneralResponse<PaginatedData<CommentListItemDTO>>
             {
                 IsSuccess = true,
@@ -85,6 +88,38 @@ namespace Kpett.ChatApp.Controllers
                 IsSuccess = true,
                 Message = "Comment deleted successfully",
                 StatusCode = 200
+            });
+        }
+
+        [HttpPut("{commentId}/likes")]
+        [Authorize]
+        public async Task<ActionResult<GeneralResponse<CommentListItemDTO>>> LikeComment(string commentId, CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _commentService.LikeCommentAsync(commentId, userId, cancel);
+
+            return Ok(new GeneralResponse<CommentListItemDTO>
+            {
+                IsSuccess = true,
+                Message = "Like comment successfully",
+                Data = result,
+                StatusCode = StatusCodes.Status200OK
+            });
+        }
+
+        [HttpDelete("{commentId}/likes")]
+        [Authorize]
+        public async Task<ActionResult<GeneralResponse<CommentListItemDTO>>> UnlikeComment(string commentId, CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _commentService.UnlikeCommentAsync(commentId, userId, cancel);
+
+            return Ok(new GeneralResponse<CommentListItemDTO>
+            {
+                IsSuccess = true,
+                Message = "Unlike comment successfully",
+                Data = result,
+                StatusCode = StatusCodes.Status200OK
             });
         }
     }

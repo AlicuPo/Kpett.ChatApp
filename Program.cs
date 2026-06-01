@@ -1,19 +1,21 @@
 using CloudinaryDotNet;
 using Hangfire;
+using Kpett.ChatApp.Be.Services.Impls;
 using Kpett.ChatApp.Configs;
-using Kpett.ChatApp.Contants;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Options;
-using Kpett.ChatApp.Receive;
 using Kpett.ChatApp.Services.Impls;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Serilog;
+using Serilog.Core;
 using StackExchange.Redis;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
@@ -24,14 +26,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+var corsSettings = builder.Configuration.GetSection("Cors").Get<CorsOptions>();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("ClientCors", policy =>
     {
         policy
-            .WithOrigins(
-                "http://localhost:3000",
-                "http://localhost:5173")
+            .WithOrigins(corsSettings?.AllowedOrigins ?? new[] { "http://localhost:3000" })
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
@@ -62,7 +63,6 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
 
     var configuration = ConfigurationOptions.Parse(redisConnectionString);
-    // Cho phép kết nối lại khi Redis sẵn sàng
     configuration.AbortOnConnectFail = false;
     configuration.ConnectRetry = 3;
     configuration.ConnectTimeout = 5000;
@@ -80,6 +80,12 @@ builder.Services.AddHangfire(config => config
 // Add the Hangfire server to process background jobs
 builder.Services.AddHangfireServer();
 
+// MediatR
+builder.Services.AddMediatR(cfg =>
+{
+    cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
+});
+
 var account = new Account(
     builder.Configuration["CloudinarySettings:CloudName"],
     builder.Configuration["CloudinarySettings:ApiKey"],
@@ -91,6 +97,12 @@ var issuer = jwtSection["Issuer"];
 var audience = jwtSection["Audience"];
 var KeyAccess = jwtSection["KeyAccess"];
 
+// Cấu hình Serilog đọc từ appsettings.json
+builder.Host.UseSerilog((context, configuration) =>
+{
+    configuration.ReadFrom.Configuration(context.Configuration);
+});
+
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -101,10 +113,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = issuer, // Đảm bảo biến này đã được khai báo ở trên
-            ValidAudience = audience, // Đảm bảo biến này đã được khai báo ở trên
+            ValidIssuer = issuer,
+            ValidAudience = audience,
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(KeyAccess!) // Đảm bảo KeyAccess đã được khai báo
+                Encoding.UTF8.GetBytes(KeyAccess!)
             ),
             ClockSkew = TimeSpan.Zero
         };
@@ -132,12 +144,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
 
-                // Xử lý token cho kết nối WebSockets / SignalR
-                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/chat-Hub"))
+                if (!string.IsNullOrEmpty(accessToken) && (path.StartsWithSegments("/hubs/app")))
                 {
+                    // Đọc token từ query string cho SignalR
                     context.Token = accessToken;
                 }
-
                 return Task.CompletedTask;
             },
 
@@ -207,24 +218,42 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IRedisService, RedisService>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddScoped<ICloudinaryService, UploadFileService>();
-builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 builder.Services.AddScoped<IConversationAccessService, ConversationAccessService>();
-builder.Services.AddScoped<IConversationPresenceService, ConversationPresenceService>();
-builder.Services.AddScoped<IRealtimeService, RealtimeService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRelationshipService, RelationshipService>();
 builder.Services.AddScoped<IPostService, PostService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddScoped<IMediaService, MediaService>();
+builder.Services.AddScoped<IConversationTypingService, ConversationTypingService>();
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        var context = services.GetRequiredService<AppDbContext>();
+
+        context.Database.Migrate();
+
+        logger.LogInformation("Azure SQL Database Migration applied successfully.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred while migrating the database.");
+    }
+}
+
 JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
+
+app.UseSerilogRequestLogging();
 
 app.UseExceptionHandler();
 app.UseHttpsRedirection();
@@ -233,23 +262,31 @@ app.UseCors("ClientCors");
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Enable Hangfire Dashboard (optional, for monitoring background jobs)
-app.UseHangfireDashboard();
-
 // Schedule a recurring job to clean up orphaned images daily at 2 AM
-RecurringJob.AddOrUpdate<IMediaService>(
-    "cleanup-temp-images",
-    service => service.CleanUpOrphanedImagesAsync(),
-    Cron.Daily(2)
-);
+// Tạo một Service Scope để lấy các service từ DI Container
+using (var scope = app.Services.CreateScope())
+{
+    var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+
+    recurringJobManager.AddOrUpdate<IMediaService>(
+        "cleanup-temp-images",
+        service => service.CleanUpOrphanedImagesAsync(),
+        Cron.Daily(2)
+    );
+}
 
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+
+    // Expose Hangfire Dashboard only in development unless an authorization policy is added.
+    app.UseHangfireDashboard();
 }
 
 app.MapControllers();
-app.MapHub<ChatHub>("/chat-Hub").RequireCors("ClientCors");
+app.MapHub<AppHub>("/hubs/app").RequireCors("ClientCors");
 
 app.Run();
+
+

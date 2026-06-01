@@ -1,6 +1,7 @@
 using Kpett.ChatApp.DTOs.Request.Friend;
 using Kpett.ChatApp.DTOs.Response.Friend;
 using Kpett.ChatApp.DTOs.Response.Shared;
+using Kpett.ChatApp.DTOs.Response.User;
 
 namespace Kpett.ChatApp.Services.Interfaces
 {
@@ -14,5 +15,8 @@ namespace Kpett.ChatApp.Services.Interfaces
         Task FollowAsync(string followerId, string followeeId);
         Task UnfollowAsync(string followerId, string followeeId);
         Task<PaginatedData<FriendListItemDTO>> GetFriendsAsync(string currentUserId, FriendListRequest request, CancellationToken cancel);
+        Task<PaginatedData<UserResponse>> GetFriendsNotInGroupAsync(string currentUserId, GetFriendsNotInGroupRequest request, CancellationToken cancel);
+        Task<List<UserResponse>> GetFriendSuggestionsAsync(string currentUserId, int limit, CancellationToken cancel);
     }
 }
+

@@ -1,11 +1,13 @@
-using Hangfire;
-using Kpett.ChatApp.Contants;
+﻿using Hangfire;
+using Kpett.ChatApp.Constants;
+using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Request.User;
+using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
-using Kpett.ChatApp.Extentions;
+using Kpett.ChatApp.Extensions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
@@ -17,13 +19,15 @@ namespace Kpett.ChatApp.Services.Impls
     {
         private readonly AppDbContext _dbcontext;
         private readonly IRedisService _redisService;
+        private readonly ILogger<UserService> _logger;
 
         private readonly string AVATAR_TYPE = UserMediaType.Avatar.GetDescription();
         private readonly string COVER_TYPE = UserMediaType.Cover.GetDescription();
-        public UserService(AppDbContext dbContext, IRedisService redisService)
+        public UserService(AppDbContext dbContext, IRedisService redisService, ILogger<UserService> logger)
         {
             _dbcontext = dbContext;
             _redisService = redisService;
+            _logger = logger;
         }
 
         public async Task<UserGeneralInfoResponse> GetMyGeneralInfo(string userId, CancellationToken cancel)
@@ -61,6 +65,8 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You can only access your own profile.");
             }
+
+            _logger.LogInformation("User {userId} get info successfully", userId);
 
             return user;
         }
@@ -101,6 +107,8 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<UserGeneralInfoResponse> UpdateUserGeneralInfo(string currentUserId, UpdateGeneralInfoUserRequest request, CancellationToken cancel)
         {
+            _logger.LogInformation("User {userId} is updating general info", currentUserId);
+
             if (string.IsNullOrEmpty(request.Username))
             {
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Username is required");
@@ -135,6 +143,8 @@ namespace Kpett.ChatApp.Services.Impls
 
             await _dbcontext.SaveChangesAsync();
 
+            _logger.LogInformation("User {userId} updated general info successfully", currentUserId);
+
             return new UserGeneralInfoResponse
             {
                 Id = user.Id,
@@ -151,6 +161,8 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<UserMediaResponse> UpdateUserMedia(string currentUserId, MediaRequest media, string mediaType)
         {
+            _logger.LogInformation("User {userId} is updating media", currentUserId);
+
             if (media == null)
             {
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Media is not null");
@@ -182,6 +194,8 @@ namespace Kpett.ChatApp.Services.Impls
 
             BackgroundJob.Enqueue<IMediaService>(e => e.ConfirmMediaOnCloudinaryAsync(new List<string> { userMedia.Id }));
 
+            _logger.LogInformation("User {userId} updated media successfully", currentUserId);
+
             return new UserMediaResponse
             {
                 Id = userMedia.Id,
@@ -196,6 +210,8 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<bool> DeleteUserMediaPrimaryAsync(string currentUserId, string mediaType)
         {
+            _logger.LogInformation("User {userId} is deleting primary media of type {mediaType}", currentUserId, mediaType);
+
             if (_dbcontext.Users.AnyAsync(u => u.Id == currentUserId).Result == false)
             {
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
@@ -216,6 +232,8 @@ namespace Kpett.ChatApp.Services.Impls
                 _dbcontext.UserMedias.Update(userMedia);
                 await _dbcontext.SaveChangesAsync();
             }
+
+            _logger.LogInformation("User {userId} deleted primary media of type {mediaType} successfully", currentUserId, mediaType);
 
             return true;
         }
@@ -241,6 +259,8 @@ namespace Kpett.ChatApp.Services.Impls
 
         public async Task<UsernameCheckResponse> CheckExistByUsername(string username, CancellationToken cancel)
         {
+            _logger.LogInformation("Checking availability of username {username}", username);
+
             if (string.IsNullOrWhiteSpace(username))
             {
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Username cannot be null or empty");
@@ -452,5 +472,89 @@ namespace Kpett.ChatApp.Services.Impls
                 IsOnline = isOnline
             };
         }
+
+        public async Task<PaginatedData<UserResponse>> SearchUsersAsync(string? currentUserId, string keyword, int limit, string? cursor, CancellationToken cancel)
+        {
+            limit = limit <= 0 ? 20 : Math.Min(limit, 50);
+            var searchTerm = keyword?.Trim() ?? string.Empty;
+
+            // Khởi tạo Query cơ bản (Bỏ qua tracking để tối ưu tốc độ đọc)
+            var query = _dbcontext.Users.AsNoTracking().AsQueryable();
+
+            // Lọc theo từ khóa (Tìm trong DisplayName hoặc Username)
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                query = query.Where(u =>
+                    (u.DisplayName != null && u.DisplayName.Contains(searchTerm)) ||
+                    (u.Username != null && u.Username.Contains(searchTerm))
+                );
+            }
+
+            // Loại trừ người đang thực hiện tìm kiếm
+            if (!string.IsNullOrWhiteSpace(currentUserId))
+            {
+                query = query.Where(u => u.Id != currentUserId);
+            }
+
+            // Giải mã Cursor
+            string? cursorId = null;
+            if (!string.IsNullOrWhiteSpace(cursor))
+            {
+                var decoded = CursorHelper.Decode<UserSearchCursorPayload>(cursor);
+                if (decoded != null) cursorId = decoded.UserId;
+            }
+
+            // Áp dụng Cursor Pagination (Sắp xếp tăng dần theo Id)
+            if (!string.IsNullOrWhiteSpace(cursorId))
+            {
+                query = query.Where(u => string.Compare(u.Id, cursorId) > 0);
+            }
+
+            // Truy vấn dữ liệu từ DB (Dư 1 record để check NextCursor)
+            var rawUsers = await query
+                .OrderBy(u => u.Id)
+                .Take(limit + 1)
+                .Select(u => new
+                {
+                    u.Id,
+                    u.DisplayName,
+                    u.Username,
+                    // Sub-query để lấy Avatar một cách tối ưu
+                    AvatarUrl = _dbcontext.UserMedias
+                        .Where(um => um.UserId == u.Id && um.IsPrimary && um.MediaType == "Avatar")
+                        .Select(um => um.MediaUrl)
+                        .FirstOrDefault()
+                })
+                .ToListAsync(cancel);
+
+            // Xử lý phân trang
+            string? nextCursor = null;
+            if (rawUsers.Count > limit)
+            {
+                var lastItem = rawUsers[limit - 1];
+                nextCursor = CursorHelper.Encode(new UserSearchCursorPayload { UserId = lastItem.Id });
+                rawUsers.RemoveAt(limit);
+            }
+
+            // Mapping sang DTO trả về
+            var items = rawUsers.Select(u => new UserResponse
+            {
+                Id = u.Id,
+                DisplayName = u.DisplayName ?? u.Username,
+                Username = u.Username,
+                AvatarUrl = u.AvatarUrl
+            }).ToList();
+
+            return new PaginatedData<UserResponse>
+            {
+                Items = items,
+                Pagination = new CursorPaginationMeta
+                {
+                    NextCursor = nextCursor,
+                    Limit = limit
+                }
+            };
+        }
     }
 }
+

@@ -1,9 +1,7 @@
-using Kpett.ChatApp.Contants;
-using Kpett.ChatApp.DTOs.Request.Firend;
 using Kpett.ChatApp.DTOs.Request.Friend;
 using Kpett.ChatApp.DTOs.Response.Friend;
 using Kpett.ChatApp.DTOs.Response.Shared;
-using Kpett.ChatApp.Exceptions;
+using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -120,7 +118,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<IActionResult> Follow(string followeeId)
         {
             var currentUserId = User.GetRequiredUserId();
-             await _friendServices.FollowAsync(currentUserId, followeeId);
+            await _friendServices.FollowAsync(currentUserId, followeeId);
 
             return Ok(new GeneralResponse
             {
@@ -141,7 +139,23 @@ namespace Kpett.ChatApp.Controllers
                 IsSuccess = true,
                 Message = "Unfollowed successfully",
                 StatusCode = StatusCodes.Status200OK
-            }); 
+            });
+        }
+
+        [HttpGet("friends/suggestions")]
+        public async Task<IActionResult> GetFriendSuggestions([FromQuery] int limit = 10, CancellationToken cancel = default)
+        {
+            var currentUserId = User.GetRequiredUserId();
+            var suggestions = await _friendServices.GetFriendSuggestionsAsync(currentUserId, limit, cancel);
+
+            return Ok(new GeneralResponse<List<UserResponse>>
+            {
+                IsSuccess = true,
+                Message = "Get friend suggestions successfully",
+                Data = suggestions,
+                StatusCode = StatusCodes.Status200OK
+            });
         }
     }
 }
+

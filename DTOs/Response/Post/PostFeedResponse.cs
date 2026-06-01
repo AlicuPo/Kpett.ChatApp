@@ -13,6 +13,8 @@ namespace Kpett.ChatApp.DTOs.Response.Post
 
         public string? Content { get; set; }
 
+        public string Type { get; set; } = null!;
+
         public List<string> Hashtags { get; set; } = new List<string>();
 
         public List<MediaPostResponse> Media { get; set; } = new List<MediaPostResponse>();

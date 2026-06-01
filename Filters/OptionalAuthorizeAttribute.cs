@@ -1,4 +1,4 @@
-﻿using Kpett.ChatApp.Contants;
+﻿using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
@@ -37,3 +37,4 @@ namespace Kpett.ChatApp.Filters
         }
     }
 }
+

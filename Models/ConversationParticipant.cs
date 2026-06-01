@@ -14,15 +14,18 @@ public partial class ConversationParticipant
     [MaxLength(450)]
     public string UserId { get; set; } = null!;
 
-    public string? Role { get; set; }
+    public string Role { get; set; } = null!;
 
     public DateTime? JoinedAt { get; set; }
 
     public DateTime? LastReadAt { get; set; }
 
-    public long? LastReadMessageId { get; set; }
+    [MaxLength(450)]
+    public string? LastReadMessageId { get; set; }
 
-    public bool? IsMuted { get; set; }
+    public bool IsMuted { get; set; } = false;
 
-    public bool? IsArchived { get; set; }
+    public bool IsArchived { get; set; } = false;
+
+    public bool IsKicked { get; set; } = false;
 }
