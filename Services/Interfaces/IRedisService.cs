@@ -12,6 +12,11 @@
         Task BlacklistRefreshTokenAsync(string refreshToken, TimeSpan ttl);
         Task<bool> IsRefreshTokenBlacklistedAsync(string refreshToken);
 
+        // Password reset helpers
+        Task SavePasswordResetOtpAsync(string email, string otp, TimeSpan ttl);
+        Task<string?> GetPasswordResetOtpAsync(string email);
+        Task RemovePasswordResetOtpAsync(string email);
+
         // Connection / presence helpers
         Task AddConnectionAsync(string userId, string connectionId);
         Task RemoveConnectionAsync(string userId, string connectionId);

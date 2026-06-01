@@ -15,6 +15,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using IRedisService = Kpett.ChatApp.Services.Interfaces.IRedisService;
 
+
 namespace Kpett.ChatApp.Controllers
 {
     [Route("api/[controller]")]
@@ -86,6 +87,34 @@ namespace Kpett.ChatApp.Controllers
                 Message = "Token refreshed successfully."
             });
         }
+
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancel = default)
+        {
+            await _authService.ForgotPasswordAsync(request, cancel);
+
+            return Ok(new GeneralResponse
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "If the email exists, an OTP has been sent."
+            });
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordWithOtpRequest request, CancellationToken cancel = default)
+        {
+            await _authService.ResetPasswordWithOtpAsync(request, cancel);
+
+            return Ok(new GeneralResponse
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Password reset successfully."
+            });
+        }
+
+
 
         [Authorize]
         [HttpPost("revoke")]
