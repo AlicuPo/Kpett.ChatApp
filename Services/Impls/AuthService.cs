@@ -1,6 +1,5 @@
 using Azure.Core;
 using Kpett.ChatApp.Constants;
-using Kpett.ChatApp.Contants;
 using Kpett.ChatApp.DTOs.Request.Auth;
 using Kpett.ChatApp.DTOs.Response.Auth;
 using Kpett.ChatApp.DTOs.Response.User;
@@ -27,13 +26,12 @@ public class AuthService : IAuthService
     private readonly IJwtService _token;
     private readonly ILogger<AuthService> _logger;
 
-    public AuthService(AppDbContext context, IJwtService token, IRedisService redis, ILogger<AuthService> logger)
     public AuthService(
         AppDbContext context,
         IJwtService token,
         IRedisService redis,
         IEmailService emailService,
-        IOptions<EmailOptions> emailOptions)
+        IOptions<EmailOptions> emailOptions, ILogger<AuthService> logger)
     {
         _dbContext = context;
         _token = token;
@@ -276,7 +274,7 @@ public class AuthService : IAuthService
 
         return ttl > TimeSpan.Zero ? ttl : fallback;
     }
-}
+
 
     public async Task ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken cancel = default)
     {
