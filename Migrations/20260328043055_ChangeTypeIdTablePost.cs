@@ -23,6 +23,17 @@ namespace Kpett.ChatApp.Migrations
                 name: "TempId", schema: "KpettChatApp", table: "Posts",
                 type: "nvarchar(450)", nullable: true);
 
+            migrationBuilder.DropPrimaryKey(
+                name: "PK_Posts",
+                schema: "KpettChatApp",
+                table: "Posts");
+
+            migrationBuilder.Sql("""
+                UPDATE [KpettChatApp].[Posts]
+                SET [TempId] = CONVERT(nvarchar(450), [Id])
+                WHERE [TempId] IS NULL;
+                """);
+
             migrationBuilder.DropColumn(
                 name: "Id", schema: "KpettChatApp", table: "Posts");
 
@@ -33,6 +44,12 @@ namespace Kpett.ChatApp.Migrations
             migrationBuilder.AlterColumn<string>(
                 name: "Id", schema: "KpettChatApp", table: "Posts",
                 type: "nvarchar(450)", nullable: false, defaultValue: "");
+
+            migrationBuilder.AddPrimaryKey(
+                name: "PK_Posts",
+                schema: "KpettChatApp",
+                table: "Posts",
+                column: "Id");
 
             migrationBuilder.AlterColumn<string>(
                 name: "PostId",
@@ -65,53 +82,8 @@ namespace Kpett.ChatApp.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AlterColumn<long>(
-                name: "PostId",
-                schema: "KpettChatApp",
-                table: "UserFeeds",
-                type: "bigint",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "nvarchar(max)");
-
-            migrationBuilder.AlterColumn<long>(
-                name: "Id",
-                schema: "KpettChatApp",
-                table: "Posts",
-                type: "bigint",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "nvarchar(450)")
-                .Annotation("SqlServer:Identity", "1, 1");
-
-            migrationBuilder.AlterColumn<long>(
-                name: "PostId",
-                schema: "KpettChatApp",
-                table: "PostReactions",
-                type: "bigint",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "nvarchar(max)");
-
-            migrationBuilder.AlterColumn<long>(
-                name: "PostId",
-                schema: "KpettChatApp",
-                table: "PostMedia",
-                type: "bigint",
-                nullable: false,
-                defaultValue: 0L,
-                oldClrType: typeof(string),
-                oldType: "nvarchar(max)",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<long>(
-                name: "PostId",
-                schema: "KpettChatApp",
-                table: "Comments",
-                type: "bigint",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "nvarchar(max)");
+            throw new System.NotSupportedException(
+                "Rollback for migration '20260328043055_ChangeTypeIdTablePost' is not supported.");
         }
     }
 }

@@ -18,6 +18,19 @@
         public string CurrentPassword { get; set; } = null!;
         public string NewPassword { get; set; } = null!;
     }
+
+    public class ForgotPasswordRequest
+    {
+        public string Email { get; set; } = null!;
+    }
+
+    public class ResetPasswordWithOtpRequest
+    {
+        public string Email { get; set; } = null!;
+        public string Otp { get; set; } = null!;
+        public string NewPassword { get; set; } = null!;
+    }
+
     public class UpdateUserStatusRequest
     {
         public bool IsActive { get; set; }

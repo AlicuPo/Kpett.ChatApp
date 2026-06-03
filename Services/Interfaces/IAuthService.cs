@@ -10,5 +10,7 @@ namespace Kpett.ChatApp.Services.Interfaces
         Task<int> RegisterAsync(RegisterRequest request, CancellationToken cancel = default);
         Task<bool> LogoutAsync(LogoutRequest logoutRequest , ClaimsPrincipal user, CancellationToken cancel = default);
         Task<TokenResponse> RefreshTokenAsync(RefreshTokenRequest request);
+        Task ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken cancel = default);
+        Task ResetPasswordWithOtpAsync(ResetPasswordWithOtpRequest request, CancellationToken cancel = default);
     }
 }

@@ -211,10 +211,12 @@ builder.Services.AddAuthorization();
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("JwtSection"));
 builder.Services.Configure<CloudinaryOptions>(builder.Configuration.GetSection("CloudinarySettings"));
 builder.Services.Configure<MediaOptions>(builder.Configuration.GetSection("MediaSettings"));
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("EmailSettings"));
 
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IRedisService, RedisService>();
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddScoped<ICloudinaryService, UploadFileService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 builder.Services.AddScoped<IConversationAccessService, ConversationAccessService>();

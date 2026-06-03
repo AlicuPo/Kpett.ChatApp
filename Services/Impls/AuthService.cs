@@ -1,17 +1,18 @@
 using Azure.Core;
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Request.Auth;
-using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.DTOs.Response.Auth;
-using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
+using Kpett.ChatApp.Options;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using UUIDNext;
 
 namespace Kpett.ChatApp.Services.Impls;
@@ -19,16 +20,25 @@ namespace Kpett.ChatApp.Services.Impls;
 public class AuthService : IAuthService
 {
     private readonly AppDbContext _dbContext;
+    private readonly IEmailService _emailService;
+    private readonly EmailOptions _emailOptions;
     private readonly IRedisService _redis;
     private readonly IJwtService _token;
     private readonly ILogger<AuthService> _logger;
 
-    public AuthService(AppDbContext context, IJwtService token, IRedisService redis, ILogger<AuthService> logger)
+    public AuthService(
+        AppDbContext context,
+        IJwtService token,
+        IRedisService redis,
+        IEmailService emailService,
+        IOptions<EmailOptions> emailOptions, ILogger<AuthService> logger)
     {
         _dbContext = context;
         _token = token;
         _redis = redis;
         _logger = logger;
+        _emailService = emailService;
+        _emailOptions = emailOptions.Value;
     }
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancel = default)
@@ -40,6 +50,8 @@ public class AuthService : IAuthService
             _logger.LogWarning("Login attempt rejected because email is empty");
             throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Email not empty");
         }
+
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
 
         var user = await _dbContext.Users
             .Select(u => new
@@ -57,7 +69,7 @@ public class AuthService : IAuthService
                 IsVerified = u.IsVerified,
                 CreatedAt = u.CreatedAt
             })
-            .FirstOrDefaultAsync(x => x.Email == request.Email);
+            .FirstOrDefaultAsync(x => x.Email == normalizedEmail, cancel);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.Password))
         {
@@ -109,8 +121,10 @@ public class AuthService : IAuthService
         _logger.LogInformation("Register attempt received");
         ValidateAuthRequest(request);
 
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+
         var existingUserByEmail =
-            await _dbContext.Users.AnyAsync(x => x.Email == request.Email);
+            await _dbContext.Users.AnyAsync(x => x.Email == normalizedEmail, cancel);
         if (existingUserByEmail)
         {
             _logger.LogWarning("Register attempt rejected because email already exists");
@@ -118,20 +132,18 @@ public class AuthService : IAuthService
         }
 
         var hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
-
-        var avatarUrl = string.Empty;
-
-        var _id = Uuid.NewDatabaseFriendly(Database.SqlServer).ToString("N");
+        var id = Uuid.NewDatabaseFriendly(Database.SqlServer).ToString("N");
 
         var newUser = new User
         {
-            Id = _id,
+            Id = id,
             Password = hashedPassword,
-            Email = request.Email,
+            Email = normalizedEmail,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             Status = UserStatusEnums.Offline.GetDescription()
         };
+
         _dbContext.Users.Add(newUser);
         var result = await _dbContext.SaveChangesAsync(cancel);
         _logger.LogInformation("User {UserId} registered successfully", newUser.Id);
@@ -152,7 +164,7 @@ public class AuthService : IAuthService
         var jtiClaim = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
         var expClaim = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Exp)?.Value;
 
-        if (!string.IsNullOrEmpty(jtiClaim) && long.TryParse(expClaim, out long expSeconds))
+        if (!string.IsNullOrEmpty(jtiClaim) && long.TryParse(expClaim, out var expSeconds))
         {
             var expirationTime = DateTimeOffset.FromUnixTimeSeconds(expSeconds).UtcDateTime;
             var remainTtl = expirationTime - DateTime.UtcNow;
@@ -164,11 +176,9 @@ public class AuthService : IAuthService
             }
         }
 
-        // THU HỒI REFRESH TOKEN
         if (logoutRequest != null && !string.IsNullOrEmpty(logoutRequest.RefreshToken))
         {
-            TimeSpan refreshRemainTtl = TimeSpan.FromDays(30);
-
+            var refreshRemainTtl = TimeSpan.FromDays(30);
             var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
 
             if (handler.CanReadToken(logoutRequest.RefreshToken))
@@ -189,14 +199,6 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("User {UserId} logged out successfully", userId);
         return true;
-    }
-
-    private void ValidateAuthRequest(RegisterRequest request)
-    {
-        if (string.IsNullOrEmpty(request.Password) || string.IsNullOrEmpty(request.Email))
-        {
-            throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Password or Email is required");
-        }
     }
 
     public async Task<TokenResponse> RefreshTokenAsync(RefreshTokenRequest request)
@@ -224,7 +226,6 @@ public class AuthService : IAuthService
         }
 
         var email = principal.FindFirst(ClaimTypes.Email)?.Value;
-
         if (string.IsNullOrEmpty(email))
         {
             _logger.LogWarning("Refresh token request rejected for user {UserId} because email claim is missing", userId);
@@ -272,5 +273,91 @@ public class AuthService : IAuthService
         var ttl = jwtToken.ValidTo - DateTime.UtcNow;
 
         return ttl > TimeSpan.Zero ? ttl : fallback;
+    }
+
+
+    public async Task ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken cancel = default)
+    {
+        cancel.ThrowIfCancellationRequested();
+
+        var normalizedEmail = NormalizeRequiredEmail(request?.Email);
+        var user = await _dbContext.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail && u.IsActive, cancel);
+
+        if (user == null)
+        {
+            return;
+        }
+
+        var otpLength = _emailOptions.PasswordResetOtpLength <= 0 ? 6 : _emailOptions.PasswordResetOtpLength;
+        var otpLifetime = TimeSpan.FromMinutes(
+            _emailOptions.PasswordResetOtpExpiryMinutes <= 0
+                ? 10
+                : _emailOptions.PasswordResetOtpExpiryMinutes);
+
+        var otp = GenerateNumericOtp(otpLength);
+
+        await _redis.SavePasswordResetOtpAsync(normalizedEmail, otp, otpLifetime);
+        await _emailService.SendPasswordResetOtpAsync(user.Email, otp, otpLifetime, cancel);
+    }
+
+    public async Task ResetPasswordWithOtpAsync(ResetPasswordWithOtpRequest request, CancellationToken cancel = default)
+    {
+        cancel.ThrowIfCancellationRequested();
+
+        var normalizedEmail = NormalizeRequiredEmail(request?.Email);
+
+        if (string.IsNullOrWhiteSpace(request?.Otp))
+        {
+            throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "OTP is required");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.NewPassword))
+        {
+            throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "New password is required");
+        }
+
+        var savedOtp = await _redis.GetPasswordResetOtpAsync(normalizedEmail);
+        if (string.IsNullOrWhiteSpace(savedOtp) || !string.Equals(savedOtp, request.Otp.Trim(), StringComparison.Ordinal))
+        {
+            throw new UnauthorizedException(ErrorCodes.AUTH.PASSWORD_RESET_OTP_INVALID, "Invalid or expired OTP");
+        }
+
+        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail && u.IsActive, cancel);
+        if (user == null)
+        {
+            throw new UnauthorizedException(ErrorCodes.AUTH.PASSWORD_RESET_OTP_INVALID, "Invalid or expired OTP");
+        }
+
+        user.Password = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancel);
+        await _redis.RemovePasswordResetOtpAsync(normalizedEmail);
+    }
+
+    private static string NormalizeRequiredEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Email is required");
+        }
+
+        return email.Trim().ToLowerInvariant();
+    }
+
+    private static string GenerateNumericOtp(int length)
+    {
+        var upperExclusive = (int)Math.Pow(10, length);
+        return RandomNumberGenerator.GetInt32(0, upperExclusive).ToString($"D{length}");
+    }
+
+    private static void ValidateAuthRequest(RegisterRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(request.Email))
+        {
+            throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Password or Email is required");
+        }
     }
 }

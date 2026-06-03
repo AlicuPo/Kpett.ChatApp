@@ -19,6 +19,7 @@
             public const string FORBIDDEN = "AUTH.FORBIDDEN";
             public const string ACCESS_TOKEN_INVALID = "AUTH.ACCESS_TOKEN_INVALID";
             public const string REFRESH_TOKEN_INVALID = "AUTH.REFRESH_TOKEN_INVALID";
+            public const string PASSWORD_RESET_OTP_INVALID = "AUTH.PASSWORD_RESET_OTP_INVALID";
         }
 
         public static class FRIEND

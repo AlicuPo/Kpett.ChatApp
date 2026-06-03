@@ -1,0 +1,1178 @@
+Kpett.ChatApp API Flow
+Cap nhat tu source code hien tai trong workspace.
+
+========================================================================
+1. Quy uoc chung
+========================================================================
+
+Base path
+- API dung ASP.NET Controller routing.
+- Header cho endpoint can dang nhap: Authorization: Bearer <access_token>
+
+JSON casing
+- DTO C# dung PascalCase, nhung JSON tra ra tu ASP.NET se o dang camelCase.
+
+Success wrapper thong dung
+- GeneralResponse
+  {
+    "isSuccess": true,
+    "message": "...",
+    "statusCode": 200
+  }
+
+- GeneralResponse<T>
+  {
+    "isSuccess": true,
+    "message": "...",
+    "statusCode": 200,
+    "data": { ... }
+  }
+
+- PaginatedData<T>
+  {
+    "items": [ ... ],
+    "pagination": {
+      "nextCursor": "base64-or-null",
+      "hasMore": true,
+      "totalCount": 123,
+      "limit": 10
+    }
+  }
+
+Error wrapper logic
+- Phan lon business error di qua GlobalExceptionHandler va co y dinh tra:
+  {
+    "isSuccess": false,
+    "statusCode": 400,
+    "errorCode": "VAL.REQUIRED",
+    "message": "...",
+    "stackTrace": "..." // chi co o Development
+  }
+- JWT middleware co 2 nhanh rieng:
+  - 401 AUTH.ACCESS_TOKEN_INVALID khi token sai/het han
+  - 403 AUTH.FORBIDDEN khi user da xac thuc nhung khong du quyen
+- OptionalAuthorize endpoint:
+  - Neu khong gui token: van vao duoc.
+  - Neu gui Bearer token sai/het han: 401 AUTH.ACCESS_TOKEN_INVALID.
+
+Luu y implementation hien tai
+- Nhieu endpoint tra HTTP 200 nhung body.statusCode = 201.
+- /api/media/delete dang tra body.statusCode = 2000.
+- Mot so endpoint khong dung GeneralResponse ma tra raw object/list.
+- GlobalExceptionHandler hien dang WriteAsJsonAsync(jsonString), nen thuc te body loi business co the bi double-serialize thanh chuoi JSON escaped. Ve mat flow, cac loi duoi day van duoc mo ta theo ErrorResponse mong muon.
+- Co endpoint khong gan [Authorize] nhung van goi User.GetRequiredUserId(), nen thuc te van can user claim de chay duoc.
+
+DTO tom tat hay gap
+- UserResponse: id, username, email, displayName, avatarUrl, isProfileCompleted, isVerified, lastActiveAt?, createdAt?, updatedAt?
+- UserGeneralInfoResponse: UserResponse + coverUrl, dateOfBirth?, biography?, occupation?, location?
+- UserProfileResponse: UserResponse + dateOfBirth?, biography?, occupation?, location?, coverUrl?, stats?, viewerContext?, isOnline
+- TokenResponse: accessToken, refreshToken, tokenType
+- ConversationResponse: id, name, avatarUrl, type, lastMessageAt, lastMessage?, unreadCount
+- MessageDTO: id, content, createdAt, senderId, type, metadata
+- MessagePageResult: messages[], oldestMessageId?, hasMore
+- PostFeedResponse: id, author, title?, content?, hashtags[], media[], metrics, viewerContext, privacy, createdAt, updatedAt?
+- PostThumbnailResponse: PostFeedResponse + mediaThumbnail?
+- PostReactionDTO: id, postId, userId, type, createdAt
+- CommentListItemDTO: id, postId, parentId?, author, content, mentions[], attachments[], metrics, viewerContext, isEdited, isDeleted, createdAt, updatedAt?
+- FriendRequestResponse: requestId, senderId, receiverId, status, createdAt
+- FriendListItemDTO: id, username, displayName, avatarUrl, isVerified, isOnline, friendedAt?
+- CloudinarySignatureResponse: publicId, signature, timestamp, cloudName, apiKey, folder, uploadUrl, notificationUrl, tags
+- MediaUploadResponse: publicId, secureUrl, format, bytes
+
+========================================================================
+2. Auth APIs
+========================================================================
+
+POST /api/auth/login
+Auth
+- Public
+
+Request
+- Body
+  {
+    "email": "user@example.com",
+    "password": "secret",
+    "deviceToken": "optional",
+    "deviceType": "optional"
+  }
+
+Response
+- HTTP 200
+- Body: GeneralResponse<LoginResponse>
+  - data.user: UserResponse
+  - data.token: TokenResponse
+
+Errors
+- 400 VAL.REQUIRED: Email not empty
+- 401 AUTH.UNAUTHORIZED: Wrong email or password
+- 403 USER.INACTIVE: User inactive
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/auth/register
+Auth
+- Public
+
+Request
+- Body
+  {
+    "email": "user@example.com",
+    "password": "secret"
+  }
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+  - isSuccess = true
+  - message = "Register successfully."
+  - statusCode = 201
+
+Errors
+- 400 VAL.REQUIRED: Password or Email is required
+- 409 USER.ALREADY_EXISTS_BY_EMAIL: Email really existing
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/auth/logout
+Auth
+- Required
+
+Request
+- Body
+  {
+    "refreshToken": "refresh-token"
+  }
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID: token sai/het han
+- 401 AUTH.UNAUTHORIZED: Invalid user
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/auth/refresh
+POST /api/auth/refresh-token
+Auth
+- Public
+
+Request
+- Body
+  {
+    "refreshToken": "refresh-token"
+  }
+
+Response
+- HTTP 200
+- Body: GeneralResponse<TokenResponse>
+  - data.accessToken la access token moi
+  - data.refreshToken giu nguyen refresh token cu
+  - data.tokenType hien tai co the de mac dinh, service khong set lai
+
+Errors
+- 400 VAL.REQUIRED: Refresh token is required
+- 401 AUTH.REFRESH_TOKEN_INVALID:
+  - Invalid refresh token
+  - Token in black list
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/auth/revoke
+Auth
+- Required
+
+Request
+- Khong co body
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 400 custom ErrorResponse trong controller:
+  {
+    "isSuccess": false,
+    "message": "Invalid token.",
+    "errorCode": "AUTH.INVALID_TOKEN"
+  }
+- 401 AUTH.ACCESS_TOKEN_INVALID: token sai/het han
+
+========================================================================
+3. User APIs
+========================================================================
+
+GET /api/users/me
+Auth
+- Required
+
+Request
+- Khong co body
+
+Response
+- HTTP 200
+- Body: GeneralResponse<UserGeneralInfoResponse>
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 USER.NOT_FOUND: User not found
+- 500 SERVER.SYSTEM_ERROR
+
+PUT /api/users/me
+Auth
+- Required
+
+Request
+- Body
+  {
+    "username": "new_username",
+    "displayName": "New Name",
+    "occupation": "optional",
+    "dateOfBirth": "2020-01-01T00:00:00Z",
+    "biography": "optional",
+    "location": "optional"
+  }
+
+Response
+- HTTP 200
+- Body: GeneralResponse<UserGeneralInfoResponse>
+
+Errors
+- 400 VAL.REQUIRED: Username is required
+- 400 VAL.REQUIRED: DisplayName is required
+- 400 USER.USERNAME_TAKEN: Username is already taken
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 USER.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+PUT /api/users/me/media?mediaType=Avatar|Cover
+Auth
+- Required
+
+Request
+- Query
+  - mediaType: thuong dung "Avatar" hoac "Cover"
+- Body
+  {
+    "publicId": "cloudinary-public-id",
+    "url": "https://...",
+    "format": "jpg",
+    "type": "image/jpeg"
+  }
+
+Response
+- HTTP 200
+- Body: GeneralResponse<UserMediaResponse>
+
+Errors
+- 400 VAL.REQUIRED: Media is not null
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 500 SERVER.SYSTEM_ERROR
+
+DELETE /api/users/me/media/primary?mediaType=Avatar|Cover
+Auth
+- Required
+
+Request
+- Query
+  - mediaType
+
+Response
+- HTTP 200
+- Body: GeneralResponse<UserMediaResponse>
+  - Thuc te controller khong set data, nen data kha nang cao la null.
+  - isSuccess = true/false theo bool service tra ve
+
+Errors
+- 400 MEDIA.NOT_FOUND: Media not found or does not belong to the user
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 USER.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+DELETE /api/users/DeleteUser/{id}
+Auth
+- Thuc te can user claim vi controller goi User.GetRequiredUserId(), du route khong gan [Authorize]
+
+Request
+- Path
+  - id: user id can xoa
+
+Response
+- HTTP 200
+- Body: GeneralResponse<bool>
+  - data = true khi soft delete thanh cong
+
+Errors
+- 401 AUTH.UNAUTHORIZED neu khong co claim user
+- 403 AUTH.FORBIDDEN: You can only delete your own profile.
+- 404 USER.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/users/check-username?username=abc
+Auth
+- Public
+
+Request
+- Query
+  - username
+
+Response
+- HTTP 200
+- Body: GeneralResponse<UsernameCheckResponse>
+  - data.isAvailable = true/false
+
+Errors
+- 400 VAL.REQUIRED: Username cannot be null or empty
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/users/account-setup
+Auth
+- Required
+
+Request
+- Body
+  {
+    "username": "username",
+    "displayName": "Display Name",
+    "biography": "optional",
+    "interests": ["music", "travel"]
+  }
+
+Response
+- HTTP 200
+- Body: GeneralResponse<UserResponse>
+
+Errors
+- 400 VAL.REQUIRED: Username and DisplayName are required
+- 400 USER.USERNAME_TAKEN: Username is already taken
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 USER.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/users/me/stats
+Auth
+- Required
+
+Request
+- Khong co body
+
+Response
+- HTTP 200
+- Body: GeneralResponse<UserWithStatResponse>
+  - data.stats: { totalPosts, followers, following, friends }
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 USER.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/users/profile/{username}
+Auth
+- Optional
+
+Request
+- Path
+  - username
+
+Response
+- HTTP 200
+- Body: GeneralResponse<UserProfileResponse>
+  - Neu guest:
+    - viewerContext.isOwner = false
+    - viewerContext.isFriend = false
+    - viewerContext.isFollowing = false
+    - viewerContext.canMessage = false
+  - Neu co token hop le:
+    - tra them thong tin quan he voi current user
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID neu gui token sai/het han
+- 404 USER.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+========================================================================
+4. Relationship APIs
+========================================================================
+
+POST /api/relationships/friend-requests
+Auth
+- Required
+
+Request
+- Body
+  {
+    "receiverId": "target-user-id"
+  }
+
+Response
+- HTTP 200
+- Body: GeneralResponse<FriendRequestResponse>
+  - statusCode = 201
+  - data.status thuong la "Pending"
+
+Errors
+- 400 FRIEND.SELF_REFERENCE: Cannot send friend requests to myself
+- 400 FRIEND.ALREADY_FRIENDS
+- 400 FRIEND.REQUEST_ALREADY_SENT
+- 400 FRIEND.FRIEND_REQUEST_PENDING
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 USER.NOT_FOUND: Sender or Receiver not found
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/relationships/friend-requests/{requestId}/accept
+Auth
+- Required
+
+Request
+- Path
+  - requestId
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 USER.NOT_FOUND: Current user not found
+- 404 FRIEND.FRIEND_REQUEST_NOT_FOUND: Friend request not found or not pending.
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/relationships/friend-requests/{requestId}/decline
+Auth
+- Required
+
+Request
+- Path
+  - requestId
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 FRIEND.FRIEND_REQUEST_NOT_FOUND: Friend request not found.
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/relationships/friend-requests/{requestId}/cancel
+Auth
+- Required
+
+Request
+- Path
+  - requestId
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 FRIEND.FRIEND_REQUEST_NOT_FOUND: Friend request not found.
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/relationships/friends
+Auth
+- Required
+
+Request
+- Query
+  - search?
+  - cursor?
+  - limit = 20
+
+Response
+- HTTP 200
+- Body: GeneralResponse<PaginatedData<FriendListItemDTO>>
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 500 SERVER.SYSTEM_ERROR
+
+DELETE /api/relationships/{targetUserId}
+Auth
+- Required
+
+Request
+- Path
+  - targetUserId
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 FRIEND.FRIENDSHIP_NOT_FOUND: Friendship not found or not active.
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/relationships/follows/{followeeId}
+Auth
+- Required
+
+Request
+- Path
+  - followeeId
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 400 FOLLOW.SELF_REFERENCE: Unable to monitor myself
+- 400 FOLLOW.ALREADY_FOLLOWING
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 500 SERVER.SYSTEM_ERROR
+
+DELETE /api/relationships/follows/{followeeId}
+Auth
+- Required
+
+Request
+- Path
+  - followeeId
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 FOLLOW.FOLLOW_NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+========================================================================
+5. Post APIs
+========================================================================
+
+POST /api/posts
+Auth
+- Required
+
+Request
+- Body
+  {
+    "content": "post content",
+    "privacy": "Public|Friends|Private",
+    "groupId": "optional",
+    "media": [
+      {
+        "publicId": "cloudinary-public-id",
+        "url": "https://...",
+        "format": "jpg",
+        "type": "Image|Video|GIF"
+      }
+    ]
+  }
+
+Response
+- HTTP 200
+- Body: GeneralResponse<PostFeedResponse>
+  - statusCode = 201
+
+Errors
+- 400 VAL.REQUIRED: User ID cannot be empty
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 USER.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+PUT /api/posts/{postId}
+Auth
+- Required
+
+Request
+- Path
+  - postId
+- Body: giong POST /api/posts
+
+Response
+- HTTP 200
+- Body: GeneralResponse<PostFeedResponse>
+
+Errors
+- 400 VAL.REQUIRED: User ID cannot be empty
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 403 POST.USER_NOT_AUTHORIZED: Not authorized to update this post
+- 404 POST.NOT_FOUND
+- 404 USER.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/posts
+Auth
+- Optional
+
+Request
+- Query
+  - cursor?
+  - limit = 10
+
+Response
+- HTTP 200
+- Body: GeneralResponse<PaginatedData<PostFeedResponse>>
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID neu gui token sai/het han
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/posts/users/{userId}
+Auth
+- Optional
+
+Request
+- Path
+  - userId
+- Query
+  - search?
+  - status?
+  - type = Post
+  - page = 1
+  - pageSize = 40
+  - sortBy = CreateAt
+  - sortOrder = desc
+  - cursor?
+  - limit = 10
+- Thuc te service chu yeu dung type, cursor, limit.
+
+Response
+- HTTP 200
+- Body: GeneralResponse<PaginatedData<PostThumbnailResponse>>
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID neu gui token sai/het han
+- 400 VAL.REQUIRED: User ID cannot be empty
+- 404 USER.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/posts/{postId}
+Auth
+- Required
+
+Request
+- Path
+  - postId
+
+Response
+- HTTP 200
+- Body: GeneralResponse<PostFeedResponse>
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 POST.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+DELETE /api/posts/{postId}
+Auth
+- Required
+
+Request
+- Path
+  - postId
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 403 POST.USER_NOT_AUTHORIZED: Not authorized to delete this post
+- 404 POST.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+PUT /api/posts/{postId}/reactions/me
+Auth
+- Required
+
+Request
+- Path
+  - postId
+- Body
+  {
+    "reactionType": 1
+  }
+- Mapping reactionType theo enum:
+  - 0 = Like
+  - 1 = Love
+  - 2 = Haha
+  - 3 = Wow
+  - 4 = Sad
+  - 5 = Angry
+- Luu y implementation hien tai xem 0 la invalid, vi service check reactionType == 0 => loi.
+
+Response
+- HTTP 200
+- Body: raw PostReactionDTO
+
+Errors
+- 400 VAL.REQUIRED: Reaction type is required
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 POST.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+DELETE /api/posts/{postId}/reactions/me
+Auth
+- Required
+
+Request
+- Path
+  - postId
+
+Response
+- HTTP 204
+- Body rong
+- Neu khong tim thay reaction cua user thi van 204, khong coi la loi.
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 POST.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/posts/{postId}/reactions
+Auth
+- Public
+
+Request
+- Path
+  - postId
+
+Response
+- HTTP 200
+- Body: raw List<PostReactionDTO>
+
+Errors
+- 404 POST.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+========================================================================
+6. Comment APIs
+========================================================================
+
+POST /api/comments/posts/{postId}
+Auth
+- Required
+
+Request
+- Path
+  - postId
+- Body
+  {
+    "content": "comment content",
+    "parentCommentId": "optional"
+  }
+- Mention format ma service doc: <@userId>
+
+Response
+- HTTP 201
+- Body: GeneralResponse<CommentListItemDTO>
+
+Errors
+- 400 VAL.REQUIRED: Comment content cannot be empty
+- 400 VAL.REQUIRED: Mentioned users not found: ...
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 USER.NOT_FOUND
+- 404 POST.NOT_FOUND
+- 404 COMMENT.PARENT_COMMENT_NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/comments/posts/{postId}
+Auth
+- Thuc te can user claim vi controller goi User.GetRequiredUserId(), du endpoint khong gan [Authorize]
+
+Request
+- Path
+  - postId
+- Query
+  - parentCommentId
+  - cursor?
+  - limit = 10
+
+Response
+- HTTP 200
+- Body: GeneralResponse<PaginatedData<CommentListItemDTO>>
+
+Errors
+- 401 AUTH.UNAUTHORIZED neu khong co user claim
+- 404 POST.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+PUT /api/comments/posts/{commentId}
+Auth
+- Required
+
+Request
+- Path
+  - commentId
+- Body
+  {
+    "content": "updated comment"
+  }
+
+Response
+- HTTP 200
+- Body: GeneralResponse<CommentListItemDTO>
+
+Errors
+- 400 VAL.REQUIRED: Comment content cannot be empty
+- 400 VAL.REQUIRED: Mentioned users not found: ...
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 403 COMMENT.USER_NOT_AUTHORIZED
+- 404 COMMENT.NOT_FOUND
+- 404 USER.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+DELETE /api/comments/posts/{commentId}
+Auth
+- Required
+
+Request
+- Path
+  - commentId
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 403 COMMENT.USER_NOT_AUTHORIZED
+- 404 COMMENT.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+========================================================================
+7. Conversation APIs
+========================================================================
+
+POST /api/conversations
+Auth
+- Required
+
+Request
+- Body
+  {
+    "type": "optional",
+    "name": "optional",
+    "avatarUrl": "optional",
+    "unreadCount": 0,
+    "lastReadAt": "optional",
+    "updatedAt": "optional",
+    "userLow": "user-id-1",
+    "userHigh": "user-id-2"
+  }
+- Thuc te service chi can userLow, userHigh; cac field con lai mang tinh metadata tao conversation.
+
+Response
+- HTTP 201
+- Body: raw ConversationResponse
+
+Errors
+- 400 VAL.REQUIRED:
+  - Conversation request is required.
+  - Conversation participants are required.
+  - Conversation participants must be different users.
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 403 AUTH.FORBIDDEN: You can only create conversations that include the current user.
+- 404 USER.NOT_FOUND: One or more conversation participants were not found.
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/conversations
+Auth
+- Required
+
+Request
+- Query
+  - search?
+  - status?
+  - type = Post
+  - page = 1
+  - pageSize = 40
+  - sortBy = CreateAt
+  - sortOrder = desc
+- Thuc te service chu yeu dung page va pageSize.
+
+Response
+- HTTP 200
+- Body: raw List<ConversationResponse>
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 500 SERVER.SYSTEM_ERROR
+
+========================================================================
+8. Message APIs
+========================================================================
+
+GET /api/conversations/{conversationId}/messages
+Auth
+- Required
+
+Request
+- Path
+  - conversationId
+- Query
+  - cursorMessageId?
+  - pageSize = 40
+
+Response
+- HTTP 200
+- Body: raw MessagePageResult
+  {
+    "messages": [ MessageDTO ],
+    "oldestMessageId": 123,
+    "hasMore": true
+  }
+
+Errors
+- 400 VAL.REQUIRED: Conversation ID cannot be null or empty.
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 403 CONVERSATION.USER_NOT_IN_CONVERSATION
+- 404 CONVERSATION.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/conversations/{conversationId}/messages
+Auth
+- Required
+
+Request
+- Path
+  - conversationId
+- Body
+  {
+    "content": "hello",
+    "clientMessageId": "optional-idempotency-id",
+    "type": "text",
+    "metadata": "optional-json-string",
+    "color": "optional"
+  }
+
+Response
+- HTTP 201
+- Body: raw MessageDTO
+
+Errors
+- 400 VAL.REQUIRED: Message content cannot be empty.
+- 400 VAL.REQUIRED: Conversation ID cannot be null or empty.
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 403 CONVERSATION.USER_NOT_IN_CONVERSATION
+- 404 CONVERSATION.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+PUT /api/conversations/{conversationId}/participants/me/read-state
+Auth
+- Required
+
+Request
+- Path
+  - conversationId
+- Body
+  {
+    "lastReadMessageId": 123,
+    "readAt": "optional-utc-datetime"
+  }
+
+Response
+- HTTP 204
+- Body rong
+
+Errors
+- 400 VAL.REQUIRED: Read message request is required.
+- 400 VAL.REQUIRED: Conversation ID cannot be null or empty.
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 403 CONVERSATION.USER_NOT_IN_CONVERSATION
+- 404 CONVERSATION.NOT_FOUND
+- 409 CONVERSATION.INVALID_MESSAGE: Invalid Message ID for this conversation.
+- 500 SERVER.SYSTEM_ERROR
+
+========================================================================
+9. Media APIs
+========================================================================
+
+GET /api/media/generate-signature?folder=posts
+Auth
+- Required
+
+Request
+- Query
+  - folder = posts
+
+Response
+- HTTP 200
+- Body: GeneralResponse<CloudinarySignatureResponse>
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/media/upload-image?folder=images
+Auth
+- Required
+
+Request
+- Content-Type: multipart/form-data
+- Form-data
+  - file: binary file
+- Query
+  - folder = images
+
+Response
+- HTTP 200
+- Body: GeneralResponse<MediaUploadResponse>
+
+Errors
+- 400 MEDIA.FILE_EMPTY
+- 400 MEDIA.FILE_SIZE_EXCEEDS_LIMIT
+- 400 MEDIA.INVALID_FILE_EXTENSION
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/media/upload-video?folder=videos
+Auth
+- Required
+
+Request
+- Content-Type: multipart/form-data
+- Form-data
+  - file: binary file
+- Query
+  - folder = videos
+
+Response
+- HTTP 200
+- Body: GeneralResponse<MediaUploadResponse>
+
+Errors
+- 400 MEDIA.FILE_EMPTY
+- 400 MEDIA.FILE_SIZE_EXCEEDS_LIMIT
+- 400 MEDIA.INVALID_FILE_EXTENSION
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 500 SERVER.SYSTEM_ERROR
+
+DELETE /api/media/delete?publicId=...&resourceType=image
+Auth
+- Required
+
+Request
+- Query
+  - publicId
+  - resourceType = image|video|audio|raw|auto
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+  - statusCode = 2000 theo code hien tai
+
+Errors
+- 400 VAL.REQUIRED: Thieu publicId hoac resourceType
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 500 SERVER.SYSTEM_ERROR
+
+========================================================================
+10. Mock data APIs
+========================================================================
+
+POST /api/mockdata/map-mock-data
+Auth
+- Public
+
+Request
+- Khong co body
+
+Response
+- HTTP 200
+- Body raw string
+  - "Đã map thành công X posts."
+
+Errors
+- 400 raw string: "Không có user nào trong DB."
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/mockdata/generate-comments
+Auth
+- Public
+
+Request
+- Query
+  - numberOfPosts = 100
+  - minCommentsPerPost = 2
+  - maxCommentsPerPost = 5
+  - minRepliesPerComment = 0
+  - maxRepliesPerComment = 2
+  - minMentionsPerComment = 0
+  - maxMentionsPerComment = 2
+  - minLikesPerComment = 0
+  - maxLikesPerComment = 4
+
+Response
+- HTTP 200
+- Body raw anonymous object
+  {
+    "message": "...",
+    "postsProcessed": 100,
+    "rootComments": 10,
+    "replies": 5,
+    "totalComments": 15,
+    "mentions": 3,
+    "commentLikes": 8
+  }
+
+Errors
+- 400 raw string:
+  - "numberOfPosts phải lớn hơn 0."
+  - "Các tham số min/max không hợp lệ."
+  - "Cần ít nhất 2 user để generate comment mock data."
+  - "Không tìm thấy post nào trong Database. Vui lòng tạo post trước."
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/mockdata/generate-real-post-media?numberOfPosts=30000
+Auth
+- Public
+
+Request
+- Query
+  - numberOfPosts = 30000
+
+Response
+- HTTP 200
+- Body raw anonymous object
+  {
+    "message": "...",
+    "totalImages": 123,
+    "totalVideos": 45
+  }
+
+Errors
+- 400 raw string: "Không tìm thấy bài post nào trong Database. Vui lòng tạo Post trước."
+- 500 raw string: "Lỗi ghi dữ liệu: ..."
+
+========================================================================
+11. Tong ket khac biet quan trong
+========================================================================
+
+Endpoint dung GeneralResponse
+- Auth: login, register, logout, refresh, revoke(success)
+- Users: tat ca endpoint trong controller
+- Relationships: tat ca endpoint trong controller
+- Posts: create, update, get feed, get user posts, get by id, delete
+- Comments: tat ca endpoint trong controller
+- Media: tat ca endpoint trong controller
+
+Endpoint tra raw object/list
+- POST /api/conversations
+- GET /api/conversations
+- GET /api/conversations/{conversationId}/messages
+- POST /api/conversations/{conversationId}/messages
+- PUT /api/posts/{postId}/reactions/me
+- GET /api/posts/{postId}/reactions
+- Tat ca endpoint /api/mockdata/*
+
+Endpoint tra 204 No Content
+- DELETE /api/posts/{postId}/reactions/me
+- PUT /api/conversations/{conversationId}/participants/me/read-state
+
+Endpoint "dang co dau hieu can xem lai"
+- GET /api/comments/posts/{postId}: khong gan [Authorize] nhung van bat buoc user claim
+- DELETE /api/users/DeleteUser/{id}: khong gan [Authorize] nhung van bat buoc user claim
+- GlobalExceptionHandler co kha nang tra body loi dang chuoi JSON escaped
+- POST /api/auth/register, POST /api/relationships/friend-requests, POST /api/posts: HTTP 200 nhung body.statusCode = 201
+- DELETE /api/media/delete: body.statusCode = 2000

@@ -16,6 +16,7 @@ namespace Kpett.ChatApp.Services.Impls
         private static string RefreshKey(string userId) => $"refresh_token:{userId}";
         private static string AccessBlacklistKey(string jti) => $"blacklist:access:{jti}";
         private static string RefreshBlacklistKey(string token) => $"blacklist:refresh:{token}";
+        private static string PasswordResetOtpKey(string email) => $"password-reset-otp:{email.Trim().ToLowerInvariant()}";
         private static string UserConnectionsKey(string userId) => $"user:{userId}:connections";
         private static string ConversationUsersKey(string conversationId) => $"conversation:{conversationId}:users";
         private static string ConnectionConversationsKey(string connectionId) => $"connection:{connectionId}:conversations";
@@ -79,6 +80,22 @@ namespace Kpett.ChatApp.Services.Impls
             var value = await _redis.StringGetAsync(RefreshBlacklistKey(refreshToken));
             _logger.LogDebug("Checked refresh token blacklist. IsBlacklisted: {IsBlacklisted}", value.HasValue);
             return value.HasValue;
+        }
+
+        public async Task SavePasswordResetOtpAsync(string email, string otp, TimeSpan ttl)
+        {
+            await _redis.StringSetAsync(PasswordResetOtpKey(email), otp, ttl);
+        }
+
+        public async Task<string?> GetPasswordResetOtpAsync(string email)
+        {
+            var value = await _redis.StringGetAsync(PasswordResetOtpKey(email));
+            return value.HasValue ? value.ToString() : null;
+        }
+
+        public async Task RemovePasswordResetOtpAsync(string email)
+        {
+            await _redis.KeyDeleteAsync(PasswordResetOtpKey(email));
         }
 
         // Connection / presence helpers
