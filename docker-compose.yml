@@ -57,32 +57,10 @@ services:
     networks:
       - kpett
 
-  db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: kppett-chatapp-db
-    restart: unless-stopped
-    environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_PID: "${MSSQL_PID:-Express}"
-      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
-      MSSQL_DATABASE: "${MSSQL_DATABASE}"
-    ports:
-      - "${MSSQL_HOST_PORT:-1433}:1433"
-    volumes:
-      - mssql_data:/var/opt/mssql
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P kpett@123 -C -Q 'SELECT 1' || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    networks:
-      - kpett
-   
 volumes:
   api_logs:
-  mssql_data:
 
 networks:
   kpett:
-    driver: bridge
+    external: true
+    name: kpett-net
