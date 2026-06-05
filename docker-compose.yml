@@ -10,40 +10,40 @@ services:
     ports:
       - "${API_HTTP_PORT:-8080}:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
-      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Production}"
+      ASPNETCORE_URLS: "http://+:8080"
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
 
-      ConnectionStrings__KpettChatAppDb: ${KPETT_SQL_CONNECTION_STRING:?Set KPETT_SQL_CONNECTION_STRING in Portainer stack variables}
-      ConnectionStrings__Redis: ${KPETT_REDIS_CONNECTION_STRING:?Set KPETT_REDIS_CONNECTION_STRING in Portainer stack variables}
+      ConnectionStrings__KpettChatAppDb: "${ConnectionStrings__KpettChatAppDb:?Set ConnectionStrings__KpettChatAppDb in Portainer stack variables}"
+      ConnectionStrings__Redis: "${ConnectionStrings__Redis:?Set ConnectionStrings__Redis in Portainer stack variables}"
 
-      JwtSection__KeyAccess: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in Portainer stack variables}
-      JwtSection__KeyRefres: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in Portainer stack variables}
-      JwtSection__Issuer: ${JWT_ISSUER:-kpett.chatApp}
-      JwtSection__Audience: ${JWT_AUDIENCE:-kpett.chatApp}
-      JwtSection__AccessTokenExpireMinutes: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-5}
-      JwtSection__RefreshTokenExpireDays: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-365}
+      JwtSection__KeyAccess: "${JwtSection__KeyAccess:?Set JwtSection__KeyAccess in Portainer stack variables}"
+      JwtSection__KeyRefres: "${JwtSection__KeyRefres:?Set JwtSection__KeyRefres in Portainer stack variables}"
+      JwtSection__Issuer: "${JwtSection__Issuer:-kpett.chatApp}"
+      JwtSection__Audience: "${JwtSection__Audience:-kpett.chatApp}"
+      JwtSection__AccessTokenExpireMinutes: "${JwtSection__AccessTokenExpireMinutes:-5}"
+      JwtSection__RefreshTokenExpireDays: "${JwtSection__RefreshTokenExpireDays:-365}"
 
-      Cors__AllowedOrigins__0: ${CORS_ALLOWED_ORIGIN_0:?Set CORS_ALLOWED_ORIGIN_0 in Portainer stack variables}
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?Set Cors__AllowedOrigins__0 in Portainer stack variables}"
       AllowedHosts: "*"
 
-      CloudinarySettings__CloudName: ${CLOUDINARY_CLOUD_NAME:?Set CLOUDINARY_CLOUD_NAME in Portainer stack variables}
-      CloudinarySettings__ApiKey: ${CLOUDINARY_API_KEY:?Set CLOUDINARY_API_KEY in Portainer stack variables}
-      CloudinarySettings__ApiSecret: ${CLOUDINARY_API_SECRET:?Set CLOUDINARY_API_SECRET in Portainer stack variables}
-      CloudinarySettings__NotificationUrl: ${CLOUDINARY_NOTIFICATION_URL:-}
+      CloudinarySettings__CloudName: "${CloudinarySettings__CloudName:?Set CloudinarySettings__CloudName in Portainer stack variables}"
+      CloudinarySettings__ApiKey: "${CloudinarySettings__ApiKey:?Set CloudinarySettings__ApiKey in Portainer stack variables}"
+      CloudinarySettings__ApiSecret: "${CloudinarySettings__ApiSecret:?Set CloudinarySettings__ApiSecret in Portainer stack variables}"
+      CloudinarySettings__NotificationUrl: "${CloudinarySettings__NotificationUrl:-}"
 
-      EmailSettings__SmtpHost: ${SMTP_HOST:-smtp.gmail.com}
-      EmailSettings__SmtpPort: ${SMTP_PORT:-587}
-      EmailSettings__EnableSsl: ${SMTP_ENABLE_SSL:-true}
-      EmailSettings__SmtpUsername: ${SMTP_USERNAME:?Set SMTP_USERNAME in Portainer stack variables}
-      EmailSettings__SmtpPassword: ${SMTP_PASSWORD:?Set SMTP_PASSWORD in Portainer stack variables}
-      EmailSettings__FromEmail: ${SMTP_FROM_EMAIL:?Set SMTP_FROM_EMAIL in Portainer stack variables}
-      EmailSettings__FromName: ${SMTP_FROM_NAME:-Kpett.ChatApp}
-      EmailSettings__PasswordResetOtpExpiryMinutes: ${PASSWORD_RESET_OTP_EXPIRY_MINUTES:-10}
-      EmailSettings__PasswordResetOtpLength: ${PASSWORD_RESET_OTP_LENGTH:-6}
+      EmailSettings__SmtpHost: "${EmailSettings__SmtpHost:-smtp.gmail.com}"
+      EmailSettings__SmtpPort: "${EmailSettings__SmtpPort:-587}"
+      EmailSettings__EnableSsl: "${EmailSettings__EnableSsl:-true}"
+      EmailSettings__SmtpUsername: "${EmailSettings__SmtpUsername:?Set EmailSettings__SmtpUsername in Portainer stack variables}"
+      EmailSettings__SmtpPassword: "${EmailSettings__SmtpPassword:?Set EmailSettings__SmtpPassword in Portainer stack variables}"
+      EmailSettings__FromEmail: "${EmailSettings__FromEmail:?Set EmailSettings__FromEmail in Portainer stack variables}"
+      EmailSettings__FromName: "${EmailSettings__FromName:-Kpett.ChatApp}"
+      EmailSettings__PasswordResetOtpExpiryMinutes: "${EmailSettings__PasswordResetOtpExpiryMinutes:-10}"
+      EmailSettings__PasswordResetOtpLength: "${EmailSettings__PasswordResetOtpLength:-6}"
 
-      MediaSettings__MaxImageSizeBytes: ${MEDIA_MAX_IMAGE_SIZE_BYTES:-5242880}
-      MediaSettings__MaxVideoSizeBytes: ${MEDIA_MAX_VIDEO_SIZE_BYTES:-52428800}
+      MediaSettings__MaxImageSizeBytes: "${MediaSettings__MaxImageSizeBytes:-5242880}"
+      MediaSettings__MaxVideoSizeBytes: "${MediaSettings__MaxVideoSizeBytes:-52428800}"
       MediaSettings__AllowedImageExtensions__0: .jpg
       MediaSettings__AllowedImageExtensions__1: .jpeg
       MediaSettings__AllowedImageExtensions__2: .png
