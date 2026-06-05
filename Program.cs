@@ -48,9 +48,12 @@ builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSignalR();
 
+var sqlConnectionString = builder.Configuration.GetConnectionString("KpettChatAppDb")
+    ?? throw new InvalidOperationException("ConnectionStrings:KpettChatAppDb is not configured.");
+
 //Configure DbContext with SQL Server
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("KpettChatAppDb")));
+    options.UseSqlServer(sqlConnectionString));
 
 var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
 if (string.IsNullOrEmpty(redisConnectionString))
@@ -75,7 +78,7 @@ builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
-    .UseSqlServerStorage(builder.Configuration.GetConnectionString("KpettChatAppDb")));
+    .UseSqlServerStorage(sqlConnectionString));
 
 // Add the Hangfire server to process background jobs
 builder.Services.AddHangfireServer();
