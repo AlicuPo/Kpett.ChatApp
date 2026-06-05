@@ -1,0 +1,65 @@
+services:
+  api:
+    image: kpett-chatapp-api:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_CONFIGURATION: ${BUILD_CONFIGURATION:-Release}
+    restart: unless-stopped
+    ports:
+      - "${API_HTTP_PORT:-8080}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+
+      ConnectionStrings__KpettChatAppDb: ${KPETT_SQL_CONNECTION_STRING:?Set KPETT_SQL_CONNECTION_STRING in Portainer stack variables}
+      ConnectionStrings__Redis: ${KPETT_REDIS_CONNECTION_STRING:?Set KPETT_REDIS_CONNECTION_STRING in Portainer stack variables}
+
+      JwtSection__KeyAccess: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in Portainer stack variables}
+      JwtSection__KeyRefres: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in Portainer stack variables}
+      JwtSection__Issuer: ${JWT_ISSUER:-kpett.chatApp}
+      JwtSection__Audience: ${JWT_AUDIENCE:-kpett.chatApp}
+      JwtSection__AccessTokenExpireMinutes: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-5}
+      JwtSection__RefreshTokenExpireDays: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-365}
+
+      Cors__AllowedOrigins__0: ${CORS_ALLOWED_ORIGIN_0:?Set CORS_ALLOWED_ORIGIN_0 in Portainer stack variables}
+      AllowedHosts: "*"
+
+      CloudinarySettings__CloudName: ${CLOUDINARY_CLOUD_NAME:?Set CLOUDINARY_CLOUD_NAME in Portainer stack variables}
+      CloudinarySettings__ApiKey: ${CLOUDINARY_API_KEY:?Set CLOUDINARY_API_KEY in Portainer stack variables}
+      CloudinarySettings__ApiSecret: ${CLOUDINARY_API_SECRET:?Set CLOUDINARY_API_SECRET in Portainer stack variables}
+      CloudinarySettings__NotificationUrl: ${CLOUDINARY_NOTIFICATION_URL:-}
+
+      EmailSettings__SmtpHost: ${SMTP_HOST:-smtp.gmail.com}
+      EmailSettings__SmtpPort: ${SMTP_PORT:-587}
+      EmailSettings__EnableSsl: ${SMTP_ENABLE_SSL:-true}
+      EmailSettings__SmtpUsername: ${SMTP_USERNAME:?Set SMTP_USERNAME in Portainer stack variables}
+      EmailSettings__SmtpPassword: ${SMTP_PASSWORD:?Set SMTP_PASSWORD in Portainer stack variables}
+      EmailSettings__FromEmail: ${SMTP_FROM_EMAIL:?Set SMTP_FROM_EMAIL in Portainer stack variables}
+      EmailSettings__FromName: ${SMTP_FROM_NAME:-Kpett.ChatApp}
+      EmailSettings__PasswordResetOtpExpiryMinutes: ${PASSWORD_RESET_OTP_EXPIRY_MINUTES:-10}
+      EmailSettings__PasswordResetOtpLength: ${PASSWORD_RESET_OTP_LENGTH:-6}
+
+      MediaSettings__MaxImageSizeBytes: ${MEDIA_MAX_IMAGE_SIZE_BYTES:-5242880}
+      MediaSettings__MaxVideoSizeBytes: ${MEDIA_MAX_VIDEO_SIZE_BYTES:-52428800}
+      MediaSettings__AllowedImageExtensions__0: .jpg
+      MediaSettings__AllowedImageExtensions__1: .jpeg
+      MediaSettings__AllowedImageExtensions__2: .png
+      MediaSettings__AllowedImageExtensions__3: .webp
+      MediaSettings__AllowedImageExtensions__4: .gif
+      MediaSettings__AllowedVideoExtensions__0: .mp4
+      MediaSettings__AllowedVideoExtensions__1: .mov
+      MediaSettings__AllowedVideoExtensions__2: .avi
+    volumes:
+      - api_logs:/app/Logs
+    networks:
+      - kpett
+
+volumes:
+  api_logs:
+
+networks:
+  kpett:
+    driver: bridge
