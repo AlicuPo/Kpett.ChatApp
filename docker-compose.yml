@@ -65,7 +65,6 @@ services:
       ACCEPT_EULA: "Y"
       MSSQL_PID: "${MSSQL_PID:-Express}"
       MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
-      MSSQL_DATABASE: "${MSSQL_DATABASE}"
     ports:
       - "${MSSQL_HOST_PORT:-1433}:1433"
     volumes:
