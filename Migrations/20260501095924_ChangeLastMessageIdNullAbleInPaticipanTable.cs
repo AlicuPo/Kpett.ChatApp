@@ -10,9 +10,18 @@ namespace Kpett.ChatApp.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "MessageDetail",
-                schema: "KpettChatApp");
+            migrationBuilder.Sql(
+                """
+                IF OBJECT_ID(N'[KpettChatApp].[MessageDetail]', N'U') IS NOT NULL
+                BEGIN
+                    DROP TABLE [KpettChatApp].[MessageDetail];
+                END;
+
+                IF OBJECT_ID(N'[KpettChatApp].[MessageDetails]', N'U') IS NOT NULL
+                BEGIN
+                    DROP TABLE [KpettChatApp].[MessageDetails];
+                END;
+                """);
 
             migrationBuilder.AlterColumn<string>(
                 name: "LastReadMessageId",

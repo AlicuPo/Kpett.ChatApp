@@ -1,0 +1,151 @@
+﻿# Notification Sound Contract for Frontend
+
+Cap nhat backend hien tai them `sound` vao notification payload. FE can xu ly o 2 luong: REST list va SignalR realtime.
+
+========================================================================
+1. REST: GET /api/notifications
+========================================================================
+
+Endpoint:
+GET /api/notifications?cursor=&limit=10
+
+Moi item trong `data.items[]` co them field:
+
+```json
+{
+  "id": "notification-id",
+  "type": "FriendRequestReceived",
+  "referenceId": "optional-reference-id",
+  "metadata": null,
+  "isRead": false,
+  "createdAt": "2026-06-08T00:00:00Z",
+  "actor": {
+    "id": "user-id",
+    "displayName": "Actor name",
+    "username": "actor_username",
+    "avatarUrl": "https://..."
+  },
+  "sound": {
+    "enabled": true,
+    "key": "friend_request",
+    "volume": 0.8
+  }
+}
+```
+
+FE dung `sound` trong REST response chu yeu de dong bo state/list. Khong nen auto-play tat ca notification khi load list, vi se gay am thanh hang loat.
+
+========================================================================
+2. SignalR: ReceiveNotification
+========================================================================
+
+Hub:
+/hubs/app
+
+Event FE can listen:
+ReceiveNotification
+
+Payload realtime co cung structure voi notification item va co them `sound`:
+
+```ts
+connection.on("ReceiveNotification", (notification) => {
+  addNotification(notification);
+
+  if (notification.sound?.enabled) {
+    playSound(notification.sound.key, notification.sound.volume);
+  }
+});
+```
+
+Day la luong nen dung de phat am thanh ngay khi co notification moi.
+
+========================================================================
+3. Sound keys hien tai
+========================================================================
+
+Backend hien tra cac key sau:
+
+- `friend_request`: co loi moi ket ban.
+- `friend_accept`: loi moi ket ban duoc chap nhan.
+- `comment_mention`: bi mention trong comment.
+- `notification_default`: fallback neu type khong match.
+
+FE nen map key sang file audio local, vi backend khong tra URL file am thanh.
+
+Vi du:
+
+```ts
+const SOUND_ASSETS: Record<string, string> = {
+  friend_request: "/sounds/friend-request.mp3",
+  friend_accept: "/sounds/friend-accept.mp3",
+  comment_mention: "/sounds/comment-mention.mp3",
+  notification_default: "/sounds/notification-default.mp3",
+};
+```
+
+========================================================================
+4. TypeScript interfaces goi y
+========================================================================
+
+```ts
+export interface NotificationSound {
+  enabled: boolean;
+  key: "friend_request" | "friend_accept" | "comment_mention" | "notification_default" | string;
+  volume: number;
+}
+
+export interface NotificationActor {
+  id: string;
+  displayName?: string | null;
+  username?: string | null;
+  avatarUrl?: string | null;
+}
+
+export interface AppNotification {
+  id: string;
+  type: string;
+  referenceId?: string | null;
+  metadata?: unknown;
+  isRead: boolean;
+  createdAt: string;
+  actor?: NotificationActor | null;
+  sound: NotificationSound;
+}
+```
+
+========================================================================
+5. playSound helper goi y
+========================================================================
+
+```ts
+const audioCache = new Map<string, HTMLAudioElement>();
+
+function playSound(soundKey: string, volume = 0.8) {
+  const src = SOUND_ASSETS[soundKey] ?? SOUND_ASSETS.notification_default;
+  if (!src) return;
+
+  let audio = audioCache.get(src);
+  if (!audio) {
+    audio = new Audio(src);
+    audioCache.set(src, audio);
+  }
+
+  audio.pause();
+  audio.currentTime = 0;
+  audio.volume = Math.max(0, Math.min(volume, 1));
+  void audio.play().catch(() => {
+    // Browser co the chan autoplay neu user chua interact voi page.
+    // FE co the hien toggle/button bat am thanh de unlock audio.
+  });
+}
+```
+
+========================================================================
+6. Luu y UX
+========================================================================
+
+- Khong auto-play khi load `GET /api/notifications` list cu.
+- Chi play khi nhan `ReceiveNotification` realtime.
+- Nen co setting local: bat/tat notification sound.
+- Browser co the block audio autoplay neu user chua click/interact voi page.
+- Neu user tat am thanh local thi FE bo qua play, ke ca `sound.enabled = true`.
