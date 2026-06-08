@@ -103,7 +103,8 @@ namespace Kpett.ChatApp.Be.Services.Impls
                     DisplayName = n.ActorInfo.DisplayName,
                     Username = n.ActorInfo.Username,
                     AvatarUrl = n.ActorInfo.AvatarUrl
-                }
+                },
+                Sound = NotificationSoundResponse.FromType(n.Type)
             }).ToList();
 
             _logger.LogInformation("User {UserId} retrieved {Count} notifications", currentUserId, items.Count);

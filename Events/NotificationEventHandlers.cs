@@ -4,6 +4,7 @@ using Kpett.ChatApp.Events.Friend;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
+using Kpett.ChatApp.DTOs.Response.Notidication;
 using MediatR;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -113,6 +114,7 @@ namespace Kpett.ChatApp.Events
                 notif.IsRead,
                 notif.CreatedAt,
                 notif.Metadata,
+                Sound = NotificationSoundResponse.FromType(notif.Type),
                 Actor = actorInfo
             };
 

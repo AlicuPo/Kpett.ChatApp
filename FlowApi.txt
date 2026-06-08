@@ -76,6 +76,8 @@ DTO tom tat hay gap
 - CommentListItemDTO: id, postId, parentId?, author, content, mentions[], attachments[], metrics, viewerContext, isEdited, isDeleted, createdAt, updatedAt?
 - FriendRequestResponse: requestId, senderId, receiverId, status, createdAt
 - FriendListItemDTO: id, username, displayName, avatarUrl, isVerified, isOnline, friendedAt?
+- NotificationResponse: id, type, referenceId?, metadata?, isRead, createdAt, actor?, sound
+- NotificationSoundResponse: enabled, key, volume
 - CloudinarySignatureResponse: publicId, signature, timestamp, cloudName, apiKey, folder, uploadUrl, notificationUrl, tags
 - MediaUploadResponse: publicId, secureUrl, format, bytes
 
@@ -173,6 +175,48 @@ Errors
 - 401 AUTH.REFRESH_TOKEN_INVALID:
   - Invalid refresh token
   - Token in black list
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/auth/forgot-password
+Auth
+- Public
+
+Request
+- Body
+  {
+    "email": "user@example.com"
+  }
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+  - message = "If the email exists, an OTP has been sent."
+
+Errors
+- 400 VAL.REQUIRED: Email is required
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/auth/reset-password
+Auth
+- Public
+
+Request
+- Body
+  {
+    "email": "user@example.com",
+    "otp": "123456",
+    "newPassword": "new-secret"
+  }
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+  - message = "Password reset successfully."
+
+Errors
+- 400 VAL.REQUIRED: OTP is required
+- 400 VAL.REQUIRED: New password is required
+- 401 AUTH.PASSWORD_RESET_OTP_INVALID: Invalid or expired OTP
 - 500 SERVER.SYSTEM_ERROR
 
 POST /api/auth/revoke
@@ -387,6 +431,24 @@ Errors
 - 404 USER.NOT_FOUND
 - 500 SERVER.SYSTEM_ERROR
 
+GET /api/users/search
+Auth
+- Optional
+
+Request
+- Query
+  - keyword
+  - limit = 20
+  - cursor?
+
+Response
+- HTTP 200
+- Body: GeneralResponse<PaginatedData<UserResponse>>
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID neu gui token sai/het han
+- 500 SERVER.SYSTEM_ERROR
+
 ========================================================================
 4. Relationship APIs
 ========================================================================
@@ -539,6 +601,23 @@ Errors
 - 404 FOLLOW.FOLLOW_NOT_FOUND
 - 500 SERVER.SYSTEM_ERROR
 
+GET /api/relationships/friends/suggestions?limit=10
+Auth
+- Required
+
+Request
+- Query
+  - limit = 10
+
+Response
+- HTTP 200
+- Body: GeneralResponse<List<UserResponse>>
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 500 SERVER.SYSTEM_ERROR
+
 ========================================================================
 5. Post APIs
 ========================================================================
@@ -676,7 +755,7 @@ Errors
 - 404 POST.NOT_FOUND
 - 500 SERVER.SYSTEM_ERROR
 
-PUT /api/posts/{postId}/reactions/me
+PUT /api/posts/{postId}/reactions
 Auth
 - Required
 
@@ -698,7 +777,7 @@ Request
 
 Response
 - HTTP 200
-- Body: raw PostReactionDTO
+- Body: GeneralResponse<PostReactionDTO>
 
 Errors
 - 400 VAL.REQUIRED: Reaction type is required
@@ -706,7 +785,7 @@ Errors
 - 404 POST.NOT_FOUND
 - 500 SERVER.SYSTEM_ERROR
 
-DELETE /api/posts/{postId}/reactions/me
+DELETE /api/posts/{postId}/reactions
 Auth
 - Required
 
@@ -773,7 +852,7 @@ Errors
 
 GET /api/comments/posts/{postId}
 Auth
-- Thuc te can user claim vi controller goi User.GetRequiredUserId(), du endpoint khong gan [Authorize]
+- Optional
 
 Request
 - Path
@@ -788,7 +867,7 @@ Response
 - Body: GeneralResponse<PaginatedData<CommentListItemDTO>>
 
 Errors
-- 401 AUTH.UNAUTHORIZED neu khong co user claim
+- 401 AUTH.ACCESS_TOKEN_INVALID neu gui token sai/het han
 - 404 POST.NOT_FOUND
 - 500 SERVER.SYSTEM_ERROR
 
@@ -835,6 +914,42 @@ Errors
 - 404 COMMENT.NOT_FOUND
 - 500 SERVER.SYSTEM_ERROR
 
+PUT /api/comments/{commentId}/likes
+Auth
+- Required
+
+Request
+- Path
+  - commentId
+
+Response
+- HTTP 200
+- Body: GeneralResponse<CommentListItemDTO>
+
+Errors
+- 400 VAL.REQUIRED: Comment ID is required
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 COMMENT.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+DELETE /api/comments/{commentId}/likes
+Auth
+- Required
+
+Request
+- Path
+  - commentId
+
+Response
+- HTTP 200
+- Body: GeneralResponse<CommentListItemDTO>
+
+Errors
+- 400 VAL.REQUIRED: Comment ID is required
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 COMMENT.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
 ========================================================================
 7. Conversation APIs
 ========================================================================
@@ -846,30 +961,30 @@ Auth
 Request
 - Body
   {
-    "type": "optional",
-    "name": "optional",
-    "avatarUrl": "optional",
-    "unreadCount": 0,
-    "lastReadAt": "optional",
-    "updatedAt": "optional",
-    "userLow": "user-id-1",
-    "userHigh": "user-id-2"
+    "type": "Direct|Group",
+    "participantIds": ["current-user-id", "other-user-id"],
+    "initialMessage": "optional initial text",
+    "name": "optional group name"
   }
-- Thuc te service chi can userLow, userHigh; cac field con lai mang tinh metadata tao conversation.
+- Direct conversation can co dung 2 participant va initialMessage.
+- Group conversation can name va toi thieu 2 participant.
 
 Response
 - HTTP 201
-- Body: raw ConversationResponse
+- Body: GeneralResponse<ConversationResponse>
 
 Errors
 - 400 VAL.REQUIRED:
-  - Conversation request is required.
-  - Conversation participants are required.
-  - Conversation participants must be different users.
+  - Conversation request and type are required.
+  - Initial message content is required to create a direct conversation.
+  - Group name is required.
+- 400 VAL.INVALID:
+  - Invalid conversation type. Must be 'Direct' or 'Group'.
+  - Direct conversation must have exactly 2 different participants.
+  - A group must have at least 2 participants.
 - 401 AUTH.ACCESS_TOKEN_INVALID
 - 401 AUTH.UNAUTHORIZED: User is not authenticated.
-- 403 AUTH.FORBIDDEN: You can only create conversations that include the current user.
-- 404 USER.NOT_FOUND: One or more conversation participants were not found.
+- 404 USER.NOT_FOUND: One or more participants do not exist.
 - 500 SERVER.SYSTEM_ERROR
 
 GET /api/conversations
@@ -879,21 +994,215 @@ Auth
 Request
 - Query
   - search?
-  - status?
-  - type = Post
-  - page = 1
-  - pageSize = 40
-  - sortBy = CreateAt
-  - sortOrder = desc
-- Thuc te service chu yeu dung page va pageSize.
+  - cursor?
+  - limit = 20
 
 Response
 - HTTP 200
-- Body: raw List<ConversationResponse>
+- Body: GeneralResponse<PaginatedData<ConversationResponse>>
 
 Errors
 - 401 AUTH.ACCESS_TOKEN_INVALID
 - 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/conversations/has-unread
+Auth
+- Required
+
+Request
+- Khong co body
+
+Response
+- HTTP 200
+- Body: GeneralResponse<bool>
+  - data = true neu co conversation chua doc
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/conversations/{id}/friends-not-in-group
+Auth
+- Required
+
+Request
+- Path
+  - id: group conversation id
+- Query
+  - search?
+  - cursor?
+  - limit = 20
+
+Response
+- HTTP 200
+- Body: GeneralResponse<PaginatedData<UserResponse>>
+
+Errors
+- 400 VAL.REQUIRED: Conversation ID is required.
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 403 AUTH.FORBIDDEN: You are not a member of this conversation.
+- 500 SERVER.SYSTEM_ERROR
+
+POST /api/conversations/{id}/members
+Auth
+- Required
+
+Request
+- Path
+  - id: group conversation id
+- Body
+  {
+    "userIdsToAdd": ["user-id-1", "user-id-2"]
+  }
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 400 VAL.REQUIRED: User IDs to add are required.
+- 400 VAL.INVALID:
+  - No valid users to add.
+  - All provided users are already active members in the group.
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 403 AUTH.FORBIDDEN: You are not an active member of this group.
+- 404 CONVERSATION.NOT_FOUND: Group conversation not found.
+- 404 USER.NOT_FOUND: One or more users to add do not exist.
+- 500 SERVER.SYSTEM_ERROR
+
+DELETE /api/conversations/{id}/members/{userIdToRemove}
+Auth
+- Required
+
+Request
+- Path
+  - id: group conversation id
+  - userIdToRemove
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: Invalid user info.
+- 403 AUTH.FORBIDDEN:
+  - You are not a member of this group.
+  - You don't have permission to remove members.
+- 404 CONVERSATION.NOT_FOUND:
+  - Group conversation not found.
+  - The target user is not a member of this group.
+- 500 SERVER.SYSTEM_ERROR
+
+PUT /api/conversations/{conversationId}/read
+Auth
+- Required
+
+Request
+- Path
+  - conversationId
+- Khong co body
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 403 AUTH.FORBIDDEN: You are not a participant of this conversation.
+- 404 CONVERSATION.NOT_FOUND
+- 500 SERVER.SYSTEM_ERROR
+
+PUT /api/conversations/{conversationId}/settings
+Auth
+- Required
+
+Request
+- Path
+  - conversationId
+- Body
+  {
+    "isMuted": true,
+    "isArchived": false
+  }
+
+Response
+- HTTP 200
+- Body: GeneralResponse<ConversationViewerContextResponse>
+
+Errors
+- 400 VAL.REQUIRED:
+  - Conversation ID and user ID are required.
+  - At least one setting value is required.
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 403 AUTH.FORBIDDEN: You are not an active member of this conversation.
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/conversations/{id}
+Auth
+- Required
+
+Request
+- Path
+  - id: conversation id
+
+Response
+- HTTP 200
+- Body: GeneralResponse<ConversationResponse>
+
+Errors
+- 400 VAL.REQUIRED: Conversation ID is required.
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 404 CONVERSATION.NOT_FOUND: Conversation not found or you are not an active member.
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/conversations/direct/{userId}
+Auth
+- Required
+
+Request
+- Path
+  - userId: target user id
+
+Response
+- HTTP 200
+- Body: GeneralResponse<ConversationResponse>
+  - Neu direct conversation da ton tai thi tra conversation do.
+  - Neu chua ton tai thi tao moi direct conversation.
+
+Errors
+- 400 VAL.REQUIRED: User IDs are required.
+- 400 VAL.INVALID: Cannot create conversation with yourself.
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 404 USER.NOT_FOUND: One or both users do not exist.
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/conversations/{conversationId}/members
+Auth
+- Required
+
+Request
+- Path
+  - conversationId
+- Query
+  - cursor?
+  - limit = 10
+
+Response
+- HTTP 200
+- Body: GeneralResponse<PaginatedData<ParticipantResponse>>
+
+Errors
+- 400 VAL.REQUIRED: Conversation ID is required.
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 403 AUTH.FORBIDDEN: You are not an active member of this group.
 - 500 SERVER.SYSTEM_ERROR
 
 ========================================================================
@@ -908,24 +1217,18 @@ Request
 - Path
   - conversationId
 - Query
-  - cursorMessageId?
-  - pageSize = 40
+  - cursor?
+  - limit = 20
 
 Response
 - HTTP 200
-- Body: raw MessagePageResult
-  {
-    "messages": [ MessageDTO ],
-    "oldestMessageId": 123,
-    "hasMore": true
-  }
+- Body: GeneralResponse<PaginatedData<MessageResponse>>
 
 Errors
-- 400 VAL.REQUIRED: Conversation ID cannot be null or empty.
+- 400 VAL.REQUIRED: Conversation ID is required.
 - 401 AUTH.ACCESS_TOKEN_INVALID
 - 401 AUTH.UNAUTHORIZED: User is not authenticated.
-- 403 CONVERSATION.USER_NOT_IN_CONVERSATION
-- 404 CONVERSATION.NOT_FOUND
+- 403 AUTH.FORBIDDEN: You do not have permission to view messages in this conversation.
 - 500 SERVER.SYSTEM_ERROR
 
 POST /api/conversations/{conversationId}/messages
@@ -937,55 +1240,163 @@ Request
   - conversationId
 - Body
   {
+    "clientMessageId": "required-idempotency-id",
     "content": "hello",
-    "clientMessageId": "optional-idempotency-id",
-    "type": "text",
-    "metadata": "optional-json-string",
-    "color": "optional"
+    "type": "Text",
+    "replyToMessageId": "optional",
+    "attachments": [
+      {
+        "type": "Image|Video|File",
+        "url": "https://...",
+        "publicId": "optional",
+        "filename": "optional",
+        "fileSize": 12345
+      }
+    ]
   }
 
 Response
 - HTTP 201
-- Body: raw MessageDTO
+- Body: GeneralResponse<MessageResponse>
 
 Errors
-- 400 VAL.REQUIRED: Message content cannot be empty.
-- 400 VAL.REQUIRED: Conversation ID cannot be null or empty.
+- 400 VAL.REQUIRED: ClientMessageId is required for idempotency.
+- 400 VAL.INVALID: Message must contain either text content or attachments.
 - 401 AUTH.ACCESS_TOKEN_INVALID
 - 401 AUTH.UNAUTHORIZED: User is not authenticated.
-- 403 CONVERSATION.USER_NOT_IN_CONVERSATION
-- 404 CONVERSATION.NOT_FOUND
+- 403 AUTH.FORBIDDEN: You are not a participant of this conversation.
+- 404 CONVERSATION.NOT_FOUND: Conversation not found.
 - 500 SERVER.SYSTEM_ERROR
 
-PUT /api/conversations/{conversationId}/participants/me/read-state
+PUT /api/conversations/{conversationId}/messages/{messageId}
 Auth
 - Required
 
 Request
 - Path
   - conversationId
+  - messageId
 - Body
   {
-    "lastReadMessageId": 123,
-    "readAt": "optional-utc-datetime"
+    "content": "updated message"
   }
 
 Response
-- HTTP 204
-- Body rong
+- HTTP 200
+- Body: GeneralResponse<MessageResponse>
 
 Errors
-- 400 VAL.REQUIRED: Read message request is required.
-- 400 VAL.REQUIRED: Conversation ID cannot be null or empty.
+- 400 VAL.REQUIRED:
+  - Conversation ID and message ID are required.
+  - Message content is required.
+- 400 CONVERSATION.INVALID_MESSAGE: This message cannot be updated.
 - 401 AUTH.ACCESS_TOKEN_INVALID
 - 401 AUTH.UNAUTHORIZED: User is not authenticated.
-- 403 CONVERSATION.USER_NOT_IN_CONVERSATION
-- 404 CONVERSATION.NOT_FOUND
-- 409 CONVERSATION.INVALID_MESSAGE: Invalid Message ID for this conversation.
+- 403 AUTH.FORBIDDEN:
+  - You are not a participant of this conversation.
+  - You can only update your own messages.
+- 404 CONVERSATION.NOT_FOUND: Message not found.
+- 500 SERVER.SYSTEM_ERROR
+
+DELETE /api/conversations/{conversationId}/messages/{messageId}
+Auth
+- Required
+
+Request
+- Path
+  - conversationId
+  - messageId
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 400 VAL.REQUIRED: Conversation ID and message ID are required.
+- 400 CONVERSATION.INVALID_MESSAGE: System messages cannot be deleted.
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 401 AUTH.UNAUTHORIZED: User is not authenticated.
+- 403 AUTH.FORBIDDEN:
+  - You are not a participant of this conversation.
+  - You can only delete your own messages.
+- 404 CONVERSATION.NOT_FOUND: Message not found.
 - 500 SERVER.SYSTEM_ERROR
 
 ========================================================================
-9. Media APIs
+9. Notification APIs
+========================================================================
+
+ReceiveNotification
+Auth
+- Required
+
+Request
+- Query
+  - cursor?
+  - limit = 10
+
+Response
+- HTTP 200
+- Body: GeneralResponse<PaginatedData<NotificationResponse>>
+  - data.items[].sound:
+    {
+      "enabled": true,
+      "key": "friend_request|friend_accept|comment_mention|notification_default",
+      "volume": 0.8
+    }
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 500 SERVER.SYSTEM_ERROR
+
+GET /api/notifications/unread-count
+Auth
+- Required
+
+Request
+- Khong co body
+
+Response
+- HTTP 200
+- Body: GeneralResponse<int>
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 500 SERVER.SYSTEM_ERROR
+
+PUT /api/notifications/{notificationId}/read
+Auth
+- Required
+
+Request
+- Path
+  - notificationId
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 500 SERVER.SYSTEM_ERROR
+
+PUT /api/notifications/read-all
+Auth
+- Required
+
+Request
+- Khong co body
+
+Response
+- HTTP 200
+- Body: GeneralResponse
+
+Errors
+- 401 AUTH.ACCESS_TOKEN_INVALID
+- 500 SERVER.SYSTEM_ERROR
+
+========================================================================
+10. Media APIs
 ========================================================================
 
 GET /api/media/generate-signature?folder=posts
@@ -1068,110 +1479,67 @@ Errors
 - 500 SERVER.SYSTEM_ERROR
 
 ========================================================================
-10. Mock data APIs
+11. Realtime APIs
 ========================================================================
 
-POST /api/mockdata/map-mock-data
+SignalR /hubs/app
 Auth
-- Public
+- Required
 
-Request
-- Khong co body
+Transport
+- SignalR hub, khong phai REST endpoint.
+- Client can gui access token theo SignalR bearer token convention.
 
-Response
-- HTTP 200
-- Body raw string
-  - "Đã map thành công X posts."
-
-Errors
-- 400 raw string: "Không có user nào trong DB."
-- 500 SERVER.SYSTEM_ERROR
-
-POST /api/mockdata/generate-comments
-Auth
-- Public
-
-Request
-- Query
-  - numberOfPosts = 100
-  - minCommentsPerPost = 2
-  - maxCommentsPerPost = 5
-  - minRepliesPerComment = 0
-  - maxRepliesPerComment = 2
-  - minMentionsPerComment = 0
-  - maxMentionsPerComment = 2
-  - minLikesPerComment = 0
-  - maxLikesPerComment = 4
-
-Response
-- HTTP 200
-- Body raw anonymous object
+Notes
+- Hub route duoc map trong Program.cs bang app.MapHub<AppHub>("/hubs/app").RequireCors("ClientCors").
+- Dung cho realtime conversation/message/typing/notification events theo AppHub.
+- ReceiveNotification payload co them sound:
   {
-    "message": "...",
-    "postsProcessed": 100,
-    "rootComments": 10,
-    "replies": 5,
-    "totalComments": 15,
-    "mentions": 3,
-    "commentLikes": 8
+    "enabled": true,
+    "key": "friend_request|friend_accept|comment_mention|notification_default",
+    "volume": 0.8
   }
-
-Errors
-- 400 raw string:
-  - "numberOfPosts phải lớn hơn 0."
-  - "Các tham số min/max không hợp lệ."
-  - "Cần ít nhất 2 user để generate comment mock data."
-  - "Không tìm thấy post nào trong Database. Vui lòng tạo post trước."
-- 500 SERVER.SYSTEM_ERROR
-
-POST /api/mockdata/generate-real-post-media?numberOfPosts=30000
-Auth
-- Public
-
-Request
-- Query
-  - numberOfPosts = 30000
-
-Response
-- HTTP 200
-- Body raw anonymous object
-  {
-    "message": "...",
-    "totalImages": 123,
-    "totalVideos": 45
-  }
-
-Errors
-- 400 raw string: "Không tìm thấy bài post nào trong Database. Vui lòng tạo Post trước."
-- 500 raw string: "Lỗi ghi dữ liệu: ..."
+- Frontend map sound.key sang audio asset va tu quyet dinh play/pause theo user setting local.
 
 ========================================================================
-11. Tong ket khac biet quan trong
+12. Endpoint removed or not present in current source
+========================================================================
+
+Cac endpoint sau dang duoc mo ta o ban cu nhung khong co controller trong source hien tai:
+- POST /api/mockdata/map-mock-data
+- POST /api/mockdata/generate-comments
+- POST /api/mockdata/generate-real-post-media
+
+Route cu khong con khop controller:
+- PUT /api/posts/{postId}/reactions/me -> thay bang PUT /api/posts/{postId}/reactions
+- DELETE /api/posts/{postId}/reactions/me -> thay bang DELETE /api/posts/{postId}/reactions
+- PUT /api/conversations/{conversationId}/participants/me/read-state -> thay bang PUT /api/conversations/{conversationId}/read
+
+========================================================================
+13. Tong ket khac biet quan trong
 ========================================================================
 
 Endpoint dung GeneralResponse
-- Auth: login, register, logout, refresh, revoke(success)
+- Auth: login, register, logout, refresh, forgot-password, reset-password, revoke(success)
 - Users: tat ca endpoint trong controller
 - Relationships: tat ca endpoint trong controller
-- Posts: create, update, get feed, get user posts, get by id, delete
+- Posts: create, update, get feed, get user posts, get by id, delete, upsert reaction
 - Comments: tat ca endpoint trong controller
+- Conversations: tat ca endpoint trong controller
+- Messages: tat ca endpoint message trong ConversationsController
+- Notifications: tat ca endpoint trong controller
 - Media: tat ca endpoint trong controller
 
 Endpoint tra raw object/list
-- POST /api/conversations
-- GET /api/conversations
-- GET /api/conversations/{conversationId}/messages
-- POST /api/conversations/{conversationId}/messages
-- PUT /api/posts/{postId}/reactions/me
 - GET /api/posts/{postId}/reactions
-- Tat ca endpoint /api/mockdata/*
 
 Endpoint tra 204 No Content
-- DELETE /api/posts/{postId}/reactions/me
-- PUT /api/conversations/{conversationId}/participants/me/read-state
+- DELETE /api/posts/{postId}/reactions
+
+Endpoint realtime khong phai REST
+- /hubs/app
 
 Endpoint "dang co dau hieu can xem lai"
-- GET /api/comments/posts/{postId}: khong gan [Authorize] nhung van bat buoc user claim
 - DELETE /api/users/DeleteUser/{id}: khong gan [Authorize] nhung van bat buoc user claim
 - GlobalExceptionHandler co kha nang tra body loi dang chuoi JSON escaped
 - POST /api/auth/register, POST /api/relationships/friend-requests, POST /api/posts: HTTP 200 nhung body.statusCode = 201
