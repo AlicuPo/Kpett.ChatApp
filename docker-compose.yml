@@ -14,30 +14,30 @@ services:
       ASPNETCORE_URLS: "http://+:8080"
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
 
-      ConnectionStrings__KpettChatAppDb: "${ConnectionStrings__KpettChatAppDb:?Set ConnectionStrings__KpettChatAppDb in Portainer stack variables}"
-      ConnectionStrings__Redis: "${ConnectionStrings__Redis:?Set ConnectionStrings__Redis in Portainer stack variables}"
+      ConnectionStrings__KpettChatAppDb: "${ConnectionStrings__KpettChatAppDb}"
+      ConnectionStrings__Redis: "${ConnectionStrings__Redis}"
 
-      JwtSection__KeyAccess: "${JwtSection__KeyAccess:?Set JwtSection__KeyAccess in Portainer stack variables}"
-      JwtSection__KeyRefres: "${JwtSection__KeyRefres:?Set JwtSection__KeyRefres in Portainer stack variables}"
+      JwtSection__KeyAccess: "${JwtSection__KeyAccess}"
+      JwtSection__KeyRefres: "${JwtSection__KeyRefres}"
       JwtSection__Issuer: "${JwtSection__Issuer:-kpett.chatApp}"
       JwtSection__Audience: "${JwtSection__Audience:-kpett.chatApp}"
       JwtSection__AccessTokenExpireMinutes: "${JwtSection__AccessTokenExpireMinutes:-5}"
       JwtSection__RefreshTokenExpireDays: "${JwtSection__RefreshTokenExpireDays:-365}"
 
-      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?Set Cors__AllowedOrigins__0 in Portainer stack variables}"
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0}"
       AllowedHosts: "*"
 
-      CloudinarySettings__CloudName: "${CloudinarySettings__CloudName:?Set CloudinarySettings__CloudName in Portainer stack variables}"
-      CloudinarySettings__ApiKey: "${CloudinarySettings__ApiKey:?Set CloudinarySettings__ApiKey in Portainer stack variables}"
-      CloudinarySettings__ApiSecret: "${CloudinarySettings__ApiSecret:?Set CloudinarySettings__ApiSecret in Portainer stack variables}"
+      CloudinarySettings__CloudName: "${CloudinarySettings__CloudName}"
+      CloudinarySettings__ApiKey: "${CloudinarySettings__ApiKey}"
+      CloudinarySettings__ApiSecret: "${CloudinarySettings__ApiSecret}"
       CloudinarySettings__NotificationUrl: "${CloudinarySettings__NotificationUrl:-}"
 
       EmailSettings__SmtpHost: "${EmailSettings__SmtpHost:-smtp.gmail.com}"
       EmailSettings__SmtpPort: "${EmailSettings__SmtpPort:-587}"
       EmailSettings__EnableSsl: "${EmailSettings__EnableSsl:-true}"
-      EmailSettings__SmtpUsername: "${EmailSettings__SmtpUsername:?Set EmailSettings__SmtpUsername in Portainer stack variables}"
-      EmailSettings__SmtpPassword: "${EmailSettings__SmtpPassword:?Set EmailSettings__SmtpPassword in Portainer stack variables}"
-      EmailSettings__FromEmail: "${EmailSettings__FromEmail:?Set EmailSettings__FromEmail in Portainer stack variables}"
+      EmailSettings__SmtpUsername: "${EmailSettings__SmtpUsername}"
+      EmailSettings__SmtpPassword: "${EmailSettings__SmtpPassword}"
+      EmailSettings__FromEmail: "${EmailSettings__FromEmail}"
       EmailSettings__FromName: "${EmailSettings__FromName:-Kpett.ChatApp}"
       EmailSettings__PasswordResetOtpExpiryMinutes: "${EmailSettings__PasswordResetOtpExpiryMinutes:-10}"
       EmailSettings__PasswordResetOtpLength: "${EmailSettings__PasswordResetOtpLength:-6}"
@@ -62,4 +62,5 @@ volumes:
 
 networks:
   kpett:
-    driver: bridge
+    external: true
+    name: kpett-net
