@@ -250,6 +250,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             _logger.LogInformation("User {UserId} retrieved post with ID {PostId}", currentUserId ?? "Anonymous", postId);
 
+            post.CreatedAt = post.CreatedAt.ToUtc();
             return post;
         }
 
