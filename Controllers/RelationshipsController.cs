@@ -9,9 +9,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Kpett.ChatApp.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/[controller]")] 
     [ApiController]
-    [Authorize]
+    // [Authorize]
     public class RelationshipsController : ControllerBase
     {
         private readonly IRelationshipService _friendServices;
