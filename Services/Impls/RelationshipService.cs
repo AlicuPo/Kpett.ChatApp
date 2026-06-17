@@ -64,39 +64,54 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new BadRequestException(ErrorCodes.FRIEND.ALREADY_FRIENDS, "You were already friends.");
             }
 
-            // Kiểm tra xem đã có lời mời Pending giữa 2 người chưa
+            // Lấy request hiện tại giữa 2 user (nếu có, bất kể trạng thái)
             var existingRequest = await _context.FriendRequests
-                .AsNoTracking()
-                .FirstOrDefaultAsync(r => ((r.SenderId == senderId && r.ReceiverId == receiverId) || (r.SenderId == receiverId && r.ReceiverId == senderId)) && r.Status == pendingStatus);
+                .FirstOrDefaultAsync(r => (r.SenderId == senderId && r.ReceiverId == receiverId) || (r.SenderId == receiverId && r.ReceiverId == senderId));
+
+            FriendRequest request;
 
             if (existingRequest != null)
             {
-                if (existingRequest.SenderId == senderId)
+                if (existingRequest.Status == pendingStatus)
                 {
-                    _logger.LogWarning("Friend request from {SenderId} to {ReceiverId} rejected because request already exists", senderId, receiverId);
-                    throw new BadRequestException(ErrorCodes.FRIEND.REQUEST_ALREADY_SENT, "You have already sent a friend request to this person.");
+                    if (existingRequest.SenderId == senderId)
+                    {
+                        _logger.LogWarning("Friend request from {SenderId} to {ReceiverId} rejected because request already exists", senderId, receiverId);
+                        throw new BadRequestException(ErrorCodes.FRIEND.REQUEST_ALREADY_SENT, "You have already sent a friend request to this person.");
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Friend request from {SenderId} to {ReceiverId} rejected because receiver already sent a pending request", senderId, receiverId);
+                        throw new BadRequestException(ErrorCodes.FRIEND.FRIEND_REQUEST_PENDING, "This person has already sent you a friend request. Please check your pending requests.");
+                    }
                 }
-                else
-                {
-                    _logger.LogWarning("Friend request from {SenderId} to {ReceiverId} rejected because receiver already sent a pending request", senderId, receiverId);
-                    throw new BadRequestException(ErrorCodes.FRIEND.FRIEND_REQUEST_PENDING, "This person has already sent you a friend request. Please check your pending requests.");
-                }
-            }
 
-            // Canonical order để đảm bảo unique index (UserLowId, UserHighId) hoạt động đúng
-            // và tránh race condition khi 2 user gửi request đồng thời
-            var isOrderCorrect = string.CompareOrdinal(senderId, receiverId) < 0;
-            var request = new FriendRequest
+                // Nếu có request cũ nhưng đã bị từ chối, hủy hoặc unfriend, tái sử dụng bản ghi
+                existingRequest.SenderId = senderId;
+                existingRequest.ReceiverId = receiverId;
+                existingRequest.Status = pendingStatus;
+                existingRequest.CreatedAt = DateTime.UtcNow;
+                existingRequest.UpdatedAt = DateTime.UtcNow;
+                
+                request = existingRequest;
+            }
+            else
             {
-                Id = Guid.NewGuid().ToString(),
-                SenderId = senderId,
-                ReceiverId = receiverId,
-                UserLowId = isOrderCorrect ? senderId : receiverId,
-                UserHighId = isOrderCorrect ? receiverId : senderId,
-                Status = pendingStatus,
-                CreatedAt = DateTime.UtcNow,
-            };
-            await _context.FriendRequests.AddAsync(request);
+                // Canonical order để đảm bảo unique index (UserLowId, UserHighId) hoạt động đúng
+                // và tránh race condition khi 2 user gửi request đồng thời
+                var isOrderCorrect = string.CompareOrdinal(senderId, receiverId) < 0;
+                request = new FriendRequest
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    SenderId = senderId,
+                    ReceiverId = receiverId,
+                    UserLowId = isOrderCorrect ? senderId : receiverId,
+                    UserHighId = isOrderCorrect ? receiverId : senderId,
+                    Status = pendingStatus,
+                    CreatedAt = DateTime.UtcNow,
+                };
+                await _context.FriendRequests.AddAsync(request);
+            }
 
             // Logic gửi lời mời kết bạn = Tự động Follow
             var isFollowing = await _context.Follows.AnyAsync(f => f.FollowerId == senderId && f.FolloweeId == receiverId);

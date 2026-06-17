@@ -32,7 +32,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("ClientCors", policy =>
     {
         policy
-            .WithOrigins(corsSettings?.AllowedOrigins ?? new[] { "http://localhost:3000" })
+            .WithOrigins(corsSettings?.AllowedOrigins ?? new[] { "http://localhost:3000", "http://localhost:52974" })
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
