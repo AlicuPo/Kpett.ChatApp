@@ -214,10 +214,14 @@ namespace Kpett.ChatApp.Services.Impls
                 });
             }
 
-            var notifiRequest = await _context.Notifications.FirstOrDefaultAsync(n => n.ReferenceId == request.Id);
-            if(notifiRequest != null)
+            var friendRequestReceivedType = NotificationType.FriendRequestReceived.GetDescription();
+            var notifiRequests = await _context.Notifications
+                .Where(n => n.ReferenceId == request.Id && n.Type == friendRequestReceivedType)
+                .ToListAsync();
+
+            if (notifiRequests.Any())
             {
-                _context.Notifications.Remove(notifiRequest);
+                _context.Notifications.RemoveRange(notifiRequests);
             }
 
             await _context.SaveChangesAsync();
@@ -261,10 +265,14 @@ namespace Kpett.ChatApp.Services.Impls
                 _context.Follows.Remove(follow);
             }
 
-            var notifiRequest = await _context.Notifications.FirstOrDefaultAsync(n => n.ReferenceId == request.Id);
-            if (notifiRequest != null)
+            var friendRequestReceivedType = NotificationType.FriendRequestReceived.GetDescription();
+            var notifiRequests = await _context.Notifications
+                .Where(n => n.ReferenceId == request.Id && n.Type == friendRequestReceivedType)
+                .ToListAsync();
+
+            if (notifiRequests.Any())
             {
-                _context.Notifications.Remove(notifiRequest);
+                _context.Notifications.RemoveRange(notifiRequests);
             }
 
             await _context.SaveChangesAsync();
@@ -293,10 +301,14 @@ namespace Kpett.ChatApp.Services.Impls
                 _context.Follows.Remove(follow);
             }
 
-            var notifiRequest = await _context.Notifications.FirstOrDefaultAsync(n => n.ReferenceId == request.Id);
-            if (notifiRequest != null)
+            var friendRequestReceivedType = NotificationType.FriendRequestReceived.GetDescription();
+            var notifiRequests = await _context.Notifications
+                .Where(n => n.ReferenceId == request.Id && n.Type == friendRequestReceivedType)
+                .ToListAsync();
+
+            if (notifiRequests.Any())
             {
-                _context.Notifications.Remove(notifiRequest);
+                _context.Notifications.RemoveRange(notifiRequests);
             }
 
             await _context.SaveChangesAsync();
