@@ -230,6 +230,7 @@ builder.Services.AddScoped<IPostService, PostService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddScoped<IMediaService, MediaService>();
 builder.Services.AddScoped<IConversationTypingService, ConversationTypingService>();
+builder.Services.AddScoped<IGroupsService, GroupsService>();
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
@@ -249,16 +250,16 @@ app.UseAuthorization();
 
 // Schedule a recurring job to clean up orphaned images daily at 2 AM
 // Tạo một Service Scope để lấy các service từ DI Container
-using (var scope = app.Services.CreateScope())
-{
-    var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+//using (var scope = app.Services.CreateScope())
+//{
+//    var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
 
-    recurringJobManager.AddOrUpdate<IMediaService>(
-        "cleanup-temp-images",
-        service => service.CleanUpOrphanedImagesAsync(),
-        Cron.Daily(2)
-    );
-}
+//    recurringJobManager.AddOrUpdate<IMediaService>(
+//        "cleanup-temp-images",
+//        service => service.CleanUpOrphanedImagesAsync(),
+//        Cron.Daily(2)
+//    );
+//}
 
 if (app.Environment.IsDevelopment())
 {

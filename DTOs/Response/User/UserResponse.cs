@@ -21,6 +21,8 @@ namespace Kpett.ChatApp.DTOs.Response.User
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public DateTime? UpdatedAt { get; set; }
 
+
+
     }
 
 }

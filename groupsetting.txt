@@ -1,0 +1,259 @@
+================================================================================
+GROUP SETTINGS API - Request / Response
+Base URL: /api/groups
+Auth: Bearer Token (JWT) - tat ca endpoint can [Authorize]
+================================================================================
+
+Gia tri hop le
+--------------------------------------------------------------------------------
+privacy:
+  - public  : nhom cong khai
+  - private : nhom rieng tu
+  - hidden  : nhom an
+
+whoCanPost / whoCanInvite:
+  - anyone     : tat ca thanh vien trong nhom
+  - admin_mod  : admin va moderator
+  - admin_only : chi admin
+
+language:
+  - string tu 2 den 20 ky tu, vi du: "vi", "en", "en-us"
+
+rule:
+  - title bat buoc
+  - description tuy chon
+  - order tuy chon, neu khong gui server se dung thu tu trong mang
+
+Quyen:
+  - Chi thanh vien co role admin hoac ownerUserId cua nhom moi duoc xem/sua
+    settings trong cac endpoint duoi day.
+
+================================================================================
+1. Lay cai dat nhom
+GET /api/groups/{groupId}/settings
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  groupId: string - ID nhom
+
+Request body:
+  Khong co
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Get group settings successfully.",
+  "data": {
+    "groupId": "group-id",
+    "privacy": "public",
+    "whoCanPost": "anyone",
+    "whoCanInvite": "admin_mod",
+    "postApproval": false,
+    "memberApproval": true,
+    "language": "vi",
+    "rules": [
+      {
+        "id": "rule-id-1",
+        "title": "Ton trong thanh vien khac",
+        "description": "Khong cong kich ca nhan, khong spam.",
+        "order": 1
+      }
+    ],
+    "updatedAt": "2026-06-23T10:15:30Z"
+  }
+}
+
+================================================================================
+2. Cap nhat cai dat nhom
+PUT /api/groups/{groupId}/settings
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+  Content-Type: application/json
+
+Path params:
+  groupId: string - ID nhom
+
+Request body:
+  Chi can gui field muon thay doi. Field khong gui se giu nguyen.
+  Neu gui "rules", danh sach rule cu se bi thay the toan bo.
+
+{
+  "privacy": "private",
+  "whoCanPost": "admin_mod",
+  "whoCanInvite": "admin_only",
+  "postApproval": true,
+  "memberApproval": true,
+  "language": "vi",
+  "rules": [
+    {
+      "title": "Ton trong moi nguoi",
+      "description": "Khong xuc pham, cong kich, ky thi.",
+      "order": 1
+    },
+    {
+      "title": "Khong spam",
+      "description": "Khong dang noi dung lap lai hoac quang cao trai phep.",
+      "order": 2
+    }
+  ]
+}
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Group settings updated successfully.",
+  "data": {
+    "groupId": "group-id",
+    "privacy": "private",
+    "whoCanPost": "admin_mod",
+    "whoCanInvite": "admin_only",
+    "postApproval": true,
+    "memberApproval": true,
+    "language": "vi",
+    "rules": [
+      {
+        "id": "new-rule-id-1",
+        "title": "Ton trong moi nguoi",
+        "description": "Khong xuc pham, cong kich, ky thi.",
+        "order": 1
+      },
+      {
+        "id": "new-rule-id-2",
+        "title": "Khong spam",
+        "description": "Khong dang noi dung lap lai hoac quang cao trai phep.",
+        "order": 2
+      }
+    ],
+    "updatedAt": "2026-06-23T10:20:00Z"
+  }
+}
+
+Vi du chi doi che do nhom:
+{
+  "privacy": "hidden"
+}
+
+Vi du chi bat phe duyet bai dang:
+{
+  "postApproval": true
+}
+
+Vi du chi doi nguoi duoc moi thanh vien:
+{
+  "whoCanInvite": "admin_mod"
+}
+
+================================================================================
+3. Cap nhat rieng quy tac nhom
+PUT /api/groups/{groupId}/rules
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+  Content-Type: application/json
+
+Path params:
+  groupId: string - ID nhom
+
+Request body:
+  Endpoint nay thay the toan bo danh sach rules hien tai cua nhom.
+  Gui mang rong de xoa het rules.
+
+{
+  "rules": [
+    {
+      "title": "Dung dung chu de",
+      "description": "Bai dang can lien quan den noi dung cua nhom.",
+      "order": 1
+    },
+    {
+      "title": "Bao ve thong tin ca nhan",
+      "description": "Khong chia se so dien thoai, dia chi, token hoac mat khau.",
+      "order": 2
+    }
+  ]
+}
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Group rules updated successfully.",
+  "data": {
+    "groupId": "group-id",
+    "privacy": "private",
+    "whoCanPost": "admin_mod",
+    "whoCanInvite": "admin_only",
+    "postApproval": true,
+    "memberApproval": true,
+    "language": "vi",
+    "rules": [
+      {
+        "id": "new-rule-id-1",
+        "title": "Dung dung chu de",
+        "description": "Bai dang can lien quan den noi dung cua nhom.",
+        "order": 1
+      },
+      {
+        "id": "new-rule-id-2",
+        "title": "Bao ve thong tin ca nhan",
+        "description": "Khong chia se so dien thoai, dia chi, token hoac mat khau.",
+        "order": 2
+      }
+    ],
+    "updatedAt": "2026-06-23T10:25:00Z"
+  }
+}
+
+Vi du xoa tat ca rules:
+{
+  "rules": []
+}
+
+================================================================================
+Error response
+================================================================================
+
+Dang chung:
+{
+  "isSuccess": false,
+  "statusCode": 400,
+  "message": "Privacy must be public, private, or hidden.",
+  "errorCode": "GROUP_PRIVACY_INVALID",
+  "stackTrace": null
+}
+
+Ma loi co the gap:
+  400 VAL.REQUIRED              - Thieu request body
+  400 GROUP_PRIVACY_INVALID     - privacy khong hop le
+  400 GROUP_PERMISSION_INVALID  - whoCanPost / whoCanInvite khong hop le
+  400 GROUP_LANGUAGE_INVALID    - language rong hoac sai do dai
+  400 GROUP_RULE_INVALID        - rule title bi thieu
+  401 AUTH.ACCESS_TOKEN_INVALID - Token khong hop le / het han
+  403 NOT_A_MEMBER              - Nguoi goi khong phai thanh vien active cua nhom
+  403 NOT_ADMIN                 - Thanh vien khong co quyen admin/owner
+  404 GROUP_NOT_FOUND           - Khong tim thay nhom hoac nhom da bi xoa
+
+================================================================================
+Ghi chu implementation
+================================================================================
+
+1. PUT /settings la partial update: field null hoac khong gui se khong doi.
+2. Rieng "rules" neu duoc gui trong PUT /settings thi replace toan bo rules.
+3. PUT /rules luon replace toan bo rules.
+4. Create group mac dinh:
+   - whoCanPost = "anyone"
+   - whoCanInvite = "anyone"
+   - postApproval = false
+   - memberApproval = true neu privacy la private/hidden, nguoc lai false
+   - language = "vi" neu khong gui
+5. Response settings luon tra canonical string values:
+   "public" | "private" | "hidden"
+   "anyone" | "admin_mod" | "admin_only"
