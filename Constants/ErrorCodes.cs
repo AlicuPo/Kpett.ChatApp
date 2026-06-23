@@ -92,6 +92,16 @@
             public const string PERMISSION_INVALID = "GROUP_PERMISSION_INVALID";
             public const string LANGUAGE_INVALID = "GROUP_LANGUAGE_INVALID";
             public const string RULE_INVALID = "GROUP_RULE_INVALID";
+            public const string MEMBER_NOT_FOUND = "GROUP_MEMBER_NOT_FOUND";
+            public const string ALREADY_MEMBER = "GROUP_ALREADY_MEMBER";
+            public const string JOIN_REQUEST_NOT_FOUND = "GROUP_JOIN_REQUEST_NOT_FOUND";
+            public const string JOIN_REQUEST_PENDING = "GROUP_JOIN_REQUEST_PENDING";
+            public const string MEMBER_BLOCKED = "GROUP_MEMBER_BLOCKED";
+            public const string INVITE_INVALID = "GROUP_INVITE_INVALID";
+            public const string FRIEND_REQUIRED = "GROUP_FRIEND_REQUIRED";
+            public const string ROLE_INVALID = "GROUP_ROLE_INVALID";
+            public const string OWNER_ACTION_INVALID = "GROUP_OWNER_ACTION_INVALID";
+            public const string SELF_ACTION_INVALID = "GROUP_SELF_ACTION_INVALID";
         }
 
         public static class SERVER

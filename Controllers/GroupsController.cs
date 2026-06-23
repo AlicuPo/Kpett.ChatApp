@@ -77,6 +77,221 @@ namespace Kpett.ChatApp.Controllers
         //  POST api/groups
         //  Tạo nhóm mới
         // ──────────────────────────────────────────────
+        [HttpPost("{groupId}/join")]
+        public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> JoinGroup(
+            string groupId,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.JoinGroupAsync(userId, groupId, cancel);
+
+            return Ok(new GeneralResponse<GroupMembershipActionResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = result.RequiresApproval ? "Join request sent successfully." : "Joined group successfully.",
+                Data = result
+            });
+        }
+
+        [HttpPost("{groupId}/leave")]
+        public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> LeaveGroup(
+            string groupId,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.LeaveGroupAsync(userId, groupId, cancel);
+
+            return Ok(new GeneralResponse<GroupMembershipActionResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Left group successfully.",
+                Data = result
+            });
+        }
+
+        [HttpPost("{groupId}/invitations")]
+        public async Task<ActionResult<GeneralResponse<GroupInviteMembersResponse>>> InviteMembers(
+            string groupId,
+            [FromBody] InviteGroupMembersRequest request,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.InviteMembersAsync(userId, groupId, request, cancel);
+
+            return Ok(new GeneralResponse<GroupInviteMembersResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Group invitations processed successfully.",
+                Data = result
+            });
+        }
+
+        [HttpPost("{groupId}/join-requests/{targetUserId}/accept")]
+        public async Task<ActionResult<GeneralResponse<GroupMemberResponse>>> AcceptJoinRequest(
+            string groupId,
+            string targetUserId,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.AcceptJoinRequestAsync(userId, groupId, targetUserId, cancel);
+
+            return Ok(new GeneralResponse<GroupMemberResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Join request accepted successfully.",
+                Data = result
+            });
+        }
+
+        [HttpPost("{groupId}/join-requests/{targetUserId}/decline")]
+        public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> DeclineJoinRequest(
+            string groupId,
+            string targetUserId,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.DeclineJoinRequestAsync(userId, groupId, targetUserId, cancel);
+
+            return Ok(new GeneralResponse<GroupMembershipActionResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Join request declined successfully.",
+                Data = result
+            });
+        }
+
+        [HttpGet("{groupId}/members")]
+        public async Task<ActionResult<GeneralResponse<GroupMemberListResponse>>> GetGroupMembers(
+            string groupId,
+            [FromQuery] GroupMemberListRequest request,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.GetGroupMembersAsync(userId, groupId, request, cancel);
+
+            return Ok(new GeneralResponse<GroupMemberListResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Get group members successfully.",
+                Data = result
+            });
+        }
+
+        [HttpGet("{groupId}/join-requests")]
+        public async Task<ActionResult<GeneralResponse<GroupMemberListResponse>>> GetPendingJoinRequests(
+            string groupId,
+            [FromQuery] GroupMemberListRequest request,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.GetPendingJoinRequestsAsync(userId, groupId, request, cancel);
+
+            return Ok(new GeneralResponse<GroupMemberListResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Get pending join requests successfully.",
+                Data = result
+            });
+        }
+
+        [HttpDelete("{groupId}/members/{targetUserId}")]
+        public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> KickMember(
+            string groupId,
+            string targetUserId,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.KickMemberAsync(userId, groupId, targetUserId, cancel);
+
+            return Ok(new GeneralResponse<GroupMembershipActionResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Group member removed successfully.",
+                Data = result
+            });
+        }
+
+        [HttpPost("{groupId}/members/{targetUserId}/block")]
+        public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> BlockMember(
+            string groupId,
+            string targetUserId,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.BlockMemberAsync(userId, groupId, targetUserId, cancel);
+
+            return Ok(new GeneralResponse<GroupMembershipActionResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Group member blocked successfully.",
+                Data = result
+            });
+        }
+
+        [HttpPut("{groupId}/members/{targetUserId}/role")]
+        public async Task<ActionResult<GeneralResponse<GroupMemberResponse>>> UpdateMemberRole(
+            string groupId,
+            string targetUserId,
+            [FromBody] UpdateGroupMemberRoleRequest request,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.UpdateMemberRoleAsync(userId, groupId, targetUserId, request, cancel);
+
+            return Ok(new GeneralResponse<GroupMemberResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Group member role updated successfully.",
+                Data = result
+            });
+        }
+
+        [HttpDelete("{groupId}/members/{targetUserId}/role")]
+        public async Task<ActionResult<GeneralResponse<GroupMemberResponse>>> RevokeMemberRole(
+            string groupId,
+            string targetUserId,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.RevokeMemberRoleAsync(userId, groupId, targetUserId, cancel);
+
+            return Ok(new GeneralResponse<GroupMemberResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Group member role revoked successfully.",
+                Data = result
+            });
+        }
+
+        [HttpGet("{groupId}/admins-moderators")]
+        public async Task<ActionResult<GeneralResponse<GroupMemberListResponse>>> GetAdminsAndModerators(
+            string groupId,
+            [FromQuery] GroupMemberListRequest request,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.GetAdminsAndModeratorsAsync(userId, groupId, request, cancel);
+
+            return Ok(new GeneralResponse<GroupMemberListResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Get group admins and moderators successfully.",
+                Data = result
+            });
+        }
+
         [HttpPost]
         public async Task<ActionResult<GeneralResponse<CreateGroupResponse>>> CreateGroup(
             [FromBody] CreateGroupRequest request,
