@@ -80,6 +80,20 @@
             public const string PARENT_COMMENT_NOT_FOUND = "COMMENT.PARENT_COMMENT_NOT_FOUND";
         }
 
+        public static class GROUP
+        {
+            public const string USER_ID_REQUIRED = "GROUP_USER_ID_REQUIRED";
+            public const string NAME_REQUIRED = "GROUP_NAME_REQUIRED";
+            public const string NOT_FOUND = "GROUP_NOT_FOUND";
+            public const string NOT_A_MEMBER = "NOT_A_MEMBER";
+            public const string NOT_ADMIN = "NOT_ADMIN";
+            public const string NOT_OWNER = "NOT_OWNER";
+            public const string PRIVACY_INVALID = "GROUP_PRIVACY_INVALID";
+            public const string PERMISSION_INVALID = "GROUP_PERMISSION_INVALID";
+            public const string LANGUAGE_INVALID = "GROUP_LANGUAGE_INVALID";
+            public const string RULE_INVALID = "GROUP_RULE_INVALID";
+        }
+
         public static class SERVER
         {
             public const string SYSTEM_ERROR = "SERVER.SYSTEM_ERROR";

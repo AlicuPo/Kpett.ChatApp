@@ -37,6 +37,8 @@ public AppDbContext(DbContextOptions<AppDbContext> options)
 
     public virtual DbSet<GroupMember> GroupMembers { get; set; }
 
+    public virtual DbSet<GroupRule> GroupRules { get; set; }
+
     public virtual DbSet<MentionComment> MentionComments { get; set; }
 
     public virtual DbSet<Notification> Notifications { get; set; }
@@ -78,6 +80,7 @@ public AppDbContext(DbContextOptions<AppDbContext> options)
         modelBuilder.Entity<FriendRequest>().HasKey(e => e.Id);
         modelBuilder.Entity<Group>().HasKey(e => e.Id);
         modelBuilder.Entity<GroupMember>().HasKey(e => e.Id);
+        modelBuilder.Entity<GroupRule>().HasKey(e => e.Id);
         modelBuilder.Entity<Message>().HasKey(e => e.Id);
         modelBuilder.Entity<Notification>().HasKey(e => e.Id);
         modelBuilder.Entity<MentionComment>().HasKey(e => e.Id);

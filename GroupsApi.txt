@@ -1,0 +1,332 @@
+================================================================================
+  GROUPS API — Tài liệu Request / Response / Error
+  Base URL : /api/groups
+  Auth     : Bearer Token (JWT) — tất cả endpoints đều yêu cầu [Authorize]
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  CẤU TRÚC RESPONSE CHUNG (GeneralResponse<T>)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  {
+    "isSuccess"  : boolean,   // true | false
+    "statusCode" : number,    // HTTP status code
+    "message"    : string,    // mô tả kết quả
+    "data"       : object     // payload (null nếu không có data)
+  }
+
+  CẤU TRÚC ERROR RESPONSE (khi thất bại):
+  {
+    "isSuccess"  : false,
+    "statusCode" : number,
+    "message"    : string,    // mô tả lỗi
+    "errorCode"  : string,    // mã lỗi nội bộ (xem bảng Error Codes bên dưới)
+    "stackTrace" : string     // chỉ có trong môi trường Development
+  }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  BẢNG ERROR CODES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ErrorCode                  | HTTP | Ý nghĩa
+  ---------------------------|------|----------------------------------------
+  USER_ID_REQUIRED           | 400  | userId rỗng (không xảy ra với JWT hợp lệ)
+  GROUP_NAME_REQUIRED        | 400  | Chưa truyền name khi tạo nhóm
+  GROUP_NOT_FOUND            | 404  | groupId / slug không tồn tại hoặc đã xóa
+  NOT_A_MEMBER               | 403  | Người dùng không phải thành viên nhóm
+  NOT_ADMIN                  | 403  | Chỉ admin mới được sửa thông tin nhóm
+  NOT_OWNER                  | 403  | Chỉ owner / admin mới được xóa nhóm
+  AUTH.ACCESS_TOKEN_INVALID  | 401  | Token không hợp lệ hoặc hết hạn
+  SERVER.SYSTEM_ERROR        | 500  | Lỗi server không xác định
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1. TẠO NHÓM — POST /api/groups
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Headers:
+    Authorization : Bearer <access_token>
+    Content-Type  : application/json
+
+  REQUEST BODY (CreateGroupRequest):
+  {
+    "name"          : string   [BẮT BUỘC]  — Tên nhóm
+    "description"   : string   [tùy chọn]  — Mô tả nhóm
+    "type"          : string   [tùy chọn]  — "public" | "private" | "hidden"  (mặc định: "public")
+    "avatarUrl"     : string   [tùy chọn]  — URL ảnh đại diện nhóm
+    "coverImageUrl" : string   [tùy chọn]  — URL ảnh bìa nhóm
+    "language"      : string   [tùy chọn]  — Ngôn ngữ nhóm  (mặc định: "vi")
+    "rules"         : string[] [tùy chọn]  — Danh sách nội quy (mảng chuỗi)
+  }
+
+  RESPONSE THÀNH CÔNG — 201 Created:
+  {
+    "isSuccess"  : true,
+    "statusCode" : 201,
+    "message"    : "Group created successfully.",
+    "data": {
+      "id"        : string,   // ID nhóm vừa tạo (GUID)
+      "name"      : string,   // Tên nhóm
+      "slug"      : null,     // Slug (chưa implement — tạm null)
+      "createdAt" : string    // ISO 8601 datetime UTC
+    }
+  }
+
+  LOGIC TỰ ĐỘNG:
+    • Người tạo được tự động thêm vào GroupMembers với role = "admin"
+    • memberApproval = true nếu type là "private" hoặc "hidden"
+    • postApproval = false (mặc định)
+    • status = "active"
+
+  LỖI CÓ THỂ GẶP:
+    400 — GROUP_NAME_REQUIRED : thiếu trường "name"
+    401 — Token không hợp lệ
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  2. CẬP NHẬT NHÓM — PUT /api/groups/{groupId}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Headers:
+    Authorization : Bearer <access_token>
+    Content-Type  : application/json
+
+  PATH PARAMS:
+    groupId : string [BẮT BUỘC] — ID của nhóm cần cập nhật
+
+  REQUEST BODY (UpdateGroupRequest) — chỉ truyền field muốn thay đổi:
+  {
+    "name"          : string       [tùy chọn] — Tên mới
+    "description"   : string       [tùy chọn] — Mô tả mới (truyền "" để xóa)
+    "privacy"       : number       [tùy chọn] — 0=Public | 1=Private | 2=Hidden
+    "avatarUrl"     : string       [tùy chọn] — URL ảnh đại diện mới
+    "coverImageUrl" : string       [tùy chọn] — URL ảnh bìa mới
+    "language"      : string       [tùy chọn] — Ngôn ngữ nhóm
+    "rules"         : string[]     [tùy chọn] — Danh sách nội quy mới
+  }
+
+  LƯU Ý: Các field null / không truyền sẽ KHÔNG bị thay đổi.
+
+  RESPONSE THÀNH CÔNG — 200 OK:
+  {
+    "isSuccess"  : true,
+    "statusCode" : 200,
+    "message"    : "Group updated successfully.",
+    "data": {
+      "id"              : string,
+      "name"            : string,
+      "avatarUrl"       : string | null,
+      "description"     : string | null,
+      "type"            : string,           // "public" | "private" | "hidden"
+      "createdAt"       : string,           // ISO 8601 datetime UTC
+      "createdByUserId" : string | null,
+      "updatedAt"       : string | null,    // ISO 8601 datetime UTC
+      "isMember"        : boolean,          // người gọi có phải thành viên không
+      "myRole"          : string | null,    // "admin" | "moderator" | "member" | null
+      "memberCount"     : number            // tổng số thành viên active
+    }
+  }
+
+  QUYỀN:
+    • Chỉ thành viên có role = "admin" mới được cập nhật
+
+  LỖI CÓ THỂ GẶP:
+    404 — GROUP_NOT_FOUND  : groupId không tồn tại
+    403 — NOT_A_MEMBER     : người gọi không phải thành viên nhóm
+    403 — NOT_ADMIN        : thành viên nhưng không phải admin
+    401 — Token không hợp lệ
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  3. XÓA NHÓM — DELETE /api/groups/{groupId}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Headers:
+    Authorization : Bearer <access_token>
+    Content-Type  : application/json
+
+  PATH PARAMS:
+    groupId : string [BẮT BUỘC] — ID của nhóm cần xóa
+
+  REQUEST BODY (DeleteGroupRequest) — tùy chọn, có thể bỏ qua:
+  {
+    "reason" : string [tùy chọn] — Lý do xóa nhóm (ghi nhận log)
+  }
+
+  RESPONSE THÀNH CÔNG — 200 OK:
+  {
+    "isSuccess"  : true,
+    "statusCode" : 200,
+    "message"    : "Group deleted successfully."
+    // không có trường "data"
+  }
+
+  LOGIC:
+    • Soft delete: chỉ đánh dấu status = "deleted", không xóa khỏi DB
+    • updatedAt và updatedByUserId được cập nhật
+
+  QUYỀN:
+    • ownerUserId == userId  HOẶC  thành viên có role = "admin"
+
+  LỖI CÓ THỂ GẶP:
+    404 — GROUP_NOT_FOUND : groupId không tồn tại
+    403 — NOT_OWNER       : không phải owner và không phải admin
+    401 — Token không hợp lệ
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  4. XEM CHI TIẾT NHÓM (theo ID) — GET /api/groups/{groupId}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Headers:
+    Authorization : Bearer <access_token>
+
+  PATH PARAMS:
+    groupId : string [BẮT BUỘC]
+
+  REQUEST BODY: không có
+
+  RESPONSE THÀNH CÔNG — 200 OK:
+  {
+    "isSuccess"  : true,
+    "statusCode" : 200,
+    "message"    : "Get group detail successfully.",
+    "data": {
+      "id"              : string,
+      "name"            : string,
+      "avatarUrl"       : string | null,
+      "description"     : string | null,
+      "type"            : string,           // "public" | "private" | "hidden"
+      "createdAt"       : string,           // ISO 8601 datetime UTC
+      "createdByUserId" : string | null,
+      "updatedAt"       : string | null,
+      "isMember"        : boolean,
+      "myRole"          : string | null,    // "admin" | "moderator" | "member" | null
+      "memberCount"     : number
+    }
+  }
+
+  LỖI CÓ THỂ GẶP:
+    404 — GROUP_NOT_FOUND : groupId không tồn tại hoặc đã bị xóa
+    401 — Token không hợp lệ
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  5. XEM CHI TIẾT NHÓM (theo Slug) — GET /api/groups/slug/{slug}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Headers:
+    Authorization : Bearer <access_token>
+
+  PATH PARAMS:
+    slug : string [BẮT BUỘC] — Slug của nhóm
+           [LƯU Ý]: Hiện tại slug = groupId (chưa có trường Slug riêng trên model)
+
+  REQUEST BODY: không có
+
+  RESPONSE: giống hệt endpoint GET /api/groups/{groupId}
+
+  LỖI CÓ THỂ GẶP:
+    404 — GROUP_NOT_FOUND : slug không tìm thấy hoặc nhóm đã bị xóa
+    401 — Token không hợp lệ
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  6. TÌM KIẾM NHÓM — GET /api/groups/search
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Headers:
+    Authorization : Bearer <access_token>
+
+  QUERY PARAMS (SearchGroupRequest):
+    keyword  : string  [tùy chọn] — Từ khóa tìm theo tên hoặc mô tả
+    type     : string  [tùy chọn] — Lọc theo loại: "public" | "private" | "hidden"
+    language : string  [tùy chọn] — Lọc theo ngôn ngữ (chưa lưu trên model — bỏ qua)
+    sortBy   : number  [tùy chọn] — 0=Relevance | 1=NewestCreated | 2=MostMembers | 3=MostActive
+                                    (mặc định: 0, hiện chỉ sort theo createdAt desc)
+    page     : number  [tùy chọn] — Trang hiện tại  (mặc định: 1)
+    pageSize : number  [tùy chọn] — Số item mỗi trang (mặc định: 20)
+
+  Ví dụ: GET /api/groups/search?keyword=lập trình&type=public&page=1&pageSize=10
+
+  RESPONSE THÀNH CÔNG — 200 OK:
+  {
+    "isSuccess"  : true,
+    "statusCode" : 200,
+    "message"    : "Search groups successfully.",
+    "data": {
+      "items": [
+        {
+          "id"          : string,
+          "name"        : string | null,
+          "slug"        : string,       // tạm = id
+          "avatarUrl"   : string | null,
+          "privacy"     : number,       // 0=Public | 1=Private | 2=Hidden
+          "memberCount" : number,
+          "isMember"    : boolean       // người gọi có tham gia nhóm này chưa
+        }
+      ],
+      "totalCount" : number,  // tổng số nhóm thỏa điều kiện
+      "page"       : number,  // trang hiện tại
+      "pageSize"   : number   // số item mỗi trang
+    }
+  }
+
+  LỖI CÓ THỂ GẶP:
+    401 — Token không hợp lệ
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  7. DANH SÁCH NHÓM CỦA TÔI — GET /api/groups/me
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Headers:
+    Authorization : Bearer <access_token>
+
+  QUERY PARAMS (MyGroupsRequest):
+    filterByRole : string [tùy chọn] — Lọc theo vai trò trong nhóm:
+                   "admin" | "moderator" | "member"
+                   (không truyền = lấy tất cả)
+    page         : number [tùy chọn] — Trang hiện tại  (mặc định: 1)
+    pageSize     : number [tùy chọn] — Số item mỗi trang (mặc định: 20)
+
+  Ví dụ: GET /api/groups/me?filterByRole=admin&page=1&pageSize=20
+
+  RESPONSE THÀNH CÔNG — 200 OK:
+  {
+    "isSuccess"  : true,
+    "statusCode" : 200,
+    "message"    : "Get my groups successfully.",
+    "data": {
+      "items": [
+        {
+          "id"              : string,
+          "name"            : string | null,
+          "slug"            : string,    // tạm = id
+          "avatarUrl"       : string | null,
+          "myRole"          : number,    // 0=Member | 1=Moderator | 2=Admin
+          "memberCount"     : number,
+          "unreadPostCount" : number,    // luôn = 0 (chưa implement)
+          "joinedAt"        : string     // ISO 8601 datetime UTC
+        }
+      ],
+      "totalCount" : number  // tổng số nhóm của người dùng (chưa lọc theo trang)
+    }
+  }
+
+  LỖI CÓ THỂ GẶP:
+    401 — Token không hợp lệ
+
+
+================================================================================
+  GHI CHÚ CHUNG
+================================================================================
+  1. Tất cả datetime đều ở UTC, định dạng ISO 8601.
+     VD: "2026-06-19T03:00:00Z"
+
+  2. userId được lấy tự động từ JWT claim — FE không cần truyền.
+
+  3. Trường "privacy" trong UpdateGroupRequest là enum số:
+       0 = Public   (công khai)
+       1 = Private  (riêng tư — cần duyệt tham gia)
+       2 = Hidden   (ẩn — không xuất hiện khi tìm kiếm)
+
+  4. Xóa nhóm là SOFT DELETE — nhóm vẫn tồn tại trong DB với status="deleted".
+     Các endpoint GET đều tự lọc status != "deleted".
+
+  5. TODO (chưa implement):
+     • Trường "slug" thực sự (đang tạm dùng ID)
+     • unreadPostCount (đang trả về 0)
+     • Lọc theo language trong search
+     • sortBy MostMembers, MostActive
+================================================================================
