@@ -26,6 +26,18 @@ namespace Kpett.ChatApp.Enums
         Follow = 2
     }
 
+    public enum PostStatus
+    {
+        [Description("approved")]
+        Approved = 0,
+
+        [Description("pending")]
+        Pending = 1,
+
+        [Description("rejected")]
+        Rejected = 2
+    }
+
     public enum PostReactionType
     {
         [Description("Like")]

@@ -18,6 +18,9 @@ public partial class Post
     [MaxLength(450)]
     public string? GroupId { get; set; }
 
+    [MaxLength(32)]
+    public string? Status { get; set; }
+
     public string Type { get; set; } = null!;
 
     public int LikeCount { get; set; }

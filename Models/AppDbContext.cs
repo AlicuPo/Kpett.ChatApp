@@ -141,6 +141,10 @@ public AppDbContext(DbContextOptions<AppDbContext> options)
             .HasIndex(e => new { e.CreatedByUserId, e.IsDeleted, e.PinnedAt, e.CreatedAt, e.Id })
             .HasDatabaseName("IX_Posts_User_Deleted_PinnedAt_CreatedAt_Id");
 
+        modelBuilder.Entity<Post>()
+            .HasIndex(e => new { e.GroupId, e.IsDeleted, e.Status, e.CreatedAt, e.Id })
+            .HasDatabaseName("IX_Posts_Group_Deleted_Status_CreatedAt_Id");
+
         modelBuilder.Entity<Comment>()
             .HasIndex(e => e.PostId)
             .HasDatabaseName("IX_Comments_PostId");

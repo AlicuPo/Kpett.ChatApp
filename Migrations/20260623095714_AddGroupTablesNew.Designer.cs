@@ -4,6 +4,7 @@ using Kpett.ChatApp.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Kpett.ChatApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260623095714_AddGroupTablesNew")]
+    partial class AddGroupTablesNew
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -626,10 +629,6 @@ namespace Kpett.ChatApp.Migrations
                     b.Property<string>("Privacy")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Status")
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
-
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -641,9 +640,6 @@ namespace Kpett.ChatApp.Migrations
 
                     b.HasIndex("CreatedByUserId", "IsDeleted", "PinnedAt", "CreatedAt", "Id")
                         .HasDatabaseName("IX_Posts_User_Deleted_PinnedAt_CreatedAt_Id");
-
-                    b.HasIndex("GroupId", "IsDeleted", "Status", "CreatedAt", "Id")
-                        .HasDatabaseName("IX_Posts_Group_Deleted_Status_CreatedAt_Id");
 
                     b.ToTable("Posts");
                 });
