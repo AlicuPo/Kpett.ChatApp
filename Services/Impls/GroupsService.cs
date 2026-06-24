@@ -38,10 +38,7 @@ namespace Kpett.ChatApp.Services.Impls
             _dbContext = dbContext;
         }
 
-        public async Task<CreateGroupResponse> CreateGroupAsync(
-            string userId,
-            CreateGroupRequest request,
-            CancellationToken cancel = default)
+        public async Task<CreateGroupResponse> CreateGroupAsync(string userId, CreateGroupRequest request, CancellationToken cancel = default)
         {
             EnsureUserId(userId);
             EnsureRequest(request);

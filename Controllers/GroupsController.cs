@@ -1,10 +1,15 @@
 using Kpett.ChatApp.DTOs.Request.Group;
+using Kpett.ChatApp.DTOs.Request.Post;
+using Kpett.ChatApp.DTOs.Request.Shared;
 using Kpett.ChatApp.DTOs.Response.Group;
+using Kpett.ChatApp.DTOs.Response.Post;
 using Kpett.ChatApp.DTOs.Response.Shared;
+using Kpett.ChatApp.Filters;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Kpett.ChatApp.Controllers
 {
@@ -14,10 +19,12 @@ namespace Kpett.ChatApp.Controllers
     public class GroupsController : ControllerBase
     {
         private readonly IGroupsService _groupsService;
+        private readonly IPostService _postService;
 
-        public GroupsController(IGroupsService groupsService)
+        public GroupsController(IGroupsService groupsService, IPostService postService)
         {
             _groupsService = groupsService;
+            _postService = postService;
         }
 
         [HttpGet("{groupId}/settings")]
@@ -288,6 +295,63 @@ namespace Kpett.ChatApp.Controllers
                 IsSuccess = true,
                 StatusCode = StatusCodes.Status200OK,
                 Message = "Get group admins and moderators successfully.",
+                Data = result
+            });
+        }
+
+        [HttpGet("{groupId}/posts")]
+        [AllowAnonymous]
+        [OptionalAuthorize]
+        public async Task<ActionResult<GeneralResponse<PaginatedData<PostFeedResponse>>>> GetGroupPosts(
+            string groupId,
+            [FromQuery] CursorPaginationRequest request,
+            CancellationToken cancel)
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var result = await _postService.GetGroupPostsAsync(currentUserId, groupId, request, cancel);
+
+            return Ok(new GeneralResponse<PaginatedData<PostFeedResponse>>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Get group posts successfully.",
+                Data = result
+            });
+        }
+
+        [HttpPost("{groupId}/posts")]
+        public async Task<ActionResult<GeneralResponse<PostFeedResponse>>> CreateGroupPost(
+            string groupId,
+            [FromBody] PostRequest request,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _postService.CreateGroupPostAsync(userId, groupId, request, cancel);
+
+            return StatusCode(StatusCodes.Status201Created, new GeneralResponse<PostFeedResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status201Created,
+                Message = result.Status == "pending" ? "Group post submitted for approval." : "Group post created successfully.",
+                Data = result
+            });
+        }
+
+        [HttpPut("{groupId}/posts/{postId}/status")]
+        public async Task<ActionResult<GeneralResponse<PostFeedResponse>>> UpdateGroupPostStatus(
+            string groupId,
+            string postId,
+            [FromBody] UpdateGroupPostStatusRequest request,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _postService.UpdateGroupPostStatusAsync(userId, groupId, postId, request, cancel);
+
+            return Ok(new GeneralResponse<PostFeedResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Group post status updated successfully.",
                 Data = result
             });
         }

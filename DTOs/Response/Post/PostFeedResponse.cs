@@ -15,6 +15,12 @@ namespace Kpett.ChatApp.DTOs.Response.Post
 
         public string Type { get; set; } = null!;
 
+        public string? GroupId { get; set; }
+
+        public PostGroupSummaryResponse? Group { get; set; }
+
+        public string? Status { get; set; }
+
         public List<string> Hashtags { get; set; } = new List<string>();
 
         public List<MediaPostResponse> Media { get; set; } = new List<MediaPostResponse>();
@@ -28,5 +34,16 @@ namespace Kpett.ChatApp.DTOs.Response.Post
         public DateTime CreatedAt { get; set; }
 
         public DateTime? UpdatedAt { get; set; }
+    }
+
+    public class PostGroupSummaryResponse
+    {
+        public string Id { get; set; } = string.Empty;
+
+        public string? Name { get; set; }
+
+        public string? AvatarUrl { get; set; }
+
+        public string? Privacy { get; set; }
     }
 }
