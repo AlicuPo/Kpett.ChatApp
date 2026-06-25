@@ -8,7 +8,9 @@ namespace Kpett.ChatApp.Helper
     {
         public static string GetRequiredUserId(this ClaimsPrincipal? user)
         {
-            var userId = user?.FindFirstValue(ClaimTypes.NameIdentifier);
+            var userId = user?.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? user?.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.NameId)
+                ?? user?.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub);
 
             if (userId == null)
             {
