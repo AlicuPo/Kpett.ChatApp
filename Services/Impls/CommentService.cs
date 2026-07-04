@@ -16,6 +16,7 @@ using System.Text.RegularExpressions;
 
 namespace Kpett.ChatApp.Services.Impls
 {
+    /// <summary>Service quản lý bình luận: thêm, sửa, xoá, like/unlike, lấy danh sách.</summary>
     public class CommentService : ICommentService
     {
         private static readonly Regex MentionTokenRegex = new(
@@ -25,6 +26,7 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly AppDbContext _dbContext;
         private readonly IMediator _mediator;
         private readonly ILogger<CommentService> _logger;
+        /// <summary>Khởi tạo service với các dependencies.</summary>
         public CommentService(AppDbContext dbContext, IMediator mediator, ILogger<CommentService> logger)
         {
             _dbContext = dbContext;
@@ -32,6 +34,7 @@ namespace Kpett.ChatApp.Services.Impls
             _logger = logger;
         }
 
+        /// <inheritdoc />
         public async Task<CommentListItemDTO> AddCommentAsync(string postId, string userId, string content, string? parentCommentId, CancellationToken cancel)
         {
             _logger.LogInformation("User {UserId} is adding comment to post {PostId}. HasParent: {HasParent}", userId, postId, !string.IsNullOrWhiteSpace(parentCommentId));
@@ -152,6 +155,7 @@ namespace Kpett.ChatApp.Services.Impls
             }
         }
 
+        /// <inheritdoc />
         public async Task<PaginatedData<CommentListItemDTO>> GetCommentsAsync(
             string postId,
             string parentCommentId,
@@ -267,6 +271,7 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
+        /// <inheritdoc />
         public async Task<CommentListItemDTO> UpdateCommentAsync(
             string commentId,
             string userId,
@@ -324,6 +329,7 @@ namespace Kpett.ChatApp.Services.Impls
             return MapCommentListItem(comment, user, userMedia, mentions, false, user.Id);
         }
 
+        /// <inheritdoc />
         public async Task DeleteCommentAsync(string commentId, string userId, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
@@ -377,6 +383,7 @@ namespace Kpett.ChatApp.Services.Impls
             }
         }
 
+        /// <inheritdoc />
         public async Task<CommentListItemDTO> LikeCommentAsync(string commentId, string userId, CancellationToken cancel)
         {
             _logger.LogInformation("User {UserId} is liking comment {CommentId}", userId, commentId);
@@ -435,6 +442,7 @@ namespace Kpett.ChatApp.Services.Impls
             return await MapCommentListItemByIdAsync(commentId, userId, true, cancel);
         }
 
+        /// <inheritdoc />
         public async Task<CommentListItemDTO> UnlikeCommentAsync(string commentId, string userId, CancellationToken cancel)
         {
             _logger.LogInformation("User {UserId} is unliking comment {CommentId}", userId, commentId);

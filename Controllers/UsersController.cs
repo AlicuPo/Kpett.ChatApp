@@ -27,7 +27,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<ActionResult<GeneralResponse<UserGeneralInfoResponse>>> GetMyInfo(CancellationToken cancel = default)
         {
             var userId = User.GetRequiredUserId();
-            var myInfo = await _userService.GetMyGeneralInfo(userId, cancel);
+            var myInfo = await _userService.GetMyGeneralInfoAsync(userId, cancel);
             return Ok(new GeneralResponse<UserGeneralInfoResponse>
             {
                 StatusCode = StatusCodes.Status200OK,
@@ -42,7 +42,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<ActionResult<UserGeneralInfoResponse>> UpdateUserGeneraInfo([FromBody] UpdateGeneralInfoUserRequest request, CancellationToken cancel = default)
         {
             var currentUserId = User.GetRequiredUserId();
-            var result = await _userService.UpdateUserGeneralInfo(currentUserId, request, cancel);
+            var result = await _userService.UpdateUserGeneralInfoAsync(currentUserId, request, cancel);
             return Ok(new GeneralResponse<UserGeneralInfoResponse>
             {
                 StatusCode = StatusCodes.Status200OK,
@@ -57,7 +57,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<ActionResult<UserMediaResponse>> UpdateUserMedia([FromBody] MediaRequest media, [FromQuery] string mediaType, CancellationToken cancel = default)
         {
             var currentUserId = User.GetRequiredUserId();
-            var result = await _userService.UpdateUserMedia(currentUserId, media, mediaType);
+            var result = await _userService.UpdateUserMediaAsync(currentUserId, media, mediaType);
             return Ok(new GeneralResponse<UserMediaResponse>
             {
                 StatusCode = StatusCodes.Status200OK,
@@ -86,7 +86,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<IActionResult> DeleteUser(string id, CancellationToken cancel = default)
         {
             var currentUserId = User.GetRequiredUserId();
-            var result = await _userService.DeleteUser(id, currentUserId, cancel);
+            var result = await _userService.DeleteUserAsync(id, currentUserId, cancel);
 
             return Ok(new GeneralResponse<bool>
             {
@@ -100,7 +100,7 @@ namespace Kpett.ChatApp.Controllers
         [HttpGet("check-username")]
         public async Task<IActionResult> CheckUsername([FromQuery] string username, CancellationToken cancel = default)
         {
-            var result = await _userService.CheckExistByUsername(username, cancel);
+            var result = await _userService.CheckExistByUsernameAsync(username, cancel);
 
             return Ok(new GeneralResponse<UsernameCheckResponse>
             {
@@ -115,7 +115,7 @@ namespace Kpett.ChatApp.Controllers
         [Authorize]
         public async Task<IActionResult> AccountSetup([FromBody] AccountSetupRequest accountSetupRequest, CancellationToken cancel = default)
         {
-            var result = await _userService.AccountSetup(User.GetRequiredUserId(), accountSetupRequest, cancel);
+            var result = await _userService.AccountSetupAsync(User.GetRequiredUserId(), accountSetupRequest, cancel);
 
             return Ok(new GeneralResponse<UserResponse>
             {

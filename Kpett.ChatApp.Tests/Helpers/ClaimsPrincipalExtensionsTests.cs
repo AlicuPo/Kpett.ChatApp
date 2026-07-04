@@ -21,6 +21,18 @@ public class ClaimsPrincipalExtensionsTests
     }
 
     [Fact]
+    public void GetRequiredUserId_ReturnsJwtNameIdClaim()
+    {
+        var user = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.NameId, "user-123")],
+            authenticationType: "Test"));
+
+        var userId = user.GetRequiredUserId();
+
+        Assert.Equal("user-123", userId);
+    }
+
+    [Fact]
     public void GetRequiredUserId_ThrowsUnauthorized_WhenClaimIsMissing()
     {
         var user = new ClaimsPrincipal(new ClaimsIdentity(authenticationType: "Test"));

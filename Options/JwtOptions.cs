@@ -1,4 +1,4 @@
-﻿namespace Kpett.ChatApp.Configs
+﻿namespace Kpett.ChatApp.Options
 {
     public class JwtOptions
     {

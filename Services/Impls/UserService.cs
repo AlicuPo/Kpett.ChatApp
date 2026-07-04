@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Kpett.ChatApp.Services.Impls
 {
+    /// <summary>Service quản lý người dùng: thông tin cá nhân, media, tìm kiếm, thiết lập tài khoản.</summary>
     public class UserService : IUserService
     {
         private readonly AppDbContext _dbcontext;
@@ -23,6 +24,7 @@ namespace Kpett.ChatApp.Services.Impls
 
         private readonly string AVATAR_TYPE = UserMediaType.Avatar.GetDescription();
         private readonly string COVER_TYPE = UserMediaType.Cover.GetDescription();
+        /// <summary>Khởi tạo service với các dependencies.</summary>
         public UserService(AppDbContext dbContext, IRedisService redisService, ILogger<UserService> logger)
         {
             _dbcontext = dbContext;
@@ -30,7 +32,8 @@ namespace Kpett.ChatApp.Services.Impls
             _logger = logger;
         }
 
-        public async Task<UserGeneralInfoResponse> GetMyGeneralInfo(string userId, CancellationToken cancel)
+        /// <inheritdoc />
+        public async Task<UserGeneralInfoResponse> GetMyGeneralInfoAsync(string userId, CancellationToken cancel)
         {
             var user = await _dbcontext.Users
                 .AsNoTracking()
@@ -71,7 +74,8 @@ namespace Kpett.ChatApp.Services.Impls
             return user;
         }
 
-        public async Task<(List<UserResponse>, int)> GetAllUser(UserRequest search, CancellationToken cancel = default)
+        /// <inheritdoc />
+        public async Task<(List<UserResponse>, int)> GetAllUserAsync(UserRequest search, CancellationToken cancel = default)
         {
             var query = _dbcontext.Users.AsQueryable().AsNoTracking();
 
@@ -105,7 +109,8 @@ namespace Kpett.ChatApp.Services.Impls
             return (users, totalCount);
         }
 
-        public async Task<UserGeneralInfoResponse> UpdateUserGeneralInfo(string currentUserId, UpdateGeneralInfoUserRequest request, CancellationToken cancel)
+        /// <inheritdoc />
+        public async Task<UserGeneralInfoResponse> UpdateUserGeneralInfoAsync(string currentUserId, UpdateGeneralInfoUserRequest request, CancellationToken cancel)
         {
             _logger.LogInformation("User {userId} is updating general info", currentUserId);
 
@@ -159,7 +164,8 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
-        public async Task<UserMediaResponse> UpdateUserMedia(string currentUserId, MediaRequest media, string mediaType)
+        /// <inheritdoc />
+        public async Task<UserMediaResponse> UpdateUserMediaAsync(string currentUserId, MediaRequest media, string mediaType)
         {
             _logger.LogInformation("User {userId} is updating media", currentUserId);
 
@@ -208,11 +214,12 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
+        /// <inheritdoc />
         public async Task<bool> DeleteUserMediaPrimaryAsync(string currentUserId, string mediaType)
         {
             _logger.LogInformation("User {userId} is deleting primary media of type {mediaType}", currentUserId, mediaType);
 
-            if (_dbcontext.Users.AnyAsync(u => u.Id == currentUserId).Result == false)
+            if (!await _dbcontext.Users.AnyAsync(u => u.Id == currentUserId))
             {
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
@@ -238,7 +245,8 @@ namespace Kpett.ChatApp.Services.Impls
             return true;
         }
 
-        public async Task<bool> DeleteUser(string id, string currentUserId, CancellationToken cancel)
+        /// <inheritdoc />
+        public async Task<bool> DeleteUserAsync(string id, string currentUserId, CancellationToken cancel)
         {
             if (id != currentUserId)
             {
@@ -257,7 +265,8 @@ namespace Kpett.ChatApp.Services.Impls
             return true;
         }
 
-        public async Task<UsernameCheckResponse> CheckExistByUsername(string username, CancellationToken cancel)
+        /// <inheritdoc />
+        public async Task<UsernameCheckResponse> CheckExistByUsernameAsync(string username, CancellationToken cancel)
         {
             _logger.LogInformation("Checking availability of username {username}", username);
 
@@ -276,7 +285,8 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
-        public async Task<UserResponse> AccountSetup(string userId, AccountSetupRequest accountSetupRequest, CancellationToken cancel)
+        /// <inheritdoc />
+        public async Task<UserResponse> AccountSetupAsync(string userId, AccountSetupRequest accountSetupRequest, CancellationToken cancel)
         {
             var user = await _dbcontext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancel);
             if (user == null)
@@ -317,6 +327,7 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
+        /// <inheritdoc />
         public async Task<UserWithStatResponse> GetUserStatsAsync(string userId, CancellationToken cancel)
         {
             var userStats = await _dbcontext.Users
@@ -356,6 +367,7 @@ namespace Kpett.ChatApp.Services.Impls
             return userStats;
         }
 
+        /// <inheritdoc />
         public async Task<UserProfileResponse> GetUserProfileAsync(string targetUsername, string? currentUserId, CancellationToken cancel)
         {
             bool isGuest = string.IsNullOrEmpty(currentUserId);
@@ -473,6 +485,7 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
+        /// <inheritdoc />
         public async Task<PaginatedData<UserResponse>> SearchUsersAsync(string? currentUserId, string keyword, int limit, string? cursor, CancellationToken cancel)
         {
             limit = limit <= 0 ? 20 : Math.Min(limit, 50);

@@ -281,7 +281,7 @@ namespace Kpett.ChatApp.Controllers
             {
                 IsSuccess = true,
                 Data = paginatedMembers,
-                Message = "Get paticipant successfully",
+                Message = "Get participant successfully",
                 StatusCode = 200
             });
         }

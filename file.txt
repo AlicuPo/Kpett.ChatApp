@@ -1,0 +1,94 @@
+Group posts FE update notes
+===========================
+
+Backend direction:
+- User posts and group posts use the same Posts table.
+- A post is a group post when groupId is not null.
+- FE should use separate routes for UX, but response items have the same post shape.
+
+New / changed fields in post response:
+- groupId: string | null
+- status: "approved" | "pending" | "rejected"
+- group: null or {
+    id: string,
+    name: string | null,
+    avatarUrl: string | null,
+    privacy: "public" | "private" | "hidden" | null
+  }
+
+Create personal post:
+POST /api/posts
+Auth: required
+Body:
+{
+  "content": "text",
+  "privacy": "Public",
+  "media": []
+}
+
+Create group post:
+POST /api/groups/{groupId}/posts
+Auth: required
+Body is the same as PostRequest:
+{
+  "content": "text",
+  "privacy": "Public",
+  "media": []
+}
+
+Do not send groupId from FE for this route. The backend takes groupId from the URL.
+
+Create group post response:
+- 201
+- message is "Group post created successfully." when status is approved
+- message is "Group post submitted for approval." when status is pending
+- data is PostFeedResponse with groupId, group, and status
+
+Moderate group post status:
+PUT /api/groups/{groupId}/posts/{postId}/status
+Auth: required, group admin/moderator only
+Body:
+{
+  "status": "approved"
+}
+
+Allowed status values:
+- approved
+- pending
+- rejected
+
+Use this route for approve/reject buttons when group postApproval is enabled.
+
+List posts in one group:
+GET /api/groups/{groupId}/posts?cursor={cursor}&limit=10
+Auth: optional
+
+Visibility:
+- Public group: anonymous/user can see approved posts.
+- Private/hidden group: only active members can see posts.
+- Pending posts are visible to the author and group admin/moderator.
+- Pending posts should show a pending badge and disable like/comment in FE.
+
+Main feed:
+GET /api/posts?cursor={cursor}&limit=10
+
+Feed now can include:
+- Personal posts.
+- Approved posts from public groups.
+- Approved posts from private/hidden groups when the viewer is an active member.
+- Pending group posts only for the author or group admin/moderator.
+
+User profile posts:
+GET /api/posts/users/{userId}
+
+This endpoint now returns personal posts only. Show group posts from:
+- main feed, or
+- GET /api/groups/{groupId}/posts
+
+Recommended FE changes:
+1. On group detail page, load posts from GET /api/groups/{groupId}/posts.
+2. On group composer, create posts with POST /api/groups/{groupId}/posts.
+3. On normal composer/profile composer, create posts with POST /api/posts and do not pass groupId.
+4. In feed card, if groupId is not null, render group source using data.group.
+5. If status is pending, show pending state and hide/disable like/comment actions.
+6. Treat 403 from group posts as not allowed/not a member; treat 404 as group not found.

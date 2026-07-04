@@ -11,6 +11,7 @@ using System.Collections.Concurrent;
 
 namespace Kpett.ChatApp.Services.Impls
 {
+    /// <summary>Service quản lý trạng thái typing trong hội thoại (dùng Redis + SignalR).</summary>
     public class ConversationTypingService : IConversationTypingService
     {
         private readonly IRedisService _redis;
@@ -25,6 +26,7 @@ namespace Kpett.ChatApp.Services.Impls
         private static readonly ConcurrentDictionary<string, CancellationTokenSource> _expireTimers
             = new(StringComparer.Ordinal);
 
+        /// <summary>Khởi tạo service với các dependencies.</summary>
         public ConversationTypingService(
             IRedisService redis,
             IHubContext<AppHub> hubContext,
@@ -37,6 +39,7 @@ namespace Kpett.ChatApp.Services.Impls
             _logger = logger;
         }
 
+        /// <inheritdoc />
         public async Task<bool> StartTypingAsync(string conversationId, string userId, string connectionId, CancellationToken ct = default)
         {
             // Kiểm tra xem user đã có tab nào đang typing chưa (để quyết định có broadcast start không)
@@ -64,6 +67,7 @@ namespace Kpett.ChatApp.Services.Impls
             return shouldBroadcastStart;
         }
 
+        /// <inheritdoc />
         public async Task<bool> StopTypingAsync(string conversationId, string userId, string connectionId, CancellationToken ct = default)
         {
             // Hủy auto-expire timer nếu đang chạy
@@ -83,9 +87,11 @@ namespace Kpett.ChatApp.Services.Impls
             return shouldBroadcastStop;
         }
 
+        /// <inheritdoc />
         public Task<List<(string UserId, string ConnectionId)>> GetTypingUsersAsync(string conversationId)
             => _redis.GetTypingUsersInConversationAsync(conversationId);
 
+        /// <inheritdoc />
         public async Task<List<(string ConversationId, string UserId)>> CleanupConnectionTypingAsync(string connectionId)
         {
             // Hủy tất cả timer liên quan đến connectionId này

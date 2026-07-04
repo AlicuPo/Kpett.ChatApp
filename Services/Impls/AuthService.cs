@@ -17,6 +17,7 @@ using UUIDNext;
 
 namespace Kpett.ChatApp.Services.Impls;
 
+/// <summary>Service xác thực: đăng nhập, đăng ký, đăng xuất, refresh token, quên mật khẩu.</summary>
 public class AuthService : IAuthService
 {
     private readonly AppDbContext _dbContext;
@@ -26,6 +27,7 @@ public class AuthService : IAuthService
     private readonly IJwtService _token;
     private readonly ILogger<AuthService> _logger;
 
+    /// <summary>Khởi tạo service với các dependencies.</summary>
     public AuthService(
         AppDbContext context,
         IJwtService token,
@@ -41,6 +43,7 @@ public class AuthService : IAuthService
         _emailOptions = emailOptions.Value;
     }
 
+    /// <inheritdoc />
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancel = default)
     {
         _logger.LogInformation("Login attempt received");
@@ -114,6 +117,7 @@ public class AuthService : IAuthService
         };
     }
 
+    /// <inheritdoc />
     public async Task<int> RegisterAsync(RegisterRequest request, CancellationToken cancel = default)
     {
         cancel.ThrowIfCancellationRequested();
@@ -150,6 +154,7 @@ public class AuthService : IAuthService
         return result;
     }
 
+    /// <inheritdoc />
     public async Task<bool> LogoutAsync(LogoutRequest logoutRequest, ClaimsPrincipal user, CancellationToken cancel = default)
     {
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
@@ -201,6 +206,7 @@ public class AuthService : IAuthService
         return true;
     }
 
+    /// <inheritdoc />
     public async Task<TokenResponse> RefreshTokenAsync(RefreshTokenRequest request)
     {
         if (string.IsNullOrEmpty(request.RefreshToken))
@@ -276,6 +282,7 @@ public class AuthService : IAuthService
     }
 
 
+    /// <inheritdoc />
     public async Task ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken cancel = default)
     {
         cancel.ThrowIfCancellationRequested();
@@ -302,6 +309,7 @@ public class AuthService : IAuthService
         await _emailService.SendPasswordResetOtpAsync(user.Email, otp, otpLifetime, cancel);
     }
 
+    /// <inheritdoc />
     public async Task ResetPasswordWithOtpAsync(ResetPasswordWithOtpRequest request, CancellationToken cancel = default)
     {
         cancel.ThrowIfCancellationRequested();

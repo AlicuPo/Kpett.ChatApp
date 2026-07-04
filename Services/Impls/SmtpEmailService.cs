@@ -6,15 +6,18 @@ using Microsoft.Extensions.Options;
 
 namespace Kpett.ChatApp.Services.Impls
 {
+    /// <summary>Service gửi email SMTP.</summary>
     public class SmtpEmailService : IEmailService
     {
         private readonly EmailOptions _options;
 
+        /// <summary>Khởi tạo service với các dependencies.</summary>
         public SmtpEmailService(IOptions<EmailOptions> options)
         {
             _options = options.Value;
         }
 
+        /// <inheritdoc />
         public async Task SendPasswordResetOtpAsync(string toEmail, string otp, TimeSpan lifetime, CancellationToken cancel = default)
         {
             cancel.ThrowIfCancellationRequested();

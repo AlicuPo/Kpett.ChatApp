@@ -1,6 +1,6 @@
-﻿using Kpett.ChatApp.Configs;
-using Kpett.ChatApp.Helper;
+﻿using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Models;
+using Kpett.ChatApp.Options;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -12,6 +12,7 @@ using System.Text;
 
 namespace Kpett.ChatApp.Services.Impls
 {
+    /// <summary>Service tạo và xác thực JWT token (access + refresh).</summary>
     public class JwtService : IJwtService
     {
 
@@ -20,6 +21,7 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly IConfiguration _config;
         private readonly ILogger<JwtService> _logger;
 
+        /// <summary>Khởi tạo service với các dependencies.</summary>
         public JwtService(IHttpContextAccessor contextAccessor, IOptions<JwtOptions> options, IConfiguration config, ILogger<JwtService> logger)
         {
             _contextAccessor = contextAccessor;
@@ -28,6 +30,7 @@ namespace Kpett.ChatApp.Services.Impls
             _logger = logger;
         }
 
+        /// <inheritdoc />
         public string GenerateAccessToken(string userId, string email)
         {
             var jwtKey = _jwtOptions.KeyAccess;
@@ -64,6 +67,7 @@ namespace Kpett.ChatApp.Services.Impls
             _logger.LogDebug("Generated access token for user {UserId}", userId);
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
+        /// <inheritdoc />
         public string GenerateRefreshToken(string userId, string email)
         {
             var jwtKey = _jwtOptions.KeyRefres;
@@ -101,6 +105,7 @@ namespace Kpett.ChatApp.Services.Impls
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
+        /// <inheritdoc />
         public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token, bool isRefresh = false)
         {
             var keyName = isRefresh ? "JwtSection:KeyRefres" : "JwtSection:KeyAccess";
@@ -137,6 +142,7 @@ namespace Kpett.ChatApp.Services.Impls
             }
         }
 
+        /// <inheritdoc />
         public UserClaims? GetUserClaims()
         {
             try

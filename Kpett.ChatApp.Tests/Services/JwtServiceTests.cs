@@ -1,6 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using Kpett.ChatApp.Configs;
+using Kpett.ChatApp.Options;
 using Kpett.ChatApp.Services.Impls;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;

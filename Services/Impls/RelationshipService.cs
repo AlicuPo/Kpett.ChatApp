@@ -18,6 +18,7 @@ using System.Threading.Channels;
 
 namespace Kpett.ChatApp.Services.Impls
 {
+    /// <summary>Service quản lý quan hệ bạn bè: kết bạn, huỷ kết bạn, theo dõi, đề xuất bạn bè.</summary>
     public class RelationshipService : IRelationshipService
     {
         private readonly AppDbContext _context;
@@ -25,6 +26,7 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly IMediator _mediator;
         private readonly ILogger<RelationshipService> _logger;
 
+        /// <summary>Khởi tạo service với các dependencies.</summary>
         public RelationshipService(AppDbContext context, IRedisService redisService, IMediator mediator, ILogger<RelationshipService> logger)
         {
             _context = context;
@@ -34,6 +36,7 @@ namespace Kpett.ChatApp.Services.Impls
         }
 
         // Friend request
+        /// <inheritdoc />
         public async Task<FriendRequestResponse> SendFriendRequestAsync(string senderId, string receiverId)
         {
             _logger.LogInformation("User {SenderId} is sending friend request to user {ReceiverId}", senderId, receiverId);
@@ -149,6 +152,7 @@ namespace Kpett.ChatApp.Services.Impls
         }
 
         // Accept request
+        /// <inheritdoc />
         public async Task AcceptFriendRequestAsync(string currentUserId, string requestId)
         {
             _logger.LogInformation("User {UserId} is accepting friend request {RequestId}", currentUserId, requestId);
@@ -236,6 +240,7 @@ namespace Kpett.ChatApp.Services.Impls
             _logger.LogInformation("Friend request {RequestId} accepted by user {UserId}", request.Id, currentUserId);
         }
 
+        /// <inheritdoc />
         public async Task DeclineFriendRequestAsync(string currentUserId, string requestId)
         {
             _logger.LogInformation("User {UserId} is declining friend request {RequestId}", currentUserId, requestId);
@@ -279,6 +284,7 @@ namespace Kpett.ChatApp.Services.Impls
             _logger.LogInformation("Friend request {RequestId} declined by user {UserId}", requestId, currentUserId);
         }
 
+        /// <inheritdoc />
         public async Task CancelFriendRequestAsync(string currentUserId, string requestId)
         {
             _logger.LogInformation("User {UserId} is cancelling friend request {RequestId}", currentUserId, requestId);
@@ -315,6 +321,7 @@ namespace Kpett.ChatApp.Services.Impls
             _logger.LogInformation("Friend request {RequestId} cancelled by user {UserId}", requestId, currentUserId);
         }
 
+        /// <inheritdoc />
         public async Task UnfriendAsync(string currentUserId, string targetUserId)
         {
             _logger.LogInformation("User {UserId} is unfriending user {TargetUserId}", currentUserId, targetUserId);
@@ -358,6 +365,7 @@ namespace Kpett.ChatApp.Services.Impls
             _logger.LogInformation("User {UserId} unfriended user {TargetUserId}", currentUserId, targetUserId);
         }
 
+        /// <inheritdoc />
         public async Task FollowAsync(string followerId, string followeeId)
         {
             _logger.LogInformation("User {FollowerId} is following user {FolloweeId}", followerId, followeeId);
@@ -391,6 +399,7 @@ namespace Kpett.ChatApp.Services.Impls
             _logger.LogInformation("User {FollowerId} followed user {FolloweeId}", followerId, followeeId);
         }
 
+        /// <inheritdoc />
         public async Task UnfollowAsync(string followerId, string followeeId)
         {
             _logger.LogInformation("User {FollowerId} is unfollowing user {FolloweeId}", followerId, followeeId);
@@ -409,6 +418,7 @@ namespace Kpett.ChatApp.Services.Impls
             _logger.LogInformation("User {FollowerId} unfollowed user {FolloweeId}", followerId, followeeId);
         }
 
+        /// <inheritdoc />
         public async Task<PaginatedData<FriendListItemDTO>> GetFriendsAsync(string currentUserId, FriendListRequest request, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(currentUserId))
@@ -523,6 +533,7 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
+        /// <inheritdoc />
         public async Task<PaginatedData<UserResponse>> GetFriendsNotInGroupAsync(string currentUserId, GetFriendsNotInGroupRequest request, CancellationToken cancel)
         {
             // VALIDATION & SECURITY CHECK
@@ -651,6 +662,7 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
+        /// <inheritdoc />
         public async Task<List<UserResponse>> GetFriendSuggestionsAsync(string currentUserId, int limit, CancellationToken cancel)
         {
             if (string.IsNullOrWhiteSpace(currentUserId))
