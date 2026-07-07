@@ -64,6 +64,12 @@ public AppDbContext(DbContextOptions<AppDbContext> options)
 
     public virtual DbSet<Message> Messages { get; set; }
 
+    public virtual DbSet<MessageAttachment> MessageAttachments { get; set; }
+
+    public virtual DbSet<StickerPack> StickerPacks { get; set; }
+
+    public virtual DbSet<Sticker> Stickers { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
