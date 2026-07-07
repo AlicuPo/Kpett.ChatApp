@@ -8,6 +8,8 @@ namespace Kpett.ChatApp.DTOs.Request.Post
         public string? Privacy { get; set; }
         public string? GroupId { get; set; }
         public List<MediaRequest>? Media { get; set; }
+
+        public bool IsNsfw { get; set; }
     }
 
     public class UserFeedRequest

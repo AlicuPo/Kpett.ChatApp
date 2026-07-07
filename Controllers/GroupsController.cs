@@ -305,10 +305,11 @@ namespace Kpett.ChatApp.Controllers
         public async Task<ActionResult<GeneralResponse<PaginatedData<PostFeedResponse>>>> GetGroupPosts(
             string groupId,
             [FromQuery] CursorPaginationRequest request,
+            [FromQuery] string? status,
             CancellationToken cancel)
         {
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var result = await _postService.GetGroupPostsAsync(currentUserId, groupId, request, cancel);
+            var result = await _postService.GetGroupPostsAsync(currentUserId, groupId, request, status, cancel);
 
             return Ok(new GeneralResponse<PaginatedData<PostFeedResponse>>
             {

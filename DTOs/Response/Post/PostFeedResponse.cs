@@ -31,6 +31,8 @@ namespace Kpett.ChatApp.DTOs.Response.Post
 
         public string? Privacy { get; set; } = string.Empty;
 
+        public bool IsNsfw { get; set; }
+
         public DateTime CreatedAt { get; set; }
 
         public DateTime? UpdatedAt { get; set; }

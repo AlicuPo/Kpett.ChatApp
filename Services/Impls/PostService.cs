@@ -93,6 +93,7 @@ namespace Kpett.ChatApp.Services.Impls
                 Type = PostType.Post.GetDescription(),
                 GroupId = null,
                 Status = ApprovedPostStatus,
+                IsNsfw = postRequest.IsNsfw,
                 CreatedAt = DateTime.UtcNow,
                 PinnedAt = DateTime.UtcNow,
                 IsDeleted = false,
@@ -176,6 +177,7 @@ namespace Kpett.ChatApp.Services.Impls
                 Type = PostType.Post.GetDescription(),
                 GroupId = group.Id,
                 Status = status,
+                IsNsfw = postRequest.IsNsfw,
                 CreatedAt = now,
                 PinnedAt = now,
                 IsDeleted = false,
@@ -599,6 +601,7 @@ namespace Kpett.ChatApp.Services.Impls
             string? currentUserId,
             string groupId,
             CursorPaginationRequest request,
+            string? status = null,
             CancellationToken cancel = default)
         {
             if (string.IsNullOrWhiteSpace(groupId))
@@ -636,12 +639,23 @@ namespace Kpett.ChatApp.Services.Impls
 
             var query = _dbContext.Posts
                 .AsNoTracking()
-                .Where(p => p.GroupId == group.Id && !p.IsDeleted)
-                .Where(p =>
+                .Where(p => p.GroupId == group.Id && !p.IsDeleted);
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                var normalizedFilterStatus = NormalizePostStatusForWrite(status);
+                if (!canModerate && normalizedFilterStatus != ApprovedPostStatus)
+                    throw new ForbiddenException(ErrorCodes.GROUP.NOT_ADMIN, "Only admins can filter by non-approved statuses.");
+                query = query.Where(p => p.Status == normalizedFilterStatus);
+            }
+            else
+            {
+                query = query.Where(p =>
                     p.Status == null ||
                     p.Status == ApprovedPostStatus ||
                     (!string.IsNullOrWhiteSpace(currentUserId) && p.CreatedByUserId == currentUserId && p.Status == PendingPostStatus) ||
                     (canModerate && p.Status == PendingPostStatus));
+            }
 
             if (cursorDate.HasValue && !string.IsNullOrEmpty(cursorId))
             {
@@ -1251,6 +1265,7 @@ namespace Kpett.ChatApp.Services.Impls
                 GroupId = post.GroupId,
                 Group = group,
                 Status = post.Status ?? ApprovedPostStatus,
+                IsNsfw = post.IsNsfw,
                 Media = mediaResponse,
                 Privacy = post.Privacy,
                 CreatedAt = post.CreatedAt,

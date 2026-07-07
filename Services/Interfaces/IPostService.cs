@@ -29,7 +29,7 @@ namespace Kpett.ChatApp.Services.Interfaces
         Task<PaginatedData<PostFeedResponse>> GetFeedAsync(string? currentUserId, string? cursor = null, int limit = 10, CancellationToken cancel = default);
 
         /// <summary>Lấy bài viết trong nhóm.</summary>
-        Task<PaginatedData<PostFeedResponse>> GetGroupPostsAsync(string? currentUserId, string groupId, CursorPaginationRequest request, CancellationToken cancel = default);
+        Task<PaginatedData<PostFeedResponse>> GetGroupPostsAsync(string? currentUserId, string groupId, CursorPaginationRequest request, string? status = null, CancellationToken cancel = default);
 
         /// <summary>Lấy bài viết của người dùng cụ thể.</summary>
         Task<PaginatedData<PostThumbnailResponse>> GetPostsByUserIdAsync(string userId, string? currentUserId, SearchRequest request, CursorPaginationRequest cursorPagination, CancellationToken cancel = default);
