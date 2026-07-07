@@ -8,6 +8,11 @@ namespace Kpett.ChatApp.Services.Interfaces
     /// </summary>
     public interface IGroupMemberService
     {
+        /// <summary>Lấy danh sách thành viên bị chặn.</summary>
+        Task<GroupMemberListResponse> GetBlockedMembersAsync(string userId, string groupId, GroupMemberListRequest request, CancellationToken cancel = default);
+
+        /// <summary>Bỏ chặn thành viên.</summary>
+        Task<GroupMembershipActionResponse> UnblockMemberAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default);
         /// <summary>
         /// Người dùng tham gia nhóm (hoặc gửi yêu cầu nếu nhóm yêu cầu phê duyệt).
         /// </summary>

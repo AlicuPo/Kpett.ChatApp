@@ -10,7 +10,7 @@ namespace Kpett.ChatApp.DTOs.Request.Group
 
         public string? Description { get; set; }
 
-        public GroupPrivacy? Privacy { get; set; }
+        public string? Privacy { get; set; }
 
         public string? AvatarUrl { get; set; }
 

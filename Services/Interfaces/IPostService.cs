@@ -19,6 +19,9 @@ namespace Kpett.ChatApp.Services.Interfaces
         /// <summary>Cập nhật trạng thái bài viết nhóm (duyệt/từ chối).</summary>
         Task<PostFeedResponse> UpdateGroupPostStatusAsync(string userId, string groupId, string postId, UpdateGroupPostStatusRequest request, CancellationToken cancel);
 
+        /// <summary>Ghim/bỏ ghim bài viết trong nhóm.</summary>
+        Task<PostFeedResponse> TogglePinPostAsync(string userId, string groupId, string postId, CancellationToken cancel);
+
         /// <summary>Cập nhật nội dung bài viết.</summary>
         Task<PostFeedResponse> UpdatePostAsync(string postId, string userId, PostRequest postRequest, CancellationToken cancel);
 

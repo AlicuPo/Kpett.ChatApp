@@ -11,6 +11,8 @@ public partial class Group
 
     public string? Name { get; set; }
 
+    public string? Slug { get; set; }
+
     public string? AvatarUrl { get; set; }
 
     [Column("CoverUrl")]

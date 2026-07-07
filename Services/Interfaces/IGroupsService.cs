@@ -78,6 +78,24 @@ namespace Kpett.ChatApp.Services.Interfaces
         /// <summary>Lấy danh sách admin và moderator của nhóm.</summary>
         Task<GroupMemberListResponse> GetAdminsAndModeratorsAsync(string userId, string groupId, GroupMemberListRequest request, CancellationToken cancel = default);
 
+        /// <summary>Lấy danh sách thành viên bị chặn.</summary>
+        Task<GroupMemberListResponse> GetBlockedMembersAsync(string userId, string groupId, GroupMemberListRequest request, CancellationToken cancel = default);
+
+        /// <summary>Bỏ chặn thành viên.</summary>
+        Task<GroupMembershipActionResponse> UnblockMemberAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default);
+
+        /// <summary>Chuyển quyền sở hữu nhóm.</summary>
+        Task<GroupMemberResponse> TransferOwnershipAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default);
+
+        /// <summary>Lấy danh sách lời mời của tôi.</summary>
+        Task<List<GroupInvitationResponse>> GetMyInvitationsAsync(string userId, CancellationToken cancel = default);
+
+        /// <summary>Chấp nhận lời mời vào nhóm.</summary>
+        Task<GroupMembershipActionResponse> AcceptInvitationAsync(string userId, string invitationId, CancellationToken cancel = default);
+
+        /// <summary>Từ chối lời mời vào nhóm.</summary>
+        Task<GroupMembershipActionResponse> DeclineInvitationAsync(string userId, string invitationId, CancellationToken cancel = default);
+
         // ─── Internal CRUD ───
 
         /// <summary>Lấy entity Group theo ID (ném NotFoundException nếu không tìm thấy).</summary>

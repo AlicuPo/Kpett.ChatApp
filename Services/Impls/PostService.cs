@@ -289,6 +289,78 @@ namespace Kpett.ChatApp.Services.Impls
         }
 
         /// <inheritdoc />
+        public async Task<PostFeedResponse> TogglePinPostAsync(
+            string userId,
+            string groupId,
+            string postId,
+            CancellationToken cancel)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "User ID cannot be empty");
+
+            if (string.IsNullOrWhiteSpace(postId))
+                throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Post ID cannot be empty");
+
+            var group = await GetActiveGroupAsync(groupId, cancel);
+            var member = await GetActiveGroupMemberAsync(group.Id, userId, cancel);
+            if (GetGroupRoleRank(group, member) < 1)
+                throw new ForbiddenException(ErrorCodes.GROUP.NOT_ADMIN, "Only group admins or moderators can pin posts.");
+
+            var post = await _dbContext.Posts
+                .FirstOrDefaultAsync(p =>
+                    p.Id == postId &&
+                    p.GroupId == group.Id &&
+                    !p.IsDeleted,
+                    cancel);
+
+            if (post == null)
+                throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
+
+            post.IsPinned = !post.IsPinned;
+            if (post.IsPinned)
+                post.PinnedAt = DateTime.UtcNow;
+            post.UpdatedAt = DateTime.UtcNow;
+
+            await _dbContext.SaveChangesAsync(cancel);
+
+            var author = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => u.Id == post.CreatedByUserId)
+                .Select(u => new UserResponse
+                {
+                    Id = u.Id,
+                    Email = u.Email,
+                    Username = u.Username,
+                    DisplayName = u.DisplayName,
+                    IsVerified = u.IsVerified,
+                    AvatarUrl = _dbContext.UserMedias
+                        .Where(um => um.UserId == u.Id && um.IsPrimary && um.MediaType == avatarType)
+                        .Select(um => um.MediaUrl)
+                        .FirstOrDefault()
+                })
+                .FirstOrDefaultAsync(cancel)
+                ?? throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
+
+            var media = await _dbContext.PostMedia
+                .AsNoTracking()
+                .Where(m => m.PostId == post.Id)
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => new MediaPostResponse
+                {
+                    PublicId = m.Id,
+                    Url = m.MediaUrl,
+                    Type = m.MediaType
+                })
+                .ToListAsync(cancel);
+
+            var isLiked = await _dbContext.PostReactions
+                .AsNoTracking()
+                .AnyAsync(r => r.PostId == post.Id && r.UserId == userId, cancel);
+
+            return BuildPostResponse(post, author, media, isLiked, BuildGroupSummary(group));
+        }
+
+        /// <inheritdoc />
         public async Task<PostFeedResponse> UpdatePostAsync(string postId, string userId, PostRequest postRequest, CancellationToken cancel)
         {
             _logger.LogInformation("User {UserId} updating post with ID {PostId}", userId, postId);
