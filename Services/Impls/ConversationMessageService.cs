@@ -111,9 +111,32 @@ namespace Kpett.ChatApp.Services.Impls
                 rawMessages.RemoveAt(limit);
             }
 
+            var messageIds = rawMessages.Select(m => m.Id).ToList();
+            var attachmentEntities = await _context.MessageAttachments
+                .AsNoTracking()
+                .Where(a => messageIds.Contains(a.MessageId))
+                .OrderBy(a => a.CreatedAt)
+                .Select(a => new { a.Id, a.MessageId, a.Type, a.Url, a.PublicId, a.Filename, a.FileSize, a.Width, a.Height })
+                .ToListAsync(cancel);
+
+            var attachmentsByMessage = attachmentEntities
+                .GroupBy(a => a.MessageId)
+                .ToDictionary(g => g.Key, g => g.Select(a => new MessageAttachmentResponse
+                {
+                    Id = a.Id,
+                    MessageId = a.MessageId,
+                    Type = a.Type,
+                    Url = a.Url,
+                    PublicId = a.PublicId,
+                    Filename = a.Filename,
+                    FileSize = a.FileSize,
+                    Width = a.Width,
+                    Height = a.Height
+                }).ToList());
+
             var messageResponses = rawMessages.Select(m =>
             {
-                return new MessageResponse
+                var response = new MessageResponse
                 {
                     Id = m.Id,
                     ConversationId = m.ConversationId,
@@ -129,6 +152,13 @@ namespace Kpett.ChatApp.Services.Impls
                     ReplyToMessageId = m.ReplyToMessageId,
                     ActionMetadata = ParseSystemMetadata(m.Type, m.Metadata)
                 };
+
+                if (attachmentsByMessage.TryGetValue(m.Id, out var attachments))
+                {
+                    response.Attachments = attachments;
+                }
+
+                return response;
             }).ToList();
 
             _logger.LogInformation("User {UserId} retrieved {Count} messages for conversation {ConversationId}", currentUserId, messageResponses.Count, conversationId);
@@ -201,6 +231,23 @@ namespace Kpett.ChatApp.Services.Impls
 
             _context.Conversations.Update(conversation);
             _context.ConversationParticipants.Update(currentUserParticipant);
+
+            if (request.Attachments != null && request.Attachments.Count != 0)
+            {
+                var attachments = request.Attachments.Select(a => new MessageAttachment
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    MessageId = messageId,
+                    Type = a.Type,
+                    Url = a.Url,
+                    PublicId = a.PublicId,
+                    Filename = a.Filename,
+                    FileSize = a.FileSize,
+                    CreatedAt = now
+                }).ToList();
+
+                _context.MessageAttachments.AddRange(attachments);
+            }
 
             await _context.SaveChangesAsync(cancel);
 
@@ -390,6 +437,23 @@ namespace Kpett.ChatApp.Services.Impls
                     SenderAvatarUrl = _context.UserMedias.Where(um => um.UserId == m.SenderId && um.IsPrimary && um.MediaType == "Avatar").Select(um => um.MediaUrl).FirstOrDefault()
                 }).FirstOrDefaultAsync(cancel);
 
+            var attachments = await _context.MessageAttachments
+                .AsNoTracking()
+                .Where(a => a.MessageId == messageId)
+                .OrderBy(a => a.CreatedAt)
+                .Select(a => new MessageAttachmentResponse
+                {
+                    Id = a.Id,
+                    MessageId = a.MessageId,
+                    Type = a.Type,
+                    Url = a.Url,
+                    PublicId = a.PublicId,
+                    Filename = a.Filename,
+                    FileSize = a.FileSize,
+                    Width = a.Width,
+                    Height = a.Height
+                }).ToListAsync(cancel);
+
             return new MessageResponse
             {
                 Id = messageData.Id,
@@ -404,7 +468,8 @@ namespace Kpett.ChatApp.Services.Impls
                 UpdatedAt = messageData.UpdatedAt?.ToUtc(),
                 IsDeleted = messageData.IsDeleted,
                 ReplyToMessageId = messageData.ReplyToMessageId,
-                ActionMetadata = ParseSystemMetadata(messageData.Type, messageData.Metadata)
+                ActionMetadata = ParseSystemMetadata(messageData.Type, messageData.Metadata),
+                Attachments = attachments
             };
         }
 
