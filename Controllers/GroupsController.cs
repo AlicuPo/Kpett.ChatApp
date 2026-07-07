@@ -299,6 +299,78 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        [HttpGet("{groupId}/blocked-members")]
+        public async Task<ActionResult<GeneralResponse<GroupMemberListResponse>>> GetBlockedMembers(
+            string groupId,
+            [FromQuery] GroupMemberListRequest request,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.GetBlockedMembersAsync(userId, groupId, request, cancel);
+
+            return Ok(new GeneralResponse<GroupMemberListResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Get blocked members successfully.",
+                Data = result
+            });
+        }
+
+        [HttpPost("{groupId}/members/{targetUserId}/unblock")]
+        public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> UnblockMember(
+            string groupId,
+            string targetUserId,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.UnblockMemberAsync(userId, groupId, targetUserId, cancel);
+
+            return Ok(new GeneralResponse<GroupMembershipActionResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Member unblocked successfully.",
+                Data = result
+            });
+        }
+
+        [HttpPost("{groupId}/transfer-ownership")]
+        public async Task<ActionResult<GeneralResponse<GroupMemberResponse>>> TransferOwnership(
+            string groupId,
+            [FromBody] TransferOwnershipRequest request,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.TransferOwnershipAsync(userId, groupId, request.TargetUserId, cancel);
+
+            return Ok(new GeneralResponse<GroupMemberResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Group ownership transferred successfully.",
+                Data = result
+            });
+        }
+
+        [HttpPost("{groupId}/posts/{postId}/pin")]
+        public async Task<ActionResult<GeneralResponse<PostFeedResponse>>> TogglePinPost(
+            string groupId,
+            string postId,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _postService.TogglePinPostAsync(userId, groupId, postId, cancel);
+
+            return Ok(new GeneralResponse<PostFeedResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Post pin status toggled successfully.",
+                Data = result
+            });
+        }
+
         [HttpGet("{groupId}/posts")]
         [AllowAnonymous]
         [OptionalAuthorize]
@@ -353,6 +425,56 @@ namespace Kpett.ChatApp.Controllers
                 IsSuccess = true,
                 StatusCode = StatusCodes.Status200OK,
                 Message = "Group post status updated successfully.",
+                Data = result
+            });
+        }
+
+        [HttpGet("invitations")]
+        public async Task<ActionResult<GeneralResponse<List<GroupInvitationResponse>>>> GetMyInvitations(
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.GetMyInvitationsAsync(userId, cancel);
+
+            return Ok(new GeneralResponse<List<GroupInvitationResponse>>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Get my invitations successfully.",
+                Data = result
+            });
+        }
+
+        [HttpPost("invitations/{invitationId}/accept")]
+        public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> AcceptInvitation(
+            string invitationId,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.AcceptInvitationAsync(userId, invitationId, cancel);
+
+            return Ok(new GeneralResponse<GroupMembershipActionResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Invitation accepted successfully.",
+                Data = result
+            });
+        }
+
+        [HttpPost("invitations/{invitationId}/decline")]
+        public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> DeclineInvitation(
+            string invitationId,
+            CancellationToken cancel)
+        {
+            var userId = User.GetRequiredUserId();
+            var result = await _groupsService.DeclineInvitationAsync(userId, invitationId, cancel);
+
+            return Ok(new GeneralResponse<GroupMembershipActionResponse>
+            {
+                IsSuccess = true,
+                StatusCode = StatusCodes.Status200OK,
+                Message = "Invitation declined successfully.",
                 Data = result
             });
         }

@@ -451,6 +451,51 @@ namespace Kpett.ChatApp.Services.Impls
         }
 
         /// <inheritdoc />
+        public async Task<GroupMemberListResponse> GetBlockedMembersAsync(
+            string userId,
+            string groupId,
+            GroupMemberListRequest request,
+            CancellationToken cancel = default)
+        {
+            EnsureUserId(userId);
+
+            var group = await GetActiveGroupAsync(groupId, cancel);
+            await EnsureCanManageMembersAsync(group, userId, cancel);
+
+            return await BuildMemberListResponseAsync(group.Id, BlockedStatus, request, roles: null, cancel);
+        }
+
+        /// <inheritdoc />
+        public async Task<GroupMembershipActionResponse> UnblockMemberAsync(
+            string userId,
+            string groupId,
+            string targetUserId,
+            CancellationToken cancel = default)
+        {
+            EnsureUserId(userId);
+
+            var group = await GetActiveGroupAsync(groupId, cancel);
+            await EnsureCanManageMembersAsync(group, userId, cancel);
+
+            var targetMember = await GetMembershipAsync(group.Id, targetUserId, cancel);
+            if (targetMember?.Status != BlockedStatus)
+                throw new NotFoundException(ErrorCodes.GROUP.MEMBER_NOT_FOUND, "Blocked member not found.");
+
+            if (targetMember.UserId == userId)
+                throw new BadRequestException(ErrorCodes.GROUP.SELF_ACTION_INVALID, "You cannot unblock yourself.");
+
+            targetMember.Status = LeftStatus;
+            targetMember.Role = MemberRole;
+            targetMember.JoinedAt = null;
+            targetMember.UpdatedAt = DateTime.UtcNow;
+            targetMember.UpdatedByUserId = userId;
+
+            await _dbContext.SaveChangesAsync(cancel);
+
+            return BuildMembershipActionResponse(targetMember, requiresApproval: false);
+        }
+
+        /// <inheritdoc />
         public async Task<GroupMemberListResponse> GetAdminsAndModeratorsAsync(
             string userId,
             string groupId,

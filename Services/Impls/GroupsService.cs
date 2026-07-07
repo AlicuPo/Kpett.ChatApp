@@ -62,6 +62,7 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 Id = Guid.NewGuid().ToString(),
                 Name = request.Name.Trim(),
+                Slug = GenerateSlug(request.Name.Trim()),
                 Description = request.Description?.Trim(),
                 Type = privacy,
                 AvatarUrl = request.AvatarUrl,
@@ -101,7 +102,7 @@ namespace Kpett.ChatApp.Services.Impls
             {
                 Id = newGroup.Id,
                 Name = newGroup.Name,
-                Slug = null,
+                Slug = newGroup.Slug,
                 CreatedAt = newGroup.CreatedAt
             };
         }
@@ -120,7 +121,10 @@ namespace Kpett.ChatApp.Services.Impls
             await EnsureGroupAdminAsync(group, userId, cancel);
 
             if (!string.IsNullOrWhiteSpace(request.Name))
+            {
                 group.Name = request.Name.Trim();
+                group.Slug = GenerateSlug(request.Name.Trim());
+            }
 
             if (request.Description != null)
                 group.Description = request.Description.Trim();
@@ -131,8 +135,8 @@ namespace Kpett.ChatApp.Services.Impls
             if (!string.IsNullOrWhiteSpace(request.CoverImageUrl))
                 group.CoverImageUrl = request.CoverImageUrl.Trim();
 
-            if (request.Privacy.HasValue)
-                group.Type = MapPrivacy(request.Privacy.Value);
+            if (!string.IsNullOrWhiteSpace(request.Privacy))
+                group.Type = NormalizePrivacyForWrite(request.Privacy, allowMissing: false);
 
             if (request.Language != null)
                 group.Language = NormalizeLanguageForWrite(request.Language, allowMissing: false);
@@ -198,7 +202,7 @@ namespace Kpett.ChatApp.Services.Impls
             EnsureUserId(userId);
 
             var group = await _dbContext.Groups
-                .FirstOrDefaultAsync(g => g.Id == slug && g.Status != DeletedStatus, cancel)
+                .FirstOrDefaultAsync(g => g.Slug == slug && g.Status != DeletedStatus, cancel)
                 ?? throw new NotFoundException(ErrorCodes.GROUP.NOT_FOUND, "Group not found.");
 
             return await BuildGroupDetailResponseAsync(group, userId, cancel);
@@ -242,13 +246,9 @@ namespace Kpett.ChatApp.Services.Impls
 
             var total = await query.CountAsync(cancel);
 
-            var groups = await query
-                .OrderByDescending(g => g.CreatedAt)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync(cancel);
+            var allGroups = await query.ToListAsync(cancel);
 
-            var groupIds = groups.Select(g => g.Id).ToList();
+            var groupIds = allGroups.Select(g => g.Id).ToList();
             var memberMap = await _dbContext.GroupMembers
                 .AsNoTracking()
                 .Where(m => groupIds.Contains(m.GroupId) && m.Status == ActiveStatus)
@@ -262,11 +262,23 @@ namespace Kpett.ChatApp.Services.Impls
                 .Select(m => m.GroupId)
                 .ToHashSetAsync(cancel);
 
-            var items = groups.Select(g => new GroupSummary
+            var sorted = request.SortBy switch
+            {
+                GroupSortBy.MostMembers => allGroups
+                    .OrderByDescending(g => memberMap.TryGetValue(g.Id, out var c) ? c : 0)
+                    .ThenByDescending(g => g.CreatedAt),
+                GroupSortBy.MostActive => allGroups
+                    .OrderByDescending(g => g.UpdatedAt ?? g.CreatedAt),
+                _ => allGroups.OrderByDescending(g => g.CreatedAt)
+            };
+
+            var paged = sorted.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+            var items = paged.Select(g => new GroupSummary
             {
                 Id = g.Id,
                 Name = g.Name,
-                Slug = g.Id,
+                Slug = g.Slug ?? g.Id,
                 AvatarUrl = g.AvatarUrl,
                 Privacy = ParsePrivacy(g.Type),
                 MemberCount = memberMap.TryGetValue(g.Id, out var count) ? count : 0,
@@ -332,7 +344,7 @@ namespace Kpett.ChatApp.Services.Impls
                     {
                         Id = group.Id,
                         Name = group.Name,
-                        Slug = group.Id,
+                        Slug = group.Slug ?? group.Id,
                         AvatarUrl = group.AvatarUrl,
                         MyRole = ParseMemberRole(m.Role),
                         MemberCount = memberMap.TryGetValue(group.Id, out var count) ? count : 0,
@@ -473,6 +485,167 @@ namespace Kpett.ChatApp.Services.Impls
             => _groupMemberService.GetAdminsAndModeratorsAsync(userId, groupId, request, cancel);
 
         /// <inheritdoc />
+        public Task<GroupMemberListResponse> GetBlockedMembersAsync(string userId, string groupId, GroupMemberListRequest request, CancellationToken cancel = default)
+            => _groupMemberService.GetBlockedMembersAsync(userId, groupId, request, cancel);
+
+        /// <inheritdoc />
+        public Task<GroupMembershipActionResponse> UnblockMemberAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default)
+            => _groupMemberService.UnblockMemberAsync(userId, groupId, targetUserId, cancel);
+
+        /// <inheritdoc />
+        public async Task<List<GroupInvitationResponse>> GetMyInvitationsAsync(
+            string userId,
+            CancellationToken cancel = default)
+        {
+            EnsureUserId(userId);
+
+            return await _dbContext.GroupInvitations
+                .AsNoTracking()
+                .Where(i => i.InviteeUserId == userId && i.Status == PendingStatus)
+                .OrderByDescending(i => i.CreatedAt)
+                .Select(i => new GroupInvitationResponse
+                {
+                    Id = i.Id,
+                    GroupId = i.GroupId,
+                    InvitedByUserId = i.InvitedByUserId,
+                    InviteeUserId = i.InviteeUserId,
+                    Status = i.Status ?? PendingStatus,
+                    CreatedAt = i.CreatedAt
+                })
+                .ToListAsync(cancel);
+        }
+
+        /// <inheritdoc />
+        public async Task<GroupMembershipActionResponse> AcceptInvitationAsync(
+            string userId,
+            string invitationId,
+            CancellationToken cancel = default)
+        {
+            EnsureUserId(userId);
+
+            var invitation = await _dbContext.GroupInvitations
+                .FirstOrDefaultAsync(i => i.Id == invitationId, cancel)
+                ?? throw new NotFoundException(ErrorCodes.GROUP.NOT_FOUND, "Invitation not found.");
+
+            if (invitation.InviteeUserId != userId)
+                throw new ForbiddenException(ErrorCodes.GROUP.NOT_A_MEMBER, "This invitation is not for you.");
+
+            if (invitation.Status != PendingStatus)
+                throw new BadRequestException(ErrorCodes.GROUP.INVITE_INVALID, "Invitation is not pending.");
+
+            var group = await GetActiveGroupAsync(invitation.GroupId, cancel);
+
+            var now = DateTime.UtcNow;
+            var existingMember = await _dbContext.GroupMembers
+                .FirstOrDefaultAsync(m => m.GroupId == group.Id && m.UserId == userId, cancel);
+
+            if (existingMember?.Status == ActiveStatus)
+                throw new ConflictException(ErrorCodes.GROUP.ALREADY_MEMBER, "You are already a member of this group.");
+
+            if (existingMember?.Status == BlockedStatus)
+                throw new ForbiddenException(ErrorCodes.GROUP.MEMBER_BLOCKED, "You are blocked from this group.");
+
+            if (existingMember == null)
+            {
+                existingMember = new GroupMember
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    GroupId = group.Id,
+                    UserId = userId,
+                    CreatedAt = now,
+                    CreatedByUserId = invitation.InvitedByUserId
+                };
+                _dbContext.GroupMembers.Add(existingMember);
+            }
+
+            existingMember.Status = ActiveStatus;
+            existingMember.Role = MemberRole;
+            existingMember.UpdatedAt = now;
+            existingMember.UpdatedByUserId = userId;
+            existingMember.JoinedAt = now;
+
+            invitation.Status = AcceptedStatus;
+
+            await _dbContext.SaveChangesAsync(cancel);
+
+            return BuildMembershipActionResponse(existingMember, requiresApproval: false);
+        }
+
+        /// <inheritdoc />
+        public async Task<GroupMembershipActionResponse> DeclineInvitationAsync(
+            string userId,
+            string invitationId,
+            CancellationToken cancel = default)
+        {
+            EnsureUserId(userId);
+
+            var invitation = await _dbContext.GroupInvitations
+                .FirstOrDefaultAsync(i => i.Id == invitationId, cancel)
+                ?? throw new NotFoundException(ErrorCodes.GROUP.NOT_FOUND, "Invitation not found.");
+
+            if (invitation.InviteeUserId != userId)
+                throw new ForbiddenException(ErrorCodes.GROUP.NOT_A_MEMBER, "This invitation is not for you.");
+
+            if (invitation.Status != PendingStatus)
+                throw new BadRequestException(ErrorCodes.GROUP.INVITE_INVALID, "Invitation is not pending.");
+
+            invitation.Status = DeclinedStatus;
+
+            await _dbContext.SaveChangesAsync(cancel);
+
+            return new GroupMembershipActionResponse
+            {
+                GroupId = invitation.GroupId,
+                UserId = userId,
+                Status = DeclinedStatus,
+                Role = MemberRole,
+                RequiresApproval = false,
+                JoinedAt = null
+            };
+        }
+
+        /// <inheritdoc />
+        public async Task<GroupMemberResponse> TransferOwnershipAsync(
+            string userId,
+            string groupId,
+            string targetUserId,
+            CancellationToken cancel = default)
+        {
+            EnsureUserId(userId);
+
+            var group = await GetActiveGroupAsync(groupId, cancel);
+
+            if (group.OwnerUserId != userId)
+                throw new ForbiddenException(ErrorCodes.GROUP.NOT_OWNER, "Only the group owner can transfer ownership.");
+
+            if (userId == targetUserId)
+                throw new BadRequestException(ErrorCodes.GROUP.SELF_ACTION_INVALID, "Cannot transfer ownership to yourself.");
+
+            var targetMember = await GetActiveTargetMemberAsync(group.Id, targetUserId, cancel);
+
+            if (targetMember.Status != ActiveStatus)
+                throw new NotFoundException(ErrorCodes.GROUP.MEMBER_NOT_FOUND, "Target member is not an active member.");
+
+            var oldOwner = await EnsureActiveMembershipAsync(group.Id, userId, cancel);
+
+            group.OwnerUserId = targetUserId;
+            group.UpdatedAt = DateTime.UtcNow;
+            group.UpdatedByUserId = userId;
+
+            targetMember.Role = AdminRole;
+            targetMember.UpdatedAt = DateTime.UtcNow;
+            targetMember.UpdatedByUserId = userId;
+
+            oldOwner.Role = AdminRole;
+            oldOwner.UpdatedAt = DateTime.UtcNow;
+            oldOwner.UpdatedByUserId = userId;
+
+            await _dbContext.SaveChangesAsync(cancel);
+
+            return await BuildMemberResponseAsync(targetMember, cancel);
+        }
+
+        /// <inheritdoc />
         public async Task<Group> GetByIdAsync(string id)
             => await _dbContext.Groups.FindAsync(id)
                ?? throw new NotFoundException(ErrorCodes.GROUP.NOT_FOUND, "Group not found.");
@@ -542,7 +715,9 @@ namespace Kpett.ChatApp.Services.Impls
 
             query = sortBy switch
             {
-                GroupSortBy.NewestCreated => query.OrderByDescending(g => g.CreatedAt),
+                GroupSortBy.MostMembers => query.OrderByDescending(g =>
+                    _dbContext.GroupMembers.Count(m => m.GroupId == g.Id && m.Status == ActiveStatus)),
+                GroupSortBy.MostActive => query.OrderByDescending(g => g.UpdatedAt ?? g.CreatedAt),
                 _ => query.OrderByDescending(g => g.CreatedAt)
             };
 
@@ -1134,6 +1309,25 @@ namespace Kpett.ChatApp.Services.Impls
             if (role == AdminRole) return 0;
             if (role == ModeratorRole) return 1;
             return 2;
+        }
+
+        private static string GenerateSlug(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return Guid.NewGuid().ToString("N")[..8];
+
+            var slug = name.Trim().ToLowerInvariant();
+            slug = System.Text.RegularExpressions.Regex.Replace(slug, @"[^a-z0-9\s-]", "");
+            slug = System.Text.RegularExpressions.Regex.Replace(slug, @"\s+", "-");
+            slug = System.Text.RegularExpressions.Regex.Replace(slug, @"-+", "-");
+            slug = slug.Trim('-');
+            if (slug.Length > 80)
+                slug = slug[..80].Trim('-');
+
+            if (string.IsNullOrWhiteSpace(slug))
+                return Guid.NewGuid().ToString("N")[..8];
+
+            return slug;
         }
     }
 }
