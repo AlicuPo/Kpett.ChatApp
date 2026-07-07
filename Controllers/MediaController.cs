@@ -19,7 +19,7 @@ namespace Kpett.ChatApp.Controllers
         [HttpGet("generate-signature")]
         public async Task<IActionResult> GetUploadSignature([FromQuery] string folder = "posts")
         {
-            var result = await _mediaService.GenerateUploadSignature(folder);
+            var result = await _mediaService.GenerateUploadSignatureAsync(folder);
             return Ok(new GeneralResponse<CloudinarySignatureResponse>
             {
                 IsSuccess = true,
@@ -66,7 +66,7 @@ namespace Kpett.ChatApp.Controllers
             return Ok(new GeneralResponse
             {
                 IsSuccess = true,
-                StatusCode = 2000,
+                StatusCode = 200,
                 Message = "File deleted successfully"
             });
         }

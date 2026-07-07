@@ -10,6 +10,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Kpett.ChatApp.Services.Impls
 {
+    /// <summary>
+    /// Service quản lý nhóm: CRUD nhóm, cài đặt, tìm kiếm (uỷ quyền thao tác thành viên cho <see cref="IGroupMemberService"/>).
+    /// </summary>
     public class GroupsService : IGroupsService
     {
         private const string ActiveStatus = "active";
@@ -32,12 +35,18 @@ namespace Kpett.ChatApp.Services.Impls
         private const string DefaultLanguage = "vi";
 
         private readonly AppDbContext _dbContext;
+        private readonly IGroupMemberService _groupMemberService;
 
-        public GroupsService(AppDbContext dbContext)
+        /// <summary>
+        /// Khởi tạo service với database context và service thành viên nhóm.
+        /// </summary>
+        public GroupsService(AppDbContext dbContext, IGroupMemberService groupMemberService)
         {
             _dbContext = dbContext;
+            _groupMemberService = groupMemberService;
         }
 
+        /// <inheritdoc />
         public async Task<CreateGroupResponse> CreateGroupAsync(string userId, CreateGroupRequest request, CancellationToken cancel = default)
         {
             EnsureUserId(userId);
@@ -97,6 +106,7 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
+        /// <inheritdoc />
         public async Task<GroupDetailResponse> UpdateGroupAsync(
             string userId,
             string groupId,
@@ -137,6 +147,7 @@ namespace Kpett.ChatApp.Services.Impls
             return await BuildGroupDetailResponseAsync(group, userId, cancel);
         }
 
+        /// <inheritdoc />
         public async Task DeleteGroupAsync(
             string userId,
             string groupId,
@@ -167,6 +178,7 @@ namespace Kpett.ChatApp.Services.Impls
             await _dbContext.SaveChangesAsync(cancel);
         }
 
+        /// <inheritdoc />
         public async Task<GroupDetailResponse> GetGroupByIdAsync(
             string userId,
             string groupId,
@@ -177,6 +189,7 @@ namespace Kpett.ChatApp.Services.Impls
             return await BuildGroupDetailResponseAsync(group, userId, cancel);
         }
 
+        /// <inheritdoc />
         public async Task<GroupDetailResponse> GetGroupBySlugAsync(
             string userId,
             string slug,
@@ -191,6 +204,7 @@ namespace Kpett.ChatApp.Services.Impls
             return await BuildGroupDetailResponseAsync(group, userId, cancel);
         }
 
+        /// <inheritdoc />
         public async Task<SearchGroupResponse> SearchGroupsAsync(
             string userId,
             SearchGroupRequest request,
@@ -268,6 +282,7 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
+        /// <inheritdoc />
         public async Task<MyGroupsResponse> GetMyGroupsAsync(
             string userId,
             MyGroupsRequest request,
@@ -333,6 +348,7 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
+        /// <inheritdoc />
         public async Task<GroupSettingsResponse> GetGroupSettingsAsync(
             string userId,
             string groupId,
@@ -346,6 +362,7 @@ namespace Kpett.ChatApp.Services.Impls
             return await BuildGroupSettingsResponseAsync(group, cancel);
         }
 
+        /// <inheritdoc />
         public async Task<GroupSettingsResponse> UpdateGroupSettingsAsync(
             string userId,
             string groupId,
@@ -386,6 +403,7 @@ namespace Kpett.ChatApp.Services.Impls
             return await BuildGroupSettingsResponseAsync(group, cancel);
         }
 
+        /// <inheritdoc />
         public async Task<GroupSettingsResponse> UpdateGroupRulesAsync(
             string userId,
             string groupId,
@@ -406,430 +424,65 @@ namespace Kpett.ChatApp.Services.Impls
             return await BuildGroupSettingsResponseAsync(group, cancel);
         }
 
-        public async Task<GroupMembershipActionResponse> JoinGroupAsync(
-            string userId,
-            string groupId,
-            CancellationToken cancel = default)
-        {
-            EnsureUserId(userId);
-
-            var group = await GetActiveGroupAsync(groupId, cancel);
-            var now = DateTime.UtcNow;
-            var existingMember = await _dbContext.GroupMembers
-                .FirstOrDefaultAsync(m => m.GroupId == group.Id && m.UserId == userId, cancel);
-
-            if (existingMember?.Status == ActiveStatus)
-                throw new ConflictException(ErrorCodes.GROUP.ALREADY_MEMBER, "You are already a member of this group.");
-
-            if (existingMember?.Status == PendingStatus)
-                throw new ConflictException(ErrorCodes.GROUP.JOIN_REQUEST_PENDING, "Your join request is already pending.");
-
-            if (existingMember?.Status == BlockedStatus)
-                throw new ForbiddenException(ErrorCodes.GROUP.MEMBER_BLOCKED, "You are blocked from this group.");
-
-            var invitation = await _dbContext.GroupInvitations
-                .FirstOrDefaultAsync(i =>
-                    i.GroupId == group.Id &&
-                    i.InviteeUserId == userId &&
-                    i.Status == PendingStatus,
-                    cancel);
-
-            var requiresApproval = invitation == null && RequiresJoinApproval(group);
-            var nextStatus = requiresApproval ? PendingStatus : ActiveStatus;
-
-            if (existingMember == null)
-            {
-                existingMember = new GroupMember
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    GroupId = group.Id,
-                    UserId = userId,
-                    CreatedAt = now,
-                    CreatedByUserId = userId
-                };
-                _dbContext.GroupMembers.Add(existingMember);
-            }
-
-            existingMember.Status = nextStatus;
-            existingMember.Role = MemberRole;
-            existingMember.UpdatedAt = now;
-            existingMember.UpdatedByUserId = userId;
-            existingMember.JoinedAt = nextStatus == ActiveStatus ? now : null;
-
-            if (invitation != null && nextStatus == ActiveStatus)
-                invitation.Status = AcceptedStatus;
-
-            await _dbContext.SaveChangesAsync(cancel);
-
-            return BuildMembershipActionResponse(existingMember, requiresApproval);
-        }
-
-        public async Task<GroupMembershipActionResponse> LeaveGroupAsync(
-            string userId,
-            string groupId,
-            CancellationToken cancel = default)
-        {
-            EnsureUserId(userId);
-
-            var group = await GetActiveGroupAsync(groupId, cancel);
-            var member = await GetMembershipAsync(group.Id, userId, cancel)
-                ?? throw new NotFoundException(ErrorCodes.GROUP.MEMBER_NOT_FOUND, "Group membership not found.");
-
-            if (member.Status != ActiveStatus && member.Status != PendingStatus)
-                throw new NotFoundException(ErrorCodes.GROUP.MEMBER_NOT_FOUND, "Group membership not found.");
-
-            if (group.OwnerUserId == userId && member.Status == ActiveStatus)
-                throw new ForbiddenException(ErrorCodes.GROUP.OWNER_ACTION_INVALID, "Group owner cannot leave the group.");
-
-            member.Status = LeftStatus;
-            member.Role = MemberRole;
-            member.UpdatedAt = DateTime.UtcNow;
-            member.UpdatedByUserId = userId;
-            member.JoinedAt = null;
-
-            await _dbContext.SaveChangesAsync(cancel);
-
-            return BuildMembershipActionResponse(member, requiresApproval: false);
-        }
-
-        public async Task<GroupInviteMembersResponse> InviteMembersAsync(
-            string userId,
-            string groupId,
-            InviteGroupMembersRequest request,
-            CancellationToken cancel = default)
-        {
-            EnsureUserId(userId);
-            EnsureRequest(request);
-
-            var group = await GetActiveGroupAsync(groupId, cancel);
-            var currentMember = await EnsureActiveMembershipAsync(group.Id, userId, cancel);
-            EnsureCanInvite(group, currentMember);
-
-            var inviteeIds = request.UserIds
-                .Where(id => !string.IsNullOrWhiteSpace(id))
-                .Select(id => id.Trim())
-                .Distinct(StringComparer.Ordinal)
-                .Take(100)
-                .ToList();
-
-            if (inviteeIds.Count == 0)
-                throw new BadRequestException(ErrorCodes.GROUP.INVITE_INVALID, "At least one invitee user ID is required.");
-
-            var response = new GroupInviteMembersResponse();
-            var now = DateTime.UtcNow;
-            var users = await _dbContext.Users
-                .AsNoTracking()
-                .Where(u => inviteeIds.Contains(u.Id))
-                .Select(u => u.Id)
-                .ToHashSetAsync(cancel);
-
-            var activeFriendIds = await GetActiveFriendIdsAsync(userId, inviteeIds, cancel);
-
-            foreach (var inviteeId in inviteeIds)
-            {
-                if (inviteeId == userId)
-                {
-                    response.Skipped.Add(new GroupInviteSkippedResponse { UserId = inviteeId, Reason = "self" });
-                    continue;
-                }
-
-                if (!users.Contains(inviteeId))
-                {
-                    response.Skipped.Add(new GroupInviteSkippedResponse { UserId = inviteeId, Reason = "user_not_found" });
-                    continue;
-                }
-
-                if (!activeFriendIds.Contains(inviteeId))
-                {
-                    response.Skipped.Add(new GroupInviteSkippedResponse { UserId = inviteeId, Reason = "not_friend" });
-                    continue;
-                }
-
-                var member = await GetMembershipAsync(group.Id, inviteeId, cancel);
-                if (member?.Status == ActiveStatus)
-                {
-                    response.Skipped.Add(new GroupInviteSkippedResponse { UserId = inviteeId, Reason = "already_member" });
-                    continue;
-                }
-
-                if (member?.Status == BlockedStatus)
-                {
-                    response.Skipped.Add(new GroupInviteSkippedResponse { UserId = inviteeId, Reason = "blocked" });
-                    continue;
-                }
-
-                if (member?.Status == PendingStatus)
-                {
-                    response.Skipped.Add(new GroupInviteSkippedResponse { UserId = inviteeId, Reason = "join_request_pending" });
-                    continue;
-                }
-
-                var invitation = await _dbContext.GroupInvitations
-                    .FirstOrDefaultAsync(i => i.GroupId == group.Id && i.InviteeUserId == inviteeId, cancel);
-
-                if (invitation?.Status == PendingStatus)
-                {
-                    response.Skipped.Add(new GroupInviteSkippedResponse { UserId = inviteeId, Reason = "invitation_pending" });
-                    continue;
-                }
-
-                if (invitation == null)
-                {
-                    invitation = new GroupInvitation
-                    {
-                        Id = Guid.NewGuid().ToString(),
-                        GroupId = group.Id,
-                        InviteeUserId = inviteeId
-                    };
-                    _dbContext.GroupInvitations.Add(invitation);
-                }
-
-                invitation.InvitedByUserId = userId;
-                invitation.Status = PendingStatus;
-                invitation.CreatedAt = now;
-
-                response.Invitations.Add(new GroupInvitationResponse
-                {
-                    Id = invitation.Id,
-                    GroupId = invitation.GroupId,
-                    InvitedByUserId = invitation.InvitedByUserId,
-                    InviteeUserId = invitation.InviteeUserId,
-                    Status = invitation.Status ?? PendingStatus,
-                    CreatedAt = invitation.CreatedAt
-                });
-            }
-
-            await _dbContext.SaveChangesAsync(cancel);
-
-            return response;
-        }
-
-        public async Task<GroupMemberResponse> AcceptJoinRequestAsync(
-            string userId,
-            string groupId,
-            string targetUserId,
-            CancellationToken cancel = default)
-        {
-            EnsureUserId(userId);
-
-            var group = await GetActiveGroupAsync(groupId, cancel);
-            await EnsureCanManageMembersAsync(group, userId, cancel);
-
-            var member = await GetMembershipAsync(group.Id, targetUserId, cancel);
-            if (member?.Status != PendingStatus)
-                throw new NotFoundException(ErrorCodes.GROUP.JOIN_REQUEST_NOT_FOUND, "Pending join request not found.");
-
-            member.Status = ActiveStatus;
-            member.Role = MemberRole;
-            member.JoinedAt = DateTime.UtcNow;
-            member.UpdatedAt = DateTime.UtcNow;
-            member.UpdatedByUserId = userId;
-
-            await _dbContext.SaveChangesAsync(cancel);
-
-            return await BuildMemberResponseAsync(member, cancel);
-        }
-
-        public async Task<GroupMembershipActionResponse> DeclineJoinRequestAsync(
-            string userId,
-            string groupId,
-            string targetUserId,
-            CancellationToken cancel = default)
-        {
-            EnsureUserId(userId);
-
-            var group = await GetActiveGroupAsync(groupId, cancel);
-            await EnsureCanManageMembersAsync(group, userId, cancel);
-
-            var member = await GetMembershipAsync(group.Id, targetUserId, cancel);
-            if (member?.Status != PendingStatus)
-                throw new NotFoundException(ErrorCodes.GROUP.JOIN_REQUEST_NOT_FOUND, "Pending join request not found.");
-
-            member.Status = DeclinedStatus;
-            member.Role = MemberRole;
-            member.JoinedAt = null;
-            member.UpdatedAt = DateTime.UtcNow;
-            member.UpdatedByUserId = userId;
-
-            await _dbContext.SaveChangesAsync(cancel);
-
-            return BuildMembershipActionResponse(member, requiresApproval: false);
-        }
-
-        public async Task<GroupMemberListResponse> GetGroupMembersAsync(
-            string userId,
-            string groupId,
-            GroupMemberListRequest request,
-            CancellationToken cancel = default)
-        {
-            EnsureUserId(userId);
-            EnsureRequest(request);
-
-            var group = await GetActiveGroupAsync(groupId, cancel);
-            await EnsureActiveMembershipAsync(group.Id, userId, cancel);
-
-            return await BuildMemberListResponseAsync(group.Id, ActiveStatus, request, roles: null, cancel);
-        }
-
-        public async Task<GroupMemberListResponse> GetPendingJoinRequestsAsync(
-            string userId,
-            string groupId,
-            GroupMemberListRequest request,
-            CancellationToken cancel = default)
-        {
-            EnsureUserId(userId);
-            EnsureRequest(request);
-
-            var group = await GetActiveGroupAsync(groupId, cancel);
-            await EnsureCanManageMembersAsync(group, userId, cancel);
-
-            return await BuildMemberListResponseAsync(group.Id, PendingStatus, request, roles: null, cancel);
-        }
-
-        public async Task<GroupMembershipActionResponse> KickMemberAsync(
-            string userId,
-            string groupId,
-            string targetUserId,
-            CancellationToken cancel = default)
-        {
-            EnsureUserId(userId);
-
-            var group = await GetActiveGroupAsync(groupId, cancel);
-            var currentMember = await EnsureCanManageMembersAsync(group, userId, cancel);
-            var targetMember = await GetActiveTargetMemberAsync(group.Id, targetUserId, cancel);
-
-            EnsureCanActOnTarget(group, currentMember, targetMember);
-
-            targetMember.Status = KickedStatus;
-            targetMember.Role = MemberRole;
-            targetMember.JoinedAt = null;
-            targetMember.UpdatedAt = DateTime.UtcNow;
-            targetMember.UpdatedByUserId = userId;
-
-            await _dbContext.SaveChangesAsync(cancel);
-
-            return BuildMembershipActionResponse(targetMember, requiresApproval: false);
-        }
-
-        public async Task<GroupMembershipActionResponse> BlockMemberAsync(
-            string userId,
-            string groupId,
-            string targetUserId,
-            CancellationToken cancel = default)
-        {
-            EnsureUserId(userId);
-
-            var group = await GetActiveGroupAsync(groupId, cancel);
-            var currentMember = await EnsureCanManageMembersAsync(group, userId, cancel);
-
-            if (userId == targetUserId)
-                throw new BadRequestException(ErrorCodes.GROUP.SELF_ACTION_INVALID, "You cannot block yourself.");
-
-            if (group.OwnerUserId == targetUserId)
-                throw new ForbiddenException(ErrorCodes.GROUP.OWNER_ACTION_INVALID, "Group owner cannot be blocked.");
-
-            var targetExists = await _dbContext.Users
-                .AsNoTracking()
-                .AnyAsync(u => u.Id == targetUserId, cancel);
-            if (!targetExists)
-                throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found.");
-
-            var targetMember = await GetMembershipAsync(group.Id, targetUserId, cancel);
-            if (targetMember != null)
-                EnsureCanActOnTarget(group, currentMember, targetMember);
-
-            if (targetMember == null)
-            {
-                targetMember = new GroupMember
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    GroupId = group.Id,
-                    UserId = targetUserId,
-                    CreatedAt = DateTime.UtcNow,
-                    CreatedByUserId = userId
-                };
-                _dbContext.GroupMembers.Add(targetMember);
-            }
-
-            targetMember.Status = BlockedStatus;
-            targetMember.Role = MemberRole;
-            targetMember.JoinedAt = null;
-            targetMember.UpdatedAt = DateTime.UtcNow;
-            targetMember.UpdatedByUserId = userId;
-
-            await _dbContext.SaveChangesAsync(cancel);
-
-            return BuildMembershipActionResponse(targetMember, requiresApproval: false);
-        }
-
-        public async Task<GroupMemberResponse> UpdateMemberRoleAsync(
-            string userId,
-            string groupId,
-            string targetUserId,
-            UpdateGroupMemberRoleRequest request,
-            CancellationToken cancel = default)
-        {
-            EnsureUserId(userId);
-            EnsureRequest(request);
-
-            var group = await GetActiveGroupAsync(groupId, cancel);
-            var currentMember = await EnsureCanManageRolesAsync(group, userId, cancel);
-            var targetMember = await GetActiveTargetMemberAsync(group.Id, targetUserId, cancel);
-            var nextRole = NormalizeRoleForWrite(request.Role);
-
-            EnsureCanActOnTarget(group, currentMember, targetMember);
-
-            targetMember.Role = nextRole;
-            targetMember.UpdatedAt = DateTime.UtcNow;
-            targetMember.UpdatedByUserId = userId;
-
-            await _dbContext.SaveChangesAsync(cancel);
-
-            return await BuildMemberResponseAsync(targetMember, cancel);
-        }
-
-        public Task<GroupMemberResponse> RevokeMemberRoleAsync(
-            string userId,
-            string groupId,
-            string targetUserId,
-            CancellationToken cancel = default)
-        {
-            return UpdateMemberRoleAsync(
-                userId,
-                groupId,
-                targetUserId,
-                new UpdateGroupMemberRoleRequest { Role = MemberRole },
-                cancel);
-        }
-
-        public async Task<GroupMemberListResponse> GetAdminsAndModeratorsAsync(
-            string userId,
-            string groupId,
-            GroupMemberListRequest request,
-            CancellationToken cancel = default)
-        {
-            EnsureUserId(userId);
-            EnsureRequest(request);
-
-            var group = await GetActiveGroupAsync(groupId, cancel);
-            await EnsureActiveMembershipAsync(group.Id, userId, cancel);
-
-            return await BuildMemberListResponseAsync(
-                group.Id,
-                ActiveStatus,
-                request,
-                new[] { AdminRole, ModeratorRole },
-                cancel);
-        }
-
+        /// <inheritdoc />
+        public Task<GroupMembershipActionResponse> JoinGroupAsync(string userId, string groupId, CancellationToken cancel = default)
+            => _groupMemberService.JoinGroupAsync(userId, groupId, cancel);
+
+        /// <inheritdoc />
+        public Task<GroupMembershipActionResponse> LeaveGroupAsync(string userId, string groupId, CancellationToken cancel = default)
+            => _groupMemberService.LeaveGroupAsync(userId, groupId, cancel);
+
+        /// <inheritdoc />
+        public Task<GroupInviteMembersResponse> InviteMembersAsync(string userId, string groupId, InviteGroupMembersRequest request, CancellationToken cancel = default)
+            => _groupMemberService.InviteMembersAsync(userId, groupId, request, cancel);
+
+        /// <inheritdoc />
+        public Task<GroupMemberResponse> AcceptJoinRequestAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default)
+            => _groupMemberService.AcceptJoinRequestAsync(userId, groupId, targetUserId, cancel);
+
+        /// <inheritdoc />
+        public Task<GroupMembershipActionResponse> DeclineJoinRequestAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default)
+            => _groupMemberService.DeclineJoinRequestAsync(userId, groupId, targetUserId, cancel);
+
+        /// <inheritdoc />
+        public Task<GroupMemberListResponse> GetGroupMembersAsync(string userId, string groupId, GroupMemberListRequest request, CancellationToken cancel = default)
+            => _groupMemberService.GetGroupMembersAsync(userId, groupId, request, cancel);
+
+        /// <inheritdoc />
+        public Task<GroupMemberListResponse> GetPendingJoinRequestsAsync(string userId, string groupId, GroupMemberListRequest request, CancellationToken cancel = default)
+            => _groupMemberService.GetPendingJoinRequestsAsync(userId, groupId, request, cancel);
+
+        /// <inheritdoc />
+        public Task<GroupMembershipActionResponse> KickMemberAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default)
+            => _groupMemberService.KickMemberAsync(userId, groupId, targetUserId, cancel);
+
+        /// <inheritdoc />
+        public Task<GroupMembershipActionResponse> BlockMemberAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default)
+            => _groupMemberService.BlockMemberAsync(userId, groupId, targetUserId, cancel);
+
+        /// <inheritdoc />
+        public Task<GroupMemberResponse> UpdateMemberRoleAsync(string userId, string groupId, string targetUserId, UpdateGroupMemberRoleRequest request, CancellationToken cancel = default)
+            => _groupMemberService.UpdateMemberRoleAsync(userId, groupId, targetUserId, request, cancel);
+
+        /// <inheritdoc />
+        public Task<GroupMemberResponse> RevokeMemberRoleAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default)
+            => _groupMemberService.RevokeMemberRoleAsync(userId, groupId, targetUserId, cancel);
+
+        /// <inheritdoc />
+        public Task<GroupMemberListResponse> GetAdminsAndModeratorsAsync(string userId, string groupId, GroupMemberListRequest request, CancellationToken cancel = default)
+            => _groupMemberService.GetAdminsAndModeratorsAsync(userId, groupId, request, cancel);
+
+        /// <inheritdoc />
         public async Task<Group> GetByIdAsync(string id)
             => await _dbContext.Groups.FindAsync(id)
                ?? throw new NotFoundException(ErrorCodes.GROUP.NOT_FOUND, "Group not found.");
 
+        /// <inheritdoc />
         public async Task<Group> GetBySlugAsync(string slug)
             => await _dbContext.Groups.FirstOrDefaultAsync(g => g.Id == slug)
                ?? throw new NotFoundException(ErrorCodes.GROUP.NOT_FOUND, "Group not found.");
 
+        /// <inheritdoc />
         public async Task<Group> CreateAsync(Group group)
         {
             _dbContext.Groups.Add(group);
@@ -837,6 +490,7 @@ namespace Kpett.ChatApp.Services.Impls
             return group;
         }
 
+        /// <inheritdoc />
         public async Task<Group> UpdateAsync(Group group)
         {
             _dbContext.Groups.Update(group);
@@ -844,6 +498,7 @@ namespace Kpett.ChatApp.Services.Impls
             return group;
         }
 
+        /// <inheritdoc />
         public async Task DeleteAsync(string id)
         {
             var group = await _dbContext.Groups.FindAsync(id)
@@ -853,6 +508,7 @@ namespace Kpett.ChatApp.Services.Impls
             await _dbContext.SaveChangesAsync();
         }
 
+        /// <inheritdoc />
         public async Task<(List<Group> Items, int TotalCount)> SearchAsync(
             string? keyword,
             GroupPrivacy? privacy,
@@ -898,6 +554,7 @@ namespace Kpett.ChatApp.Services.Impls
             return (items, total);
         }
 
+        /// <inheritdoc />
         public async Task<(List<Group> Items, int TotalCount)> GetByMemberAsync(
             string userId,
             GroupMemberRole? filterByRole,
@@ -929,9 +586,11 @@ namespace Kpett.ChatApp.Services.Impls
             return (groups, total);
         }
 
+        /// <inheritdoc />
         public async Task<bool> ExistsAsync(string id)
             => await _dbContext.Groups.AnyAsync(g => g.Id == id);
 
+        /// <inheritdoc />
         public async Task<bool> SlugExistsAsync(string slug)
             => await _dbContext.Groups.AnyAsync(g => g.Id == slug);
 
@@ -1079,7 +738,7 @@ namespace Kpett.ChatApp.Services.Impls
             var total = await query.CountAsync(cancel);
 
             var items = await query
-                .OrderBy(x => x.member.Role == AdminRole ? 0 : x.member.Role == ModeratorRole ? 1 : 2)
+                .OrderBy(x => GetRolePriority(x.member.Role))
                 .ThenByDescending(x => x.member.JoinedAt ?? x.member.CreatedAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -1468,6 +1127,13 @@ namespace Kpett.ChatApp.Services.Impls
         private static bool IsAdmin(string? role)
         {
             return string.Equals(role, AdminRole, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static int GetRolePriority(string? role)
+        {
+            if (role == AdminRole) return 0;
+            if (role == ModeratorRole) return 1;
+            return 2;
         }
     }
 }

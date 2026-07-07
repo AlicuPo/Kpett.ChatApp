@@ -1,0 +1,580 @@
+================================================================================
+GROUP MEMBER MANAGEMENT API - Request / Response
+Base URL: /api/groups
+Auth: Bearer Token (JWT) - tat ca endpoint can [Authorize]
+================================================================================
+
+Gia tri dung chung
+--------------------------------------------------------------------------------
+Member role:
+  - member
+  - moderator
+  - admin
+
+Member status:
+  - active   : dang la thanh vien
+  - pending  : dang cho duyet yeu cau tham gia
+  - declined : yeu cau tham gia bi tu choi
+  - left     : da roi nhom
+  - kicked   : bi xoa khoi nhom
+  - blocked  : bi chan khoi nhom
+
+Quyen:
+  - Thanh vien active moi xem duoc danh sach member.
+  - Moderator/Admin/Owner duoc duyet yeu cau, kick, block thanh vien thap quyen hon.
+  - Admin/Owner duoc phong/thu hoi role.
+  - Owner khong the bi kick/block/revoke role.
+  - Nguoi goi khong the tu kick/block/chinh role cua chinh minh.
+  - Moi thanh vien phu thuoc whoCanInvite trong group settings.
+
+Response wrapper chung:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Message text.",
+  "data": {}
+}
+
+Error response chung:
+{
+  "isSuccess": false,
+  "statusCode": 400,
+  "message": "Error message.",
+  "errorCode": "ERROR_CODE",
+  "stackTrace": null
+}
+
+================================================================================
+1. Tham gia nhom
+POST /api/groups/{groupId}/join
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  groupId: string
+
+Request body:
+  Khong co
+
+Logic:
+  - Neu nhom public va memberApproval=false: user vao nhom ngay, status=active.
+  - Neu nhom private/hidden hoac memberApproval=true: tao yeu cau tham gia, status=pending.
+  - Neu user co invitation pending vao nhom: chap nhan invitation va vao nhom active.
+
+Response 200 - vao nhom ngay:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Joined group successfully.",
+  "data": {
+    "groupId": "group-id",
+    "userId": "current-user-id",
+    "status": "active",
+    "role": "member",
+    "requiresApproval": false,
+    "joinedAt": "2026-06-23T10:00:00Z"
+  }
+}
+
+Response 200 - da gui yeu cau tham gia:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Join request sent successfully.",
+  "data": {
+    "groupId": "group-id",
+    "userId": "current-user-id",
+    "status": "pending",
+    "role": "member",
+    "requiresApproval": true,
+    "joinedAt": null
+  }
+}
+
+================================================================================
+2. Roi nhom
+POST /api/groups/{groupId}/leave
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  groupId: string
+
+Request body:
+  Khong co
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Left group successfully.",
+  "data": {
+    "groupId": "group-id",
+    "userId": "current-user-id",
+    "status": "left",
+    "role": "member",
+    "requiresApproval": false,
+    "joinedAt": null
+  }
+}
+
+Luu y:
+  - Owner khong the roi nhom bang endpoint nay.
+
+================================================================================
+3. Moi ban be vao nhom
+POST /api/groups/{groupId}/invitations
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+  Content-Type: application/json
+
+Path params:
+  groupId: string
+
+Request body:
+{
+  "userIds": [
+    "friend-user-id-1",
+    "friend-user-id-2"
+  ]
+}
+
+Logic:
+  - Chi moi duoc user dang la ban be active.
+  - Quyen moi thanh vien phu thuoc group settings whoCanInvite:
+    "anyone" | "admin_mod" | "admin_only"
+  - User da la member, dang pending, da bi block, hoac da co invitation pending se nam trong skipped.
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Group invitations processed successfully.",
+  "data": {
+    "invitations": [
+      {
+        "id": "invitation-id",
+        "groupId": "group-id",
+        "invitedByUserId": "current-user-id",
+        "inviteeUserId": "friend-user-id-1",
+        "status": "pending",
+        "createdAt": "2026-06-23T10:05:00Z"
+      }
+    ],
+    "skipped": [
+      {
+        "userId": "friend-user-id-2",
+        "reason": "already_member"
+      }
+    ],
+    "invitedCount": 1,
+    "skippedCount": 1
+  }
+}
+
+Skipped reason co the gap:
+  - self
+  - user_not_found
+  - not_friend
+  - already_member
+  - blocked
+  - join_request_pending
+  - invitation_pending
+
+================================================================================
+4. Chap nhan yeu cau tham gia
+POST /api/groups/{groupId}/join-requests/{targetUserId}/accept
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  groupId: string
+  targetUserId: string - user dang co yeu cau pending
+
+Request body:
+  Khong co
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Join request accepted successfully.",
+  "data": {
+    "memberId": "member-row-id",
+    "groupId": "group-id",
+    "userId": "target-user-id",
+    "username": "target_username",
+    "email": "target@example.com",
+    "displayName": "Target User",
+    "isVerified": false,
+    "role": "member",
+    "status": "active",
+    "createdAt": "2026-06-23T09:00:00Z",
+    "joinedAt": "2026-06-23T10:10:00Z",
+    "updatedAt": "2026-06-23T10:10:00Z"
+  }
+}
+
+================================================================================
+5. Tu choi yeu cau tham gia
+POST /api/groups/{groupId}/join-requests/{targetUserId}/decline
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  groupId: string
+  targetUserId: string - user dang co yeu cau pending
+
+Request body:
+  Khong co
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Join request declined successfully.",
+  "data": {
+    "groupId": "group-id",
+    "userId": "target-user-id",
+    "status": "declined",
+    "role": "member",
+    "requiresApproval": false,
+    "joinedAt": null
+  }
+}
+
+================================================================================
+6. Xem danh sach thanh vien
+GET /api/groups/{groupId}/members
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  groupId: string
+
+Query params:
+  keyword  : string [optional] - tim theo username/displayName/email
+  role     : string [optional] - member | moderator | admin
+  page     : number [optional] - default 1
+  pageSize : number [optional] - default 20, max 100
+
+Vi du:
+  GET /api/groups/{groupId}/members?keyword=nam&role=member&page=1&pageSize=20
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Get group members successfully.",
+  "data": {
+    "items": [
+      {
+        "memberId": "member-row-id",
+        "groupId": "group-id",
+        "userId": "user-id",
+        "username": "username",
+        "email": "user@example.com",
+        "displayName": "User Name",
+        "isVerified": false,
+        "role": "member",
+        "status": "active",
+        "createdAt": "2026-06-23T09:00:00Z",
+        "joinedAt": "2026-06-23T09:00:00Z",
+        "updatedAt": null
+      }
+    ],
+    "totalCount": 1,
+    "page": 1,
+    "pageSize": 20
+  }
+}
+
+================================================================================
+7. Xem danh sach yeu cau tham gia dang cho
+GET /api/groups/{groupId}/join-requests
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  groupId: string
+
+Query params:
+  keyword  : string [optional]
+  page     : number [optional] - default 1
+  pageSize : number [optional] - default 20, max 100
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Get pending join requests successfully.",
+  "data": {
+    "items": [
+      {
+        "memberId": "member-row-id",
+        "groupId": "group-id",
+        "userId": "target-user-id",
+        "username": "target_username",
+        "email": "target@example.com",
+        "displayName": "Target User",
+        "isVerified": false,
+        "role": "member",
+        "status": "pending",
+        "createdAt": "2026-06-23T09:55:00Z",
+        "joinedAt": null,
+        "updatedAt": "2026-06-23T09:55:00Z"
+      }
+    ],
+    "totalCount": 1,
+    "page": 1,
+    "pageSize": 20
+  }
+}
+
+================================================================================
+8. Xoa thanh vien khoi nhom (kick)
+DELETE /api/groups/{groupId}/members/{targetUserId}
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  groupId: string
+  targetUserId: string
+
+Request body:
+  Khong co
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Group member removed successfully.",
+  "data": {
+    "groupId": "group-id",
+    "userId": "target-user-id",
+    "status": "kicked",
+    "role": "member",
+    "requiresApproval": false,
+    "joinedAt": null
+  }
+}
+
+================================================================================
+9. Chan thanh vien khoi nhom
+POST /api/groups/{groupId}/members/{targetUserId}/block
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  groupId: string
+  targetUserId: string
+
+Request body:
+  Khong co
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Group member blocked successfully.",
+  "data": {
+    "groupId": "group-id",
+    "userId": "target-user-id",
+    "status": "blocked",
+    "role": "member",
+    "requiresApproval": false,
+    "joinedAt": null
+  }
+}
+
+================================================================================
+10. Phong Admin / Moderator
+PUT /api/groups/{groupId}/members/{targetUserId}/role
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+  Content-Type: application/json
+
+Path params:
+  groupId: string
+  targetUserId: string
+
+Request body:
+{
+  "role": "moderator"
+}
+
+Gia tri role hop le:
+  - admin
+  - moderator
+  - member
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Group member role updated successfully.",
+  "data": {
+    "memberId": "member-row-id",
+    "groupId": "group-id",
+    "userId": "target-user-id",
+    "username": "target_username",
+    "email": "target@example.com",
+    "displayName": "Target User",
+    "isVerified": false,
+    "role": "moderator",
+    "status": "active",
+    "createdAt": "2026-06-23T09:00:00Z",
+    "joinedAt": "2026-06-23T09:00:00Z",
+    "updatedAt": "2026-06-23T10:30:00Z"
+  }
+}
+
+================================================================================
+11. Thu hoi quyen Admin / Moderator
+DELETE /api/groups/{groupId}/members/{targetUserId}/role
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  groupId: string
+  targetUserId: string
+
+Request body:
+  Khong co
+
+Logic:
+  - Dua role cua target ve "member".
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Group member role revoked successfully.",
+  "data": {
+    "memberId": "member-row-id",
+    "groupId": "group-id",
+    "userId": "target-user-id",
+    "username": "target_username",
+    "email": "target@example.com",
+    "displayName": "Target User",
+    "isVerified": false,
+    "role": "member",
+    "status": "active",
+    "createdAt": "2026-06-23T09:00:00Z",
+    "joinedAt": "2026-06-23T09:00:00Z",
+    "updatedAt": "2026-06-23T10:35:00Z"
+  }
+}
+
+================================================================================
+12. Xem danh sach Admin & Moderator
+GET /api/groups/{groupId}/admins-moderators
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  groupId: string
+
+Query params:
+  keyword  : string [optional]
+  page     : number [optional] - default 1
+  pageSize : number [optional] - default 20, max 100
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Get group admins and moderators successfully.",
+  "data": {
+    "items": [
+      {
+        "memberId": "admin-member-row-id",
+        "groupId": "group-id",
+        "userId": "admin-user-id",
+        "username": "admin_username",
+        "email": "admin@example.com",
+        "displayName": "Admin User",
+        "isVerified": true,
+        "role": "admin",
+        "status": "active",
+        "createdAt": "2026-06-23T09:00:00Z",
+        "joinedAt": "2026-06-23T09:00:00Z",
+        "updatedAt": null
+      },
+      {
+        "memberId": "mod-member-row-id",
+        "groupId": "group-id",
+        "userId": "mod-user-id",
+        "username": "mod_username",
+        "email": "mod@example.com",
+        "displayName": "Moderator User",
+        "isVerified": false,
+        "role": "moderator",
+        "status": "active",
+        "createdAt": "2026-06-23T09:20:00Z",
+        "joinedAt": "2026-06-23T09:20:00Z",
+        "updatedAt": "2026-06-23T10:30:00Z"
+      }
+    ],
+    "totalCount": 2,
+    "page": 1,
+    "pageSize": 20
+  }
+}
+
+================================================================================
+Error codes co the gap
+================================================================================
+
+400 VAL.REQUIRED                 - Thieu request body
+400 GROUP_INVITE_INVALID         - Danh sach userIds rong/khong hop le
+400 GROUP_ROLE_INVALID           - role khong hop le
+400 GROUP_SELF_ACTION_INVALID    - Tu thao tac len chinh minh
+401 AUTH.ACCESS_TOKEN_INVALID    - Token khong hop le/het han
+403 NOT_A_MEMBER                 - Khong phai active member cua nhom
+403 NOT_ADMIN                    - Khong du quyen thuc hien thao tac
+403 GROUP_MEMBER_BLOCKED         - User bi chan khoi nhom
+403 GROUP_OWNER_ACTION_INVALID   - Khong duoc thao tac len owner
+404 GROUP_NOT_FOUND              - Khong tim thay nhom hoac nhom da bi xoa
+404 USER.NOT_FOUND               - Khong tim thay user
+404 GROUP_MEMBER_NOT_FOUND       - Khong tim thay active member
+404 GROUP_JOIN_REQUEST_NOT_FOUND - Khong tim thay yeu cau tham gia pending
+409 GROUP_ALREADY_MEMBER         - User da la thanh vien
+409 GROUP_JOIN_REQUEST_PENDING   - Yeu cau tham gia da dang pending
+
+================================================================================
+Ghi chu
+================================================================================
+
+1. Tat ca datetime dung ISO 8601 UTC.
+2. userId hien tai lay tu JWT, FE khong can gui trong body.
+3. Cac endpoint list dang dung page/pageSize, khong dung cursor.
+4. Invite khong tu dong them vao GroupMembers; nguoi duoc moi se vao nhom khi goi
+   POST /api/groups/{groupId}/join.
+5. Role rank:
+   owner > admin > moderator > member
+6. Moderator/Admin chi thao tac duoc thanh vien co role thap hon.

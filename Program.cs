@@ -1,13 +1,11 @@
 using CloudinaryDotNet;
 using Hangfire;
-using Kpett.ChatApp.Be.Services.Impls;
-using Kpett.ChatApp.Configs;
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response.Shared;
+using Kpett.ChatApp.Options;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Options;
 using Kpett.ChatApp.Services.Impls;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -230,7 +228,11 @@ builder.Services.AddScoped<IPostService, PostService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddScoped<IMediaService, MediaService>();
 builder.Services.AddScoped<IConversationTypingService, ConversationTypingService>();
+builder.Services.AddScoped<IConversationMessageService, ConversationMessageService>();
+builder.Services.AddScoped<IConversationMemberService, ConversationMemberService>();
 builder.Services.AddScoped<IGroupsService, GroupsService>();
+builder.Services.AddScoped<IGroupMemberService, GroupMemberService>();
+builder.Services.AddScoped<IPostReactionService, PostReactionService>();
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();

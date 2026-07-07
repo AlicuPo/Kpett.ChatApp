@@ -12,12 +12,14 @@ using static Kpett.ChatApp.Constants.ErrorCodes;
 
 namespace Kpett.ChatApp.Services.Impls
 {
+    /// <summary>Service quản lý upload/xoá media lên Cloudinary và xử lý ảnh tạm.</summary>
     public class MediaService : IMediaService
     {
         private readonly Cloudinary _cloudinary;
         private readonly MediaOptions _mediaSettings;
         private readonly ILogger<MediaService> _logger;
 
+        /// <summary>Khởi tạo service với các dependencies.</summary>
         public MediaService(
             IOptions<CloudinaryOptions> cloudinaryConfig,
             IOptions<MediaOptions> mediaConfig,
@@ -39,7 +41,7 @@ namespace Kpett.ChatApp.Services.Impls
         /// <summary>
         /// Tạo chữ ký cho phép Client tự upload trực tiếp lên Cloudinary
         /// </summary>
-        public async Task<CloudinarySignatureResponse> GenerateUploadSignature(string folder = "general")
+        public async Task<CloudinarySignatureResponse> GenerateUploadSignatureAsync(string folder = "general")
         {
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             string publicId = $"{Guid.NewGuid():N}";
@@ -72,6 +74,7 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
+        /// <inheritdoc />
         public async Task ConfirmMediaOnCloudinaryAsync(List<string> publicIds)
         {
             if (publicIds == null || !publicIds.Any())
@@ -107,6 +110,7 @@ namespace Kpett.ChatApp.Services.Impls
             }
         }
 
+        /// <inheritdoc />
         public async Task<MediaUploadResponse> UploadImageAsync(IFormFile file, string folder = "general")
         {
             ValidateFile(file, _mediaSettings.MaxImageSizeBytes, _mediaSettings.AllowedImageExtensions);
@@ -140,6 +144,7 @@ namespace Kpett.ChatApp.Services.Impls
             };
         }
 
+        /// <inheritdoc />
         public async Task<MediaUploadResponse> UploadVideoAsync(IFormFile file, string folder = "videos")
         {
             ValidateFile(file, _mediaSettings.MaxVideoSizeBytes, _mediaSettings.AllowedVideoExtensions);
@@ -194,6 +199,7 @@ namespace Kpett.ChatApp.Services.Impls
             }
         }
 
+        /// <inheritdoc />
         public async Task<bool> DeleteFileAsync(string publicId, string resourceType)
         {
             if (string.IsNullOrWhiteSpace(publicId) || string.IsNullOrWhiteSpace(resourceType))
@@ -225,6 +231,7 @@ namespace Kpett.ChatApp.Services.Impls
             return deleted;
         }
 
+        /// <inheritdoc />
         public async Task CleanUpOrphanedImagesAsync()
         {
             try

@@ -1,12 +1,12 @@
 ﻿using Kpett.ChatApp.DTOs.Request.Shared;
-using Kpett.ChatApp.DTOs.Response.Notidication;
+using Kpett.ChatApp.DTOs.Response.Notification;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Kpett.ChatApp.Be.Controllers
+namespace Kpett.ChatApp.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]

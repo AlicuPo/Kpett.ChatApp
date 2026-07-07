@@ -1,12 +1,14 @@
 using StackExchange.Redis;
 namespace Kpett.ChatApp.Services.Impls
 {
+    /// <summary>Service thao tác với Redis: token, OTP, online presence, typing tracking, conversation membership cache.</summary>
     public class RedisService : Interfaces.IRedisService
     {
         private readonly StackExchange.Redis.IDatabase _redis;
         private readonly IConnectionMultiplexer _multiplexer;
         private readonly ILogger<RedisService> _logger;
 
+        /// <summary>Khởi tạo service với các dependencies.</summary>
         public RedisService(IConnectionMultiplexer multiplexer, ILogger<RedisService> logger)
         {
             _multiplexer = multiplexer;
@@ -29,6 +31,7 @@ namespace Kpett.ChatApp.Services.Impls
         private static string TypingMember(string userId, string connectionId) => $"{userId}:{connectionId}";
         private const string TypingEntrySeparator = "|"; // dùng trong ConnTypingSetKey
 
+        /// <inheritdoc />
         public async Task SaveRefreshTokenAsync(string userId, string refreshToken, TimeSpan ttl)
         {
             await _redis.StringSetAsync(
@@ -38,6 +41,7 @@ namespace Kpett.ChatApp.Services.Impls
             );
             _logger.LogDebug("Saved refresh token for user {UserId} with TTL {Ttl}", userId, ttl);
         }
+        /// <inheritdoc />
         public async Task<string?> GetRefreshTokenAsync(string userId)
         {
             var value = await _redis.StringGetAsync(RefreshKey(userId));
@@ -45,12 +49,14 @@ namespace Kpett.ChatApp.Services.Impls
             return value.HasValue ? value.ToString() : null;
         }
 
+        /// <inheritdoc />
         public async Task RemoveRefreshTokenAsync(string userId)
         {
             var deleted = await _redis.KeyDeleteAsync(RefreshKey(userId));
             _logger.LogDebug("Removed refresh token for user {UserId}. Deleted: {Deleted}", userId, deleted);
         }
 
+        /// <inheritdoc />
         public async Task BlacklistAccessTokenAsync(string jti, TimeSpan ttl)
         {
             await _redis.StringSetAsync(
@@ -60,12 +66,14 @@ namespace Kpett.ChatApp.Services.Impls
             );
             _logger.LogDebug("Blacklisted access token JTI {Jti} with TTL {Ttl}", jti, ttl);
         }
+        /// <inheritdoc />
         public async Task<bool> IsAccessTokenBlacklistedAsync(string jti)
         {
             var value = await _redis.StringGetAsync(AccessBlacklistKey(jti));
             _logger.LogDebug("Checked access token JTI {Jti} blacklist. IsBlacklisted: {IsBlacklisted}", jti, value.HasValue);
             return value.HasValue;
         }
+        /// <inheritdoc />
         public async Task BlacklistRefreshTokenAsync(string refreshToken, TimeSpan ttl)
         {
             await _redis.StringSetAsync(
@@ -75,6 +83,7 @@ namespace Kpett.ChatApp.Services.Impls
             );
             _logger.LogDebug("Blacklisted refresh token with TTL {Ttl}", ttl);
         }
+        /// <inheritdoc />
         public async Task<bool> IsRefreshTokenBlacklistedAsync(string refreshToken)
         {
             var value = await _redis.StringGetAsync(RefreshBlacklistKey(refreshToken));
@@ -82,23 +91,27 @@ namespace Kpett.ChatApp.Services.Impls
             return value.HasValue;
         }
 
+        /// <inheritdoc />
         public async Task SavePasswordResetOtpAsync(string email, string otp, TimeSpan ttl)
         {
             await _redis.StringSetAsync(PasswordResetOtpKey(email), otp, ttl);
         }
 
+        /// <inheritdoc />
         public async Task<string?> GetPasswordResetOtpAsync(string email)
         {
             var value = await _redis.StringGetAsync(PasswordResetOtpKey(email));
             return value.HasValue ? value.ToString() : null;
         }
 
+        /// <inheritdoc />
         public async Task RemovePasswordResetOtpAsync(string email)
         {
             await _redis.KeyDeleteAsync(PasswordResetOtpKey(email));
         }
 
         // Connection / presence helpers
+        /// <inheritdoc />
         public async Task AddConnectionAsync(string userId, string connectionId)
         {
             var key = UserConnectionsKey(userId);
@@ -107,6 +120,7 @@ namespace Kpett.ChatApp.Services.Impls
             _logger.LogDebug("Added SignalR connection {ConnectionId} for user {UserId}", connectionId, userId);
         }
 
+        /// <inheritdoc />
         public async Task RemoveConnectionAsync(string userId, string connectionId)
         {
             var key = UserConnectionsKey(userId);
@@ -114,6 +128,7 @@ namespace Kpett.ChatApp.Services.Impls
             _logger.LogDebug("Removed SignalR connection {ConnectionId} for user {UserId}", connectionId, userId);
         }
 
+        /// <inheritdoc />
         public async Task<string[]> GetConnectionsAsync(string userId)
         {
             var key = UserConnectionsKey(userId);
@@ -123,6 +138,7 @@ namespace Kpett.ChatApp.Services.Impls
             return connections;
         }
 
+        /// <inheritdoc />
         public async Task<bool> IsUserOnlineAsync(string userId)
         {
             var key = UserConnectionsKey(userId);
@@ -131,6 +147,7 @@ namespace Kpett.ChatApp.Services.Impls
             return count > 0;
         }
 
+        /// <inheritdoc />
         public async Task<Dictionary<string, bool>> GetUsersOnlineStatusAsync(IEnumerable<string> userIds)
         {
             var result = new Dictionary<string, bool>();
@@ -157,18 +174,21 @@ namespace Kpett.ChatApp.Services.Impls
         }
 
         // Conversation membership helpers
+        /// <inheritdoc />
         public async Task AddUserToConversationAsync(string conversationId, string userId)
         {
             await _redis.SetAddAsync(ConversationUsersKey(conversationId), userId);
             _logger.LogDebug("Added user {UserId} to conversation {ConversationId} presence set", userId, conversationId);
         }
 
+        /// <inheritdoc />
         public async Task RemoveUserFromConversationAsync(string conversationId, string userId)
         {
             await _redis.SetRemoveAsync(ConversationUsersKey(conversationId), userId);
             _logger.LogDebug("Removed user {UserId} from conversation {ConversationId} presence set", userId, conversationId);
         }
 
+        /// <inheritdoc />
         public async Task<string[]> GetConversationUsersAsync(string conversationId)
         {
             var members = await _redis.SetMembersAsync(ConversationUsersKey(conversationId));
@@ -177,6 +197,7 @@ namespace Kpett.ChatApp.Services.Impls
             return users;
         }
 
+        /// <inheritdoc />
         public async Task TrackConnectionConversationAsync(string connectionId, string conversationId)
         {
             var key = ConnectionConversationsKey(connectionId);
@@ -185,12 +206,14 @@ namespace Kpett.ChatApp.Services.Impls
             _logger.LogDebug("Tracked conversation {ConversationId} for connection {ConnectionId}", conversationId, connectionId);
         }
 
+        /// <inheritdoc />
         public async Task UntrackConnectionConversationAsync(string connectionId, string conversationId)
         {
             await _redis.SetRemoveAsync(ConnectionConversationsKey(connectionId), conversationId);
             _logger.LogDebug("Untracked conversation {ConversationId} for connection {ConnectionId}", conversationId, connectionId);
         }
 
+        /// <inheritdoc />
         public async Task<string[]> GetConnectionConversationsAsync(string connectionId)
         {
             var members = await _redis.SetMembersAsync(ConnectionConversationsKey(connectionId));
@@ -199,6 +222,7 @@ namespace Kpett.ChatApp.Services.Impls
             return conversations;
         }
 
+        /// <inheritdoc />
         public async Task ClearConnectionConversationsAsync(string connectionId)
         {
             await _redis.KeyDeleteAsync(ConnectionConversationsKey(connectionId));
@@ -206,6 +230,7 @@ namespace Kpett.ChatApp.Services.Impls
         }
 
         // Publish wrapper using multiplexer subscriber
+        /// <inheritdoc />
         public async Task<long> PublishAsync(string channel, string message)
         {
             var sub = _multiplexer.GetSubscriber();
@@ -219,12 +244,14 @@ namespace Kpett.ChatApp.Services.Impls
         private static string ConversationAccessKey(string userId, string conversationId)
             => $"user:{userId}:conv_access:{conversationId}";
 
+        /// <inheritdoc />
         public async Task SetConversationAccessCacheAsync(string userId, string conversationId, TimeSpan ttl)
         {
             await _redis.StringSetAsync(ConversationAccessKey(userId, conversationId), "1", ttl);
             _logger.LogDebug("Set conversation access cache for user {UserId} and conversation {ConversationId} with TTL {Ttl}", userId, conversationId, ttl);
         }
 
+        /// <inheritdoc />
         public async Task<bool> GetConversationAccessCacheAsync(string userId, string conversationId)
         {
             var value = await _redis.StringGetAsync(ConversationAccessKey(userId, conversationId));
@@ -236,6 +263,7 @@ namespace Kpett.ChatApp.Services.Impls
         // TYPING TRACKING
         // ========================================================================
 
+        /// <inheritdoc />
         public async Task SetUserTypingAsync(string conversationId, string userId, string connectionId, TimeSpan ttl)
         {
             var expiryUnix = DateTimeOffset.UtcNow.Add(ttl).ToUnixTimeSeconds();
@@ -255,6 +283,7 @@ namespace Kpett.ChatApp.Services.Impls
             _logger.LogDebug("Set typing state for user {UserId}, connection {ConnectionId}, conversation {ConversationId}", userId, connectionId, conversationId);
         }
 
+        /// <inheritdoc />
         public async Task<bool> IsUserConnectionTypingAsync(string conversationId, string userId, string connectionId)
         {
             var nowUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -266,6 +295,7 @@ namespace Kpett.ChatApp.Services.Impls
             return isTyping;
         }
 
+        /// <inheritdoc />
         public async Task RemoveUserTypingAsync(string conversationId, string userId, string connectionId)
         {
             var member = TypingMember(userId, connectionId);
@@ -276,6 +306,7 @@ namespace Kpett.ChatApp.Services.Impls
             _logger.LogDebug("Removed typing state for user {UserId}, connection {ConnectionId}, conversation {ConversationId}", userId, connectionId, conversationId);
         }
 
+        /// <inheritdoc />
         public async Task<bool> HasOtherTypingConnectionsAsync(string conversationId, string userId, string excludeConnectionId)
         {
             var nowUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -295,6 +326,7 @@ namespace Kpett.ChatApp.Services.Impls
             return hasOtherConnections;
         }
 
+        /// <inheritdoc />
         public async Task<List<(string UserId, string ConnectionId)>> GetTypingUsersInConversationAsync(string conversationId)
         {
             var nowUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -318,6 +350,7 @@ namespace Kpett.ChatApp.Services.Impls
             return result;
         }
 
+        /// <inheritdoc />
         public async Task<List<(string ConversationId, string UserId)>> RemoveAllTypingForConnectionAsync(string connectionId)
         {
             var connKey = ConnTypingSetKey(connectionId);

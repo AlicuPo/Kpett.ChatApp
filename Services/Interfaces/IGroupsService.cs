@@ -5,56 +5,106 @@ using Kpett.ChatApp.Models;
 
 namespace Kpett.ChatApp.Services.Interfaces
 {
+    /// <summary>
+    /// Service quản lý nhóm: CRUD nhóm, cài đặt, tìm kiếm và uỷ quyền thao tác thành viên.
+    /// </summary>
     public interface IGroupsService
     {
-
-        // Tạo / Sửa / Xóa
+        /// <summary>Tạo nhóm mới, chủ sở hữu mặc định là người tạo.</summary>
         Task<CreateGroupResponse> CreateGroupAsync(string userId, CreateGroupRequest request, CancellationToken cancel = default);
+
+        /// <summary>Cập nhật thông tin nhóm (tên, mô tả, ảnh, quyền riêng tư, ngôn ngữ, nội quy).</summary>
         Task<GroupDetailResponse> UpdateGroupAsync(string userId, string groupId, UpdateGroupRequest request, CancellationToken cancel = default);
+
+        /// <summary>Xoá mềm nhóm (chuyển trạng thái deleted).</summary>
         Task DeleteGroupAsync(string userId, string groupId, DeleteGroupRequest? request = null, CancellationToken cancel = default);
 
-
-        // Xem chi tiết
+        /// <summary>Lấy chi tiết nhóm theo ID.</summary>
         Task<GroupDetailResponse> GetGroupByIdAsync(string userId, string groupId, CancellationToken cancel = default);
+
+        /// <summary>Lấy chi tiết nhóm theo slug.</summary>
         Task<GroupDetailResponse> GetGroupBySlugAsync(string userId, string slug, CancellationToken cancel = default);
 
-        // Tìm kiếm
+        /// <summary>Tìm kiếm nhóm theo từ khoá, loại quyền riêng tư, ngôn ngữ (phân trang).</summary>
         Task<SearchGroupResponse> SearchGroupsAsync(string userId, SearchGroupRequest request, CancellationToken cancel = default);
 
-        // Danh sách nhóm của tôi
+        /// <summary>Lấy danh sách nhóm của người dùng (phân trang, lọc theo vai trò).</summary>
         Task<MyGroupsResponse> GetMyGroupsAsync(string userId, MyGroupsRequest request, CancellationToken cancel = default);
 
-        // Cài đặt nhóm
+        /// <summary>Lấy cài đặt nhóm.</summary>
         Task<GroupSettingsResponse> GetGroupSettingsAsync(string userId, string groupId, CancellationToken cancel = default);
+
+        /// <summary>Cập nhật cài đặt nhóm (quyền riêng tư, ai có thể đăng/mời, phê duyệt, ngôn ngữ, nội quy).</summary>
         Task<GroupSettingsResponse> UpdateGroupSettingsAsync(string userId, string groupId, UpdateGroupSettingsRequest request, CancellationToken cancel = default);
+
+        /// <summary>Cập nhật nội quy nhóm.</summary>
         Task<GroupSettingsResponse> UpdateGroupRulesAsync(string userId, string groupId, UpdateGroupRulesRequest request, CancellationToken cancel = default);
 
-        // Quản lý thành viên
+        // ─── Member operations (delegated to IGroupMemberService) ───
+
+        /// <summary>Người dùng tham gia nhóm hoặc gửi yêu cầu nếu nhóm yêu cầu phê duyệt.</summary>
         Task<GroupMembershipActionResponse> JoinGroupAsync(string userId, string groupId, CancellationToken cancel = default);
+
+        /// <summary>Người dùng rời nhóm.</summary>
         Task<GroupMembershipActionResponse> LeaveGroupAsync(string userId, string groupId, CancellationToken cancel = default);
+
+        /// <summary>Mời danh sách người dùng vào nhóm.</summary>
         Task<GroupInviteMembersResponse> InviteMembersAsync(string userId, string groupId, InviteGroupMembersRequest request, CancellationToken cancel = default);
+
+        /// <summary>Chấp nhận yêu cầu tham gia nhóm.</summary>
         Task<GroupMemberResponse> AcceptJoinRequestAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default);
+
+        /// <summary>Từ chối yêu cầu tham gia nhóm.</summary>
         Task<GroupMembershipActionResponse> DeclineJoinRequestAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default);
+
+        /// <summary>Lấy danh sách thành viên đang hoạt động của nhóm.</summary>
         Task<GroupMemberListResponse> GetGroupMembersAsync(string userId, string groupId, GroupMemberListRequest request, CancellationToken cancel = default);
+
+        /// <summary>Lấy danh sách yêu cầu tham gia đang chờ.</summary>
         Task<GroupMemberListResponse> GetPendingJoinRequestsAsync(string userId, string groupId, GroupMemberListRequest request, CancellationToken cancel = default);
+
+        /// <summary>Kick thành viên khỏi nhóm.</summary>
         Task<GroupMembershipActionResponse> KickMemberAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default);
+
+        /// <summary>Chặn thành viên khỏi nhóm.</summary>
         Task<GroupMembershipActionResponse> BlockMemberAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default);
+
+        /// <summary>Cập nhật vai trò thành viên.</summary>
         Task<GroupMemberResponse> UpdateMemberRoleAsync(string userId, string groupId, string targetUserId, UpdateGroupMemberRoleRequest request, CancellationToken cancel = default);
+
+        /// <summary>Thu hồi vai trò thành viên (đặt về member).</summary>
         Task<GroupMemberResponse> RevokeMemberRoleAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default);
+
+        /// <summary>Lấy danh sách admin và moderator của nhóm.</summary>
         Task<GroupMemberListResponse> GetAdminsAndModeratorsAsync(string userId, string groupId, GroupMemberListRequest request, CancellationToken cancel = default);
 
+        // ─── Internal CRUD ───
 
+        /// <summary>Lấy entity Group theo ID (ném NotFoundException nếu không tìm thấy).</summary>
         Task<Group> GetByIdAsync(string id);
+
+        /// <summary>Lấy entity Group theo slug (ném NotFoundException nếu không tìm thấy).</summary>
         Task<Group> GetBySlugAsync(string slug);
+
+        /// <summary>Tạo entity Group mới.</summary>
         Task<Group> CreateAsync(Group group);
+
+        /// <summary>Cập nhật entity Group.</summary>
         Task<Group> UpdateAsync(Group group);
+
+        /// <summary>Xoá entity Group.</summary>
         Task DeleteAsync(string id);
 
+        /// <summary>Tìm kiếm Group theo từ khoá, quyền riêng tư, ngôn ngữ (phân trang).</summary>
         Task<(List<Group> Items, int TotalCount)> SearchAsync(string? keyword, GroupPrivacy? privacy, string? language, GroupSortBy sortBy, int page, int pageSize);
 
+        /// <summary>Lấy danh sách Group mà người dùng là thành viên.</summary>
         Task<(List<Group> Items, int TotalCount)> GetByMemberAsync(string userId, GroupMemberRole? filterByRole, int page, int pageSize);
-        Task<bool> ExistsAsync(string id);
-        Task<bool> SlugExistsAsync(string slug);
 
+        /// <summary>Kiểm tra Group có tồn tại theo ID.</summary>
+        Task<bool> ExistsAsync(string id);
+
+        /// <summary>Kiểm tra slug đã tồn tại chưa.</summary>
+        Task<bool> SlugExistsAsync(string slug);
     }
 }

@@ -1,6 +1,6 @@
 ﻿namespace Kpett.ChatApp.Extensions
 {
-    public static class DatetimeExtentions
+    public static class DateTimeExtensions
     {
         public static DateTime ToUtc(this DateTime dateTime)
         {

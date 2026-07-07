@@ -1,6 +1,6 @@
 ﻿using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Request.Shared;
-using Kpett.ChatApp.DTOs.Response.Notidication;
+using Kpett.ChatApp.DTOs.Response.Notification;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Extensions;
 using Kpett.ChatApp.Helper;
@@ -9,19 +9,22 @@ using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
-namespace Kpett.ChatApp.Be.Services.Impls
+namespace Kpett.ChatApp.Services.Impls
 {
+    /// <summary>Service quản lý thông báo: lấy danh sách, đếm chưa đọc, đánh dấu đã đọc.</summary>
     public class NotificationService : INotificationService
     {
         private readonly AppDbContext _context;
         private readonly ILogger<NotificationService> _logger;
 
+        /// <summary>Khởi tạo service với các dependencies.</summary>
         public NotificationService(AppDbContext context, ILogger<NotificationService> logger)
         {
             _context = context;
             _logger = logger;
         }
 
+        /// <inheritdoc />
         public async Task<PaginatedData<NotificationResponse>> GetUserNotificationsAsync(string currentUserId, CursorPaginationRequest request, CancellationToken cancel)
         {
             var limit = request.Limit <= 0 ? 20 : Math.Min(request.Limit, 50);
@@ -115,6 +118,7 @@ namespace Kpett.ChatApp.Be.Services.Impls
             };
         }
 
+        /// <inheritdoc />
         public async Task<int> GetUnreadCountAsync(string currentUserId, CancellationToken cancel)
         {
             var count = await _context.Notifications
@@ -123,6 +127,7 @@ namespace Kpett.ChatApp.Be.Services.Impls
             return count;
         }
 
+        /// <inheritdoc />
         public async Task MarkAsReadAsync(string currentUserId, string notificationId, CancellationToken cancel)
         {
             // Tối ưu hóa: Dùng ExecuteUpdateAsync ghi trực tiếp xuống SQL Server không cần Load Entity
@@ -132,6 +137,7 @@ namespace Kpett.ChatApp.Be.Services.Impls
             _logger.LogInformation("User {UserId} marked notification {NotificationId} as read. Affected rows: {AffectedRows}", currentUserId, notificationId, affectedRows);
         }
 
+        /// <inheritdoc />
         public async Task MarkAllAsReadAsync(string currentUserId, CancellationToken cancel)
         {
             // Tối ưu hóa: Đánh dấu tất cả đã đọc chỉ với 1 câu lệnh SQL

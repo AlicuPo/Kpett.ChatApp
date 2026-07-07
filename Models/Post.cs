@@ -36,4 +36,6 @@ public partial class Post
     public DateTime? UpdatedAt { get; set; }
 
     public bool IsDeleted { get; set; } = false;
+
+    public bool IsNsfw { get; set; } = false;
 }

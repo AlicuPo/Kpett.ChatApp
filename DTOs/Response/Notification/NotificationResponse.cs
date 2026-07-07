@@ -1,4 +1,4 @@
-﻿namespace Kpett.ChatApp.DTOs.Response.Notidication
+﻿namespace Kpett.ChatApp.DTOs.Response.Notification
 {
     public class NotificationResponse
     {

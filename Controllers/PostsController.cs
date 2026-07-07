@@ -46,7 +46,7 @@ namespace Kpett.ChatApp.Controllers
             return Ok(new GeneralResponse<PostFeedResponse>
             {
                 IsSuccess = true,
-                Message = "Create post successfully",
+                Message = "Update post successfully",
                 Data = result,
                 StatusCode = 200
             });

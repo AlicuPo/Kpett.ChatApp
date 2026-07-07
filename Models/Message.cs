@@ -1,5 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
+namespace Kpett.ChatApp.Models;
+
 public partial class Message
 {
     [Key]

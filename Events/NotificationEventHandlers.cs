@@ -4,7 +4,7 @@ using Kpett.ChatApp.Events.Friend;
 using Kpett.ChatApp.Helper;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.DTOs.Response.Notidication;
+using Kpett.ChatApp.DTOs.Response.Notification;
 using MediatR;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;

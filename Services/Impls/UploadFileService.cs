@@ -4,17 +4,20 @@ using CloudinaryDotNet.Actions;
 
 namespace Kpett.ChatApp.Services.Impls
 {
+    /// <summary>Service upload file lên Cloudinary.</summary>
     public class UploadFileService : Interfaces.ICloudinaryService
     {
         private readonly Cloudinary _cloudinary;
         private readonly ILogger<UploadFileService> _logger;
    
+        /// <summary>Khởi tạo service với các dependencies.</summary>
         public UploadFileService(Cloudinary cloudinary, ILogger<UploadFileService> logger)
         {
             _cloudinary = cloudinary ?? throw new ArgumentNullException(nameof(cloudinary));
             _logger = logger;
         }
 
+        /// <inheritdoc />
         public async Task<string> UploadToCloudinaryAsync(IFormFile file, string basePath, string yearFolder, string monthFolder)
         {
             if (file == null || file.Length == 0)

@@ -6,17 +6,20 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Kpett.ChatApp.Services.Impls
 {
+    /// <summary>Service kiểm tra quyền truy cập hội thoại.</summary>
     public class ConversationAccessService : IConversationAccessService
     {
         private readonly AppDbContext _dbContext;
         private readonly ILogger<ConversationAccessService> _logger;
 
+        /// <summary>Khởi tạo service với các dependencies.</summary>
         public ConversationAccessService(AppDbContext dbContext, ILogger<ConversationAccessService> logger)
         {
             _dbContext = dbContext;
             _logger = logger;
         }
 
+        /// <inheritdoc />
         public async Task EnsureCanAccessConversationAsync(string conversationId, string userId, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(conversationId))
