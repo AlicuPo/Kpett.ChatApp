@@ -96,6 +96,48 @@ namespace Kpett.ChatApp.Services.Impls
             if (rules.Count > 0)
                 _dbContext.GroupRules.AddRange(rules);
 
+            if (request.InviteeIds.Count > 0)
+            {
+                var validIds = request.InviteeIds
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.Ordinal)
+                    .Where(id => id != userId)
+                    .Take(100)
+                    .ToList();
+
+                var existingUsers = await _dbContext.Users
+                    .AsNoTracking()
+                    .Where(u => validIds.Contains(u.Id))
+                    .Select(u => u.Id)
+                    .ToHashSetAsync(cancel);
+
+                var nowForInvite = DateTime.UtcNow;
+                foreach (var inviteeId in validIds)
+                {
+                    if (!existingUsers.Contains(inviteeId)) continue;
+
+                    var existingMember = await _dbContext.GroupMembers
+                        .FirstOrDefaultAsync(m => m.GroupId == newGroup.Id && m.UserId == inviteeId, cancel);
+
+                    if (existingMember != null) continue;
+
+                    var existingInvite = await _dbContext.GroupInvitations
+                        .FirstOrDefaultAsync(i => i.GroupId == newGroup.Id && i.InviteeUserId == inviteeId, cancel);
+
+                    if (existingInvite != null) continue;
+
+                    _dbContext.GroupInvitations.Add(new GroupInvitation
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        GroupId = newGroup.Id,
+                        InvitedByUserId = userId,
+                        InviteeUserId = inviteeId,
+                        Status = PendingStatus,
+                        CreatedAt = nowForInvite
+                    });
+                }
+            }
+
             await _dbContext.SaveChangesAsync(cancel);
 
             return new CreateGroupResponse

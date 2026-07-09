@@ -20,5 +20,7 @@ namespace Kpett.ChatApp.DTOs.Request.Group
         public string? Language { get; set; } = "vi";
 
         public List<string> Rules { get; set; } = new();
+
+        public List<string> InviteeIds { get; set; } = new();
     }
 }
