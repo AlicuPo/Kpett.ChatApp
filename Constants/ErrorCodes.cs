@@ -55,6 +55,7 @@
             public const string NOT_FOUND = "POST.NOT_FOUND";
             public const string USER_NOT_AUTHORIZED = "POST.USER_NOT_AUTHORIZED";
             public const string PARENT_POST_NOT_FOUND = "POST.PARENT_POST_NOT_FOUND";
+            public const string COMMENTS_DISABLED = "POST.COMMENTS_DISABLED";
         }
 
         public static class MEDIA

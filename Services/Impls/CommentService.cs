@@ -64,10 +64,22 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
-            if (await _dbContext.Posts.AnyAsync(p => p.Id == postId && !p.IsDeleted, cancel) == false)
+            var post = await _dbContext.Posts
+                .AsNoTracking()
+                .Where(p => p.Id == postId && !p.IsDeleted)
+                .Select(p => new { p.AllowComments })
+                .FirstOrDefaultAsync(cancel);
+
+            if (post == null)
             {
                 _logger.LogWarning("Add comment rejected because post {PostId} was not found", postId);
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
+            }
+
+            if (!post.AllowComments)
+            {
+                _logger.LogWarning("Add comment rejected because post {PostId} has comments disabled", postId);
+                throw new ForbiddenException(ErrorCodes.POST.COMMENTS_DISABLED, "Comments are disabled on this post");
             }
 
             string? parentPath = null;

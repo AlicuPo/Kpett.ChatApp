@@ -38,4 +38,6 @@ public partial class Post
     public bool IsDeleted { get; set; } = false;
 
     public bool IsNsfw { get; set; } = false;
+
+    public bool AllowComments { get; set; } = true;
 }
