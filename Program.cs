@@ -273,6 +273,16 @@ if (app.Environment.IsDevelopment())
     app.UseHangfireDashboard();
 }
 
+// Apply pending EF Core migrations automatically on startup
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    if (dbContext.Database.GetPendingMigrations().Any())
+    {
+        dbContext.Database.Migrate();
+    }
+}
+
 app.MapControllers();
 app.MapHub<AppHub>("/hubs/app").RequireCors("ClientCors");
 
