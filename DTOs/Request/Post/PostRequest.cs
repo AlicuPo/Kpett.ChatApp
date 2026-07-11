@@ -10,6 +10,8 @@ namespace Kpett.ChatApp.DTOs.Request.Post
         public List<MediaRequest>? Media { get; set; }
 
         public bool IsNsfw { get; set; }
+
+        public bool AllowComments { get; set; } = true;
     }
 
     public class UserFeedRequest

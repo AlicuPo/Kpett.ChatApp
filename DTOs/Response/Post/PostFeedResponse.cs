@@ -33,6 +33,8 @@ namespace Kpett.ChatApp.DTOs.Response.Post
 
         public bool IsNsfw { get; set; }
 
+        public bool AllowComments { get; set; } = true;
+
         public DateTime CreatedAt { get; set; }
 
         public DateTime? UpdatedAt { get; set; }

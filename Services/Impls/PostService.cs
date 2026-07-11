@@ -94,6 +94,7 @@ namespace Kpett.ChatApp.Services.Impls
                 GroupId = null,
                 Status = ApprovedPostStatus,
                 IsNsfw = postRequest.IsNsfw,
+                AllowComments = postRequest.AllowComments,
                 CreatedAt = DateTime.UtcNow,
                 PinnedAt = DateTime.UtcNow,
                 IsDeleted = false,
@@ -178,6 +179,7 @@ namespace Kpett.ChatApp.Services.Impls
                 GroupId = group.Id,
                 Status = status,
                 IsNsfw = postRequest.IsNsfw,
+                AllowComments = postRequest.AllowComments,
                 CreatedAt = now,
                 PinnedAt = now,
                 IsDeleted = false,
@@ -209,7 +211,7 @@ namespace Kpett.ChatApp.Services.Impls
                 group.Id,
                 status);
 
-            return BuildPostResponse(newPost, user, mediaResponse, isLiked: false, BuildGroupSummary(group));
+            return BuildPostResponse(newPost, user, mediaResponse, isLiked: false, reactionType: null, group: BuildGroupSummary(group));
         }
 
         /// <inheritdoc />
@@ -285,7 +287,13 @@ namespace Kpett.ChatApp.Services.Impls
                 .AsNoTracking()
                 .AnyAsync(r => r.PostId == post.Id && r.UserId == userId, cancel);
 
-            return BuildPostResponse(post, author, media, isLiked, BuildGroupSummary(group));
+            var reactionType = await _dbContext.PostReactions
+                .AsNoTracking()
+                .Where(r => r.PostId == post.Id && r.UserId == userId)
+                .Select(r => r.Type)
+                .FirstOrDefaultAsync(cancel);
+
+            return BuildPostResponse(post, author, media, isLiked, reactionType, BuildGroupSummary(group));
         }
 
         /// <inheritdoc />
@@ -357,7 +365,13 @@ namespace Kpett.ChatApp.Services.Impls
                 .AsNoTracking()
                 .AnyAsync(r => r.PostId == post.Id && r.UserId == userId, cancel);
 
-            return BuildPostResponse(post, author, media, isLiked, BuildGroupSummary(group));
+            var reactionType = await _dbContext.PostReactions
+                .AsNoTracking()
+                .Where(r => r.PostId == post.Id && r.UserId == userId)
+                .Select(r => r.Type)
+                .FirstOrDefaultAsync(cancel);
+
+            return BuildPostResponse(post, author, media, isLiked, reactionType, BuildGroupSummary(group));
         }
 
         /// <inheritdoc />
@@ -402,6 +416,7 @@ namespace Kpett.ChatApp.Services.Impls
 
             post.Content = postRequest.Content;
             post.Privacy = postRequest.Privacy ?? post.Privacy;
+            post.AllowComments = postRequest.AllowComments;
             post.UpdatedAt = DateTime.UtcNow;
 
             await SyncPostMediaAsync(post.Id, postRequest.Media, cancel);
@@ -438,9 +453,15 @@ namespace Kpett.ChatApp.Services.Impls
 
             bool isLiked = await _dbContext.PostReactions.AnyAsync(pr => pr.PostId == postId && pr.UserId == userId, cancel);
 
+            byte? reactionType = await _dbContext.PostReactions
+                .AsNoTracking()
+                .Where(r => r.PostId == postId && r.UserId == userId)
+                .Select(r => r.Type)
+                .FirstOrDefaultAsync(cancel);
+
             _logger.LogInformation("User {UserId} updated post with ID {PostId}", userId, postId);
 
-            return BuildPostResponse(post, authorResponse, allCurrentMedias, isLiked);
+            return BuildPostResponse(post, authorResponse, allCurrentMedias, isLiked, reactionType);
         }
 
         /// <inheritdoc />
@@ -500,16 +521,22 @@ namespace Kpett.ChatApp.Services.Impls
                         CommentCount = p.CommentCount
                     },
 
+                    AllowComments = p.AllowComments,
+
                     ViewerContext = new PostViewerContextResponse
                     {
                         IsOwner = p.CreatedByUserId == currentUserId,
                         IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == currentUserId),
+                        ReactionType = _dbContext.PostReactions
+                            .Where(r => r.PostId == p.Id && r.UserId == currentUserId)
+                            .Select(r => r.Type)
+                            .FirstOrDefault(),
                         IsSaved = false,
                         IsPinned = false,
                         CanEdit = p.CreatedByUserId == currentUserId,
                         CanDelete = p.CreatedByUserId == currentUserId,
                         CanLike = true,
-                        CanComment = true,
+                        CanComment = p.AllowComments,
                         CanPin = p.CreatedByUserId == currentUserId
                     },
                 })
@@ -611,16 +638,22 @@ namespace Kpett.ChatApp.Services.Impls
                         CommentCount = p.CommentCount
                     },
 
+                    AllowComments = p.AllowComments,
+
                     ViewerContext = new PostViewerContextResponse
                     {
                         IsOwner = p.CreatedByUserId == currentUserId,
                         IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == currentUserId),
+                        ReactionType = _dbContext.PostReactions
+                            .Where(r => r.PostId == p.Id && r.UserId == currentUserId)
+                            .Select(r => r.Type)
+                            .FirstOrDefault(),
                         IsSaved = false,
                         IsPinned = false,
                         CanEdit = p.CreatedByUserId == currentUserId,
                         CanDelete = p.CreatedByUserId == currentUserId,
                         CanLike = true,
-                        CanComment = true,
+                        CanComment = p.AllowComments,
                         CanPin = p.CreatedByUserId == currentUserId
                     },
                 })
@@ -784,16 +817,22 @@ namespace Kpett.ChatApp.Services.Impls
                         CommentCount = p.CommentCount
                     },
 
+                    AllowComments = p.AllowComments,
+
                     ViewerContext = new PostViewerContextResponse
                     {
                         IsOwner = p.CreatedByUserId == currentUserId,
                         IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == currentUserId),
+                        ReactionType = _dbContext.PostReactions
+                            .Where(r => r.PostId == p.Id && r.UserId == currentUserId)
+                            .Select(r => r.Type)
+                            .FirstOrDefault(),
                         IsSaved = false,
                         IsPinned = p.IsPinned,
                         CanEdit = p.CreatedByUserId == currentUserId,
                         CanDelete = p.CreatedByUserId == currentUserId || canModerate,
                         CanLike = p.Status == null || p.Status == ApprovedPostStatus,
-                        CanComment = p.Status == null || p.Status == ApprovedPostStatus,
+                        CanComment = p.AllowComments && (p.Status == null || p.Status == ApprovedPostStatus),
                         CanPin = canModerate
                     },
                 })
@@ -923,7 +962,8 @@ namespace Kpett.ChatApp.Services.Impls
                     p.GroupId,
                     p.Status,
                     p.CreatedByUserId,
-                    p.PinnedAt
+                    p.PinnedAt,
+                    p.AllowComments
                 })
                 .ToListAsync(cancel);
 
@@ -1003,6 +1043,16 @@ namespace Kpett.ChatApp.Services.Impls
                     .ToListAsync(cancel))
                 .ToHashSet(StringComparer.Ordinal);
 
+            var reactionTypeMap = string.IsNullOrWhiteSpace(currentUserId)
+                ? new Dictionary<string, byte>(StringComparer.Ordinal)
+                : (await _dbContext.PostReactions
+                    .AsNoTracking()
+                    .Where(r => r.UserId == currentUserId && postIds.Contains(r.PostId))
+                    .Select(r => new { r.PostId, r.Type })
+                    .ToListAsync(cancel))
+                .GroupBy(r => r.PostId)
+                .ToDictionary(g => g.Key, g => g.First().Type!.Value);
+
             var mappedPosts = itemsToProcess.Select(data => new PostThumbnailResponse
             {
                 Id = data.Id,
@@ -1037,16 +1087,19 @@ namespace Kpett.ChatApp.Services.Impls
                     CommentCount = commentCounts.GetValueOrDefault(data.Id, 0)
                 },
 
+                AllowComments = data.AllowComments,
+
                 ViewerContext = new PostViewerContextResponse
                 {
                     IsOwner = data.CreatedByUserId == currentUserId,
                     IsLiked = likedPostIds.Contains(data.Id),
+                    ReactionType = reactionTypeMap.TryGetValue(data.Id, out var rType) ? rType : null,
                     IsSaved = false,
                     IsPinned = false,
                     CanEdit = data.CreatedByUserId == currentUserId,
                     CanDelete = data.CreatedByUserId == currentUserId,
                     CanLike = true,
-                    CanComment = true,
+                    CanComment = data.AllowComments,
                     CanPin = data.CreatedByUserId == currentUserId
                 },
             }).ToList();
@@ -1324,6 +1377,7 @@ namespace Kpett.ChatApp.Services.Impls
             UserResponse author,
             List<MediaPostResponse> mediaResponse,
             bool isLiked,
+            byte? reactionType = null,
             PostGroupSummaryResponse? group = null)
         {
             var isApproved = post.Status == null || post.Status == ApprovedPostStatus;
@@ -1338,6 +1392,7 @@ namespace Kpett.ChatApp.Services.Impls
                 Group = group,
                 Status = post.Status ?? ApprovedPostStatus,
                 IsNsfw = post.IsNsfw,
+                AllowComments = post.AllowComments,
                 Media = mediaResponse,
                 Privacy = post.Privacy,
                 CreatedAt = post.CreatedAt,
@@ -1353,13 +1408,14 @@ namespace Kpett.ChatApp.Services.Impls
                 {
                     IsOwner = true,
                     IsLiked = isLiked,
+                    ReactionType = reactionType,
                     IsSaved = false,
                     IsPinned = post.IsPinned,
                     CanEdit = true,
                     CanDelete = true,
                     CanPin = true,
                     CanLike = isApproved,
-                    CanComment = isApproved
+                    CanComment = post.AllowComments && isApproved
                 }
             };
         }
