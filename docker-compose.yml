@@ -43,7 +43,7 @@ services:
       EmailSettings__PasswordResetOtpLength: "${EmailSettings__PasswordResetOtpLength:-6}"
 
       MediaSettings__MaxImageSizeBytes: "${MediaSettings__MaxImageSizeBytes:-5242880}"
-      MediaSettings__MaxVideoSizeBytes: "${MediaSettings__MaxVideoSizeBytes:-52428800}"
+      MediaSettings__MaxVideoSizeBytes: "${MediaSettings__MaxVideoSizeBytes:-157286400}"
       MediaSettings__AllowedImageExtensions__0: .jpg
       MediaSettings__AllowedImageExtensions__1: .jpeg
       MediaSettings__AllowedImageExtensions__2: .png
@@ -51,7 +51,8 @@ services:
       MediaSettings__AllowedImageExtensions__4: .gif
       MediaSettings__AllowedVideoExtensions__0: .mp4
       MediaSettings__AllowedVideoExtensions__1: .mov
-      MediaSettings__AllowedVideoExtensions__2: .avi
+      MediaSettings__AllowedVideoExtensions__2: .webm
+      MediaSettings__AllowedVideoExtensions__3: .avi
     volumes:
       - api_logs:/app/Logs
     networks:
