@@ -1,4 +1,3 @@
-using Hangfire;
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Request.Post;
@@ -115,13 +114,6 @@ namespace Kpett.ChatApp.Services.Impls
                 Type = m.Type
             }).ToList() ?? new List<MediaPostResponse>();
 
-            if (postRequest.Media != null && postRequest.Media.Any())
-            {
-                var publicIdsToConfirm = postRequest.Media.Select(m => m.PublicId).ToList();
-
-                BackgroundJob.Enqueue<IMediaService>(x => x.ConfirmMediaOnCloudinaryAsync(publicIdsToConfirm));
-            }
-
             _logger.LogInformation("User {UserId} created a new post with ID {PostId}", userId, newPost.Id);
 
             return BuildPostResponse(newPost, user, mediaResponse, isLiked: false);
@@ -197,12 +189,6 @@ namespace Kpett.ChatApp.Services.Impls
                 Url = m.Url,
                 Type = m.Type
             }).ToList() ?? new List<MediaPostResponse>();
-
-            if (postRequest.Media != null && postRequest.Media.Any())
-            {
-                var publicIdsToConfirm = postRequest.Media.Select(m => m.PublicId).ToList();
-                BackgroundJob.Enqueue<IMediaService>(x => x.ConfirmMediaOnCloudinaryAsync(publicIdsToConfirm));
-            }
 
             _logger.LogInformation(
                 "User {UserId} created group post {PostId} in group {GroupId} with status {Status}",
@@ -422,13 +408,6 @@ namespace Kpett.ChatApp.Services.Impls
             await SyncPostMediaAsync(post.Id, postRequest.Media, cancel);
 
             await _dbContext.SaveChangesAsync(cancel);
-
-            if (postRequest.Media != null && postRequest.Media.Any())
-            {
-                var publicIdsToConfirm = postRequest.Media.Select(m => m.PublicId).ToList();
-
-                BackgroundJob.Enqueue<IMediaService>(x => x.ConfirmMediaOnCloudinaryAsync(publicIdsToConfirm));
-            }
 
             var allCurrentMedias = await _dbContext.PostMedia
                 .Where(m => m.PostId == post.Id && !m.IsTemporary)

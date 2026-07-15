@@ -1,5 +1,4 @@
-﻿using Hangfire;
-using Kpett.ChatApp.Constants;
+﻿using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Request.User;
@@ -197,8 +196,6 @@ namespace Kpett.ChatApp.Services.Impls
 
             await _dbcontext.UserMedias.AddAsync(userMedia);
             await _dbcontext.SaveChangesAsync();
-
-            BackgroundJob.Enqueue<IMediaService>(e => e.ConfirmMediaOnCloudinaryAsync(new List<string> { userMedia.Id }));
 
             _logger.LogInformation("User {userId} updated media successfully", currentUserId);
 
