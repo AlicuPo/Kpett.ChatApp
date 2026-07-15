@@ -1,4 +1,3 @@
-using CloudinaryDotNet;
 using Hangfire;
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response.Shared;
@@ -86,12 +85,6 @@ builder.Services.AddMediatR(cfg =>
 {
     cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
 });
-
-var account = new Account(
-    builder.Configuration["CloudinarySettings:CloudName"],
-    builder.Configuration["CloudinarySettings:ApiKey"],
-    builder.Configuration["CloudinarySettings:ApiSecret"]);
-builder.Services.AddSingleton(new Cloudinary(account));
 
 var jwtSection = builder.Configuration.GetSection("JwtSection");
 var issuer = jwtSection["Issuer"];
@@ -208,9 +201,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 200 * 1024 * 1024;
+});
+
 // Options pattern
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("JwtSection"));
-builder.Services.Configure<CloudinaryOptions>(builder.Configuration.GetSection("CloudinarySettings"));
 builder.Services.Configure<MediaOptions>(builder.Configuration.GetSection("MediaSettings"));
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("EmailSettings"));
 
@@ -218,7 +215,7 @@ builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IRedisService, RedisService>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
-builder.Services.AddScoped<ICloudinaryService, UploadFileService>();
+builder.Services.AddScoped<IMediaService, MediaService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 builder.Services.AddScoped<IConversationAccessService, ConversationAccessService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
@@ -226,7 +223,6 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRelationshipService, RelationshipService>();
 builder.Services.AddScoped<IPostService, PostService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
-builder.Services.AddScoped<IMediaService, MediaService>();
 builder.Services.AddScoped<IConversationTypingService, ConversationTypingService>();
 builder.Services.AddScoped<IConversationMessageService, ConversationMessageService>();
 builder.Services.AddScoped<IConversationMemberService, ConversationMemberService>();
@@ -250,6 +246,7 @@ app.UseRouting();
 app.UseCors("ClientCors");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseStaticFiles();
 
 // Schedule a recurring job to clean up orphaned images daily at 2 AM
 // Tạo một Service Scope để lấy các service từ DI Container
