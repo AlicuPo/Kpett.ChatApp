@@ -1,7 +1,7 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Reflection;
 
-namespace Kpett.ChatApp.Helper
+namespace Kpett.ChatApp.Helpers
 {
     public static class EnumHelper
     {

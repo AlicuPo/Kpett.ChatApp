@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.Exceptions;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Microsoft.AspNetCore.Http;
 
 namespace Kpett.ChatApp.Tests.Helpers;

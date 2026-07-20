@@ -1,4 +1,4 @@
-﻿namespace Kpett.ChatApp.Helper
+namespace Kpett.ChatApp.Helpers
 {
     public record UserClaims(
         string UserId,

@@ -1,24 +1,24 @@
-﻿using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Models;
 using System.Security.Claims;
 
 namespace Kpett.ChatApp.Services.Interfaces
 {
     /// <summary>
-    /// Service tạo và xác thực JWT token (access + refresh).
+    /// Service t?o v� x�c th?c JWT token (access + refresh).
     /// </summary>
     public interface IJwtService
     {
-        /// <summary>Lấy thông tin claims từ HttpContext hiện tại.</summary>
+        /// <summary>L?y th�ng tin claims t? HttpContext hi?n t?i.</summary>
         UserClaims? GetUserClaims();
 
-        /// <summary>Tạo access token mới.</summary>
+        /// <summary>T?o access token m?i.</summary>
         string GenerateAccessToken(string userId, string email);
 
-        /// <summary>Tạo refresh token mới.</summary>
+        /// <summary>T?o refresh token m?i.</summary>
         string GenerateRefreshToken(string userId, string email);
 
-        /// <summary>Lấy ClaimsPrincipal từ token đã hết hạn (dùng cho refresh).</summary>
+        /// <summary>L?y ClaimsPrincipal t? token �? h?t h?n (d�ng cho refresh).</summary>
         ClaimsPrincipal? GetPrincipalFromExpiredToken(string token, bool isRefresh = false);
     }
 }

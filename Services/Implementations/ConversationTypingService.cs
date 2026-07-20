@@ -1,7 +1,7 @@
 using Kpett.ChatApp.DTOs.Response.Conversation;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Extensions;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Concurrent;
 
-namespace Kpett.ChatApp.Services.Impls
+namespace Kpett.ChatApp.Services.Implementations
 {
     /// <summary>Service quản lý trạng thái typing trong hội thoại (dùng Redis + SignalR).</summary>
     public class ConversationTypingService : IConversationTypingService

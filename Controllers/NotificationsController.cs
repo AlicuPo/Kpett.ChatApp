@@ -1,7 +1,7 @@
-ï»¿using Kpett.ChatApp.DTOs.Request.Shared;
+using Kpett.ChatApp.DTOs.Request.Shared;
 using Kpett.ChatApp.DTOs.Response.Notification;
 using Kpett.ChatApp.DTOs.Response.Shared;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -30,7 +30,7 @@ namespace Kpett.ChatApp.Controllers
             {
                 IsSuccess = true,
                 Data = data,
-                Message = "Láº¥y danh sÃ¡ch thÃ´ng bÃ¡o thÃ nh cÃ´ng",
+                Message = "L?y danh sách thông báo thành công",
                 StatusCode = 200
             });
         }
@@ -45,7 +45,7 @@ namespace Kpett.ChatApp.Controllers
             {
                 IsSuccess = true,
                 Data = count,
-                Message = "Láº¥y sá»‘ lÆ°á»£ng thÃ´ng bÃ¡o chÆ°a Ä‘á»c thÃ nh cÃ´ng",
+                Message = "L?y s? lı?ng thông báo chıa ğ?c thành công",
                 StatusCode = 200
             });
         }
@@ -59,7 +59,7 @@ namespace Kpett.ChatApp.Controllers
             return Ok(new GeneralResponse
             {
                 IsSuccess = true,
-                Message = "ÄÃ£ Ä‘Ã¡nh dáº¥u thÃ´ng bÃ¡o lÃ  Ä‘Ã£ Ä‘á»c",
+                Message = "Ğ? ğánh d?u thông báo là ğ? ğ?c",
                 StatusCode = 200
             });
         }
@@ -73,7 +73,7 @@ namespace Kpett.ChatApp.Controllers
             return Ok(new GeneralResponse
             {
                 IsSuccess = true,
-                Message = "ÄÃ£ Ä‘Ã¡nh dáº¥u táº¥t cáº£ thÃ´ng bÃ¡o lÃ  Ä‘Ã£ Ä‘á»c",
+                Message = "Ğ? ğánh d?u t?t c? thông báo là ğ? ğ?c",
                 StatusCode = 200
             });
         }

@@ -8,7 +8,7 @@ using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Extensions;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
@@ -16,7 +16,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
-namespace Kpett.ChatApp.Services.Impls
+namespace Kpett.ChatApp.Services.Implementations
 {
     /// <summary>Service quản lý tin nhắn trong hội thoại: lấy, gửi, cập nhật, xoá.</summary>
     public class ConversationMessageService : IConversationMessageService

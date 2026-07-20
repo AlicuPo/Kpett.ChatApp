@@ -1,23 +1,23 @@
-﻿using Kpett.ChatApp.DTOs.Payload.Cursor;
+using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Request.Shared;
 using Kpett.ChatApp.DTOs.Response.Notification;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Extensions;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
-namespace Kpett.ChatApp.Services.Impls
+namespace Kpett.ChatApp.Services.Implementations
 {
-    /// <summary>Service quản lý thông báo: lấy danh sách, đếm chưa đọc, đánh dấu đã đọc.</summary>
+    /// <summary>Service qu?n l? th�ng b�o: l?y danh s�ch, �?m ch�a �?c, ��nh d?u �? �?c.</summary>
     public class NotificationService : INotificationService
     {
         private readonly AppDbContext _context;
         private readonly ILogger<NotificationService> _logger;
 
-        /// <summary>Khởi tạo service với các dependencies.</summary>
+        /// <summary>Kh?i t?o service v?i c�c dependencies.</summary>
         public NotificationService(AppDbContext context, ILogger<NotificationService> logger)
         {
             _context = context;
@@ -45,7 +45,7 @@ namespace Kpett.ChatApp.Services.Impls
             var query = _context.Notifications.AsNoTracking()
                 .Where(n => n.RecipientId == currentUserId);
 
-            // Phân trang bằng Cursor (Cũ hơn mốc Cursor)
+            // Ph�n trang b?ng Cursor (C? h�n m?c Cursor)
             if (cursorDate.HasValue && !string.IsNullOrWhiteSpace(cursorId))
             {
                 query = query.Where(n => n.CreatedAt < cursorDate.Value ||
@@ -130,7 +130,7 @@ namespace Kpett.ChatApp.Services.Impls
         /// <inheritdoc />
         public async Task MarkAsReadAsync(string currentUserId, string notificationId, CancellationToken cancel)
         {
-            // Tối ưu hóa: Dùng ExecuteUpdateAsync ghi trực tiếp xuống SQL Server không cần Load Entity
+            // T?i �u h�a: D�ng ExecuteUpdateAsync ghi tr?c ti?p xu?ng SQL Server kh�ng c?n Load Entity
             var affectedRows = await _context.Notifications
                 .Where(n => n.Id == notificationId && n.RecipientId == currentUserId && !n.IsRead)
                 .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true), cancel);
@@ -140,7 +140,7 @@ namespace Kpett.ChatApp.Services.Impls
         /// <inheritdoc />
         public async Task MarkAllAsReadAsync(string currentUserId, CancellationToken cancel)
         {
-            // Tối ưu hóa: Đánh dấu tất cả đã đọc chỉ với 1 câu lệnh SQL
+            // T?i �u h�a: ��nh d?u t?t c? �? �?c ch? v?i 1 c�u l?nh SQL
             var affectedRows = await _context.Notifications
                 .Where(n => n.RecipientId == currentUserId && !n.IsRead)
                 .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true), cancel);

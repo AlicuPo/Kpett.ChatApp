@@ -5,7 +5,7 @@ using Kpett.ChatApp.DTOs.Response.Group;
 using Kpett.ChatApp.DTOs.Response.Post;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Filters;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -28,6 +28,7 @@ namespace Kpett.ChatApp.Controllers
             _postService = postService;
         }
 
+        /// <summary>Lấy cài đặt nhóm (chỉ admin/owner mới xem được).</summary>
         [HttpGet("{groupId}/settings")]
         public async Task<ActionResult<GeneralResponse<GroupSettingsResponse>>> GetGroupSettings(
             string groupId,
@@ -45,6 +46,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Cập nhật cài đặt nhóm (chỉ admin/owner). Partial update — chỉ gửi field muốn thay đổi.</summary>
         [HttpPut("{groupId}/settings")]
         public async Task<ActionResult<GeneralResponse<GroupSettingsResponse>>> UpdateGroupSettings(
             string groupId,
@@ -63,6 +65,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Cập nhật nội quy nhóm (thay thế toàn bộ danh sách rules hiện tại).</summary>
         [HttpPut("{groupId}/rules")]
         public async Task<ActionResult<GeneralResponse<GroupSettingsResponse>>> UpdateGroupRules(
             string groupId,
@@ -81,10 +84,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        // ──────────────────────────────────────────────
-        //  POST api/groups
-        //  Tạo nhóm mới
-        // ──────────────────────────────────────────────
+        /// <summary>Người dùng tham gia nhóm hoặc gửi yêu cầu nếu nhóm yêu cầu phê duyệt.</summary>
         [HttpPost("{groupId}/join")]
         public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> JoinGroup(
             string groupId,
@@ -102,6 +102,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Người dùng rời nhóm. Owner không thể rời nhóm qua endpoint này.</summary>
         [HttpPost("{groupId}/leave")]
         public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> LeaveGroup(
             string groupId,
@@ -149,6 +150,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Chấp nhận yêu cầu tham gia nhóm (chỉ moderator/admin).</summary>
         [HttpPost("{groupId}/join-requests/{targetUserId}/accept")]
         public async Task<ActionResult<GeneralResponse<GroupMemberResponse>>> AcceptJoinRequest(
             string groupId,
@@ -167,6 +169,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Từ chối yêu cầu tham gia nhóm (chỉ moderator/admin).</summary>
         [HttpPost("{groupId}/join-requests/{targetUserId}/decline")]
         public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> DeclineJoinRequest(
             string groupId,
@@ -185,6 +188,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Lấy danh sách thành viên đang hoạt động của nhóm (phân trang).</summary>
         [HttpGet("{groupId}/members")]
         public async Task<ActionResult<GeneralResponse<GroupMemberListResponse>>> GetGroupMembers(
             string groupId,
@@ -203,6 +207,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Lấy danh sách yêu cầu tham gia đang chờ duyệt (chỉ moderator/admin).</summary>
         [HttpGet("{groupId}/join-requests")]
         public async Task<ActionResult<GeneralResponse<GroupMemberListResponse>>> GetPendingJoinRequests(
             string groupId,
@@ -221,6 +226,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Kick thành viên khỏi nhóm (chỉ moderator/admin).</summary>
         [HttpDelete("{groupId}/members/{targetUserId}")]
         public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> KickMember(
             string groupId,
@@ -239,6 +245,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Chặn thành viên khỏi nhóm (chỉ moderator/admin).</summary>
         [HttpPost("{groupId}/members/{targetUserId}/block")]
         public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> BlockMember(
             string groupId,
@@ -257,6 +264,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Cập nhật vai trò thành viên (chỉ admin).</summary>
         [HttpPut("{groupId}/members/{targetUserId}/role")]
         public async Task<ActionResult<GeneralResponse<GroupMemberResponse>>> UpdateMemberRole(
             string groupId,
@@ -276,6 +284,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Thu hồi vai trò thành viên (đặt về member, chỉ admin).</summary>
         [HttpDelete("{groupId}/members/{targetUserId}/role")]
         public async Task<ActionResult<GeneralResponse<GroupMemberResponse>>> RevokeMemberRole(
             string groupId,
@@ -294,6 +303,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Lấy danh sách admin và moderator của nhóm.</summary>
         [HttpGet("{groupId}/admins-moderators")]
         public async Task<ActionResult<GeneralResponse<GroupMemberListResponse>>> GetAdminsAndModerators(
             string groupId,
@@ -312,6 +322,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Lấy danh sách thành viên bị chặn (chỉ moderator/admin).</summary>
         [HttpGet("{groupId}/blocked-members")]
         public async Task<ActionResult<GeneralResponse<GroupMemberListResponse>>> GetBlockedMembers(
             string groupId,
@@ -330,6 +341,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Bỏ chặn thành viên (chỉ moderator/admin).</summary>
         [HttpPost("{groupId}/members/{targetUserId}/unblock")]
         public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> UnblockMember(
             string groupId,
@@ -348,6 +360,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Chuyển quyền sở hữu nhóm (chỉ owner hiện tại).</summary>
         [HttpPost("{groupId}/transfer-ownership")]
         public async Task<ActionResult<GeneralResponse<GroupMemberResponse>>> TransferOwnership(
             string groupId,
@@ -366,6 +379,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Ghim/bỏ ghim bài viết trong nhóm (chỉ admin/moderator).</summary>
         [HttpPost("{groupId}/posts/{postId}/pin")]
         public async Task<ActionResult<GeneralResponse<PostFeedResponse>>> TogglePinPost(
             string groupId,
@@ -384,6 +398,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Lấy danh sách bài viết trong nhóm (có thể anonymous).</summary>
         [HttpGet("{groupId}/posts")]
         [AllowAnonymous]
         [OptionalAuthorize]
@@ -405,6 +420,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Tạo bài viết trong nhóm. Nếu nhóm bật postApproval, bài viết ở trạng thái pending.</summary>
         [HttpPost("{groupId}/posts")]
         public async Task<ActionResult<GeneralResponse<PostFeedResponse>>> CreateGroupPost(
             string groupId,
@@ -423,6 +439,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Duyệt/từ chối bài viết trong nhóm (chỉ admin/moderator).</summary>
         [HttpPut("{groupId}/posts/{postId}/status")]
         public async Task<ActionResult<GeneralResponse<PostFeedResponse>>> UpdateGroupPostStatus(
             string groupId,
@@ -522,6 +539,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>Tạo nhóm mới. Người tạo tự động là admin.</summary>
         [HttpPost]
         public async Task<ActionResult<GeneralResponse<CreateGroupResponse>>> CreateGroup(
             [FromBody] CreateGroupRequest request,
@@ -539,10 +557,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        // ──────────────────────────────────────────────
-        //  PUT api/groups/{groupId}
-        //  Cập nhật thông tin nhóm
-        // ──────────────────────────────────────────────
+        /// <summary>Cập nhật thông tin nhóm (chỉ admin).</summary>
         [HttpPut("{groupId}")]
         public async Task<ActionResult<GeneralResponse<GroupDetailResponse>>> UpdateGroup(
             string groupId,
@@ -561,10 +576,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        // ──────────────────────────────────────────────
-        //  DELETE api/groups/{groupId}
-        //  Xóa nhóm (soft delete)
-        // ──────────────────────────────────────────────
+        /// <summary>Xóa mềm nhóm (chỉ owner/admin).</summary>
         [HttpDelete("{groupId}")]
         public async Task<ActionResult<GeneralResponse>> DeleteGroup(
             string groupId,
@@ -582,10 +594,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        // ──────────────────────────────────────────────
-        //  GET api/groups/{groupId}
-        //  Xem chi tiết nhóm theo ID
-        // ──────────────────────────────────────────────
+        /// <summary>Xem chi tiết nhóm theo ID.</summary>
         [HttpGet("{groupId}")]
         public async Task<ActionResult<GeneralResponse<GroupDetailResponse>>> GetGroupById(
             string groupId,
@@ -603,10 +612,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        // ──────────────────────────────────────────────
-        //  GET api/groups/slug/{slug}
-        //  Xem chi tiết nhóm theo Slug
-        // ──────────────────────────────────────────────
+        /// <summary>Xem chi tiết nhóm theo slug.</summary>
         [HttpGet("slug/{slug}")]
         public async Task<ActionResult<GeneralResponse<GroupDetailResponse>>> GetGroupBySlug(
             string slug,
@@ -624,10 +630,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        // ──────────────────────────────────────────────
-        //  GET api/groups/search?keyword=...&page=1&pageSize=20
-        //  Tìm kiếm nhóm
-        // ──────────────────────────────────────────────
+        /// <summary>Tìm kiếm nhóm theo từ khóa, loại quyền riêng tư (phân trang).</summary>
         [HttpGet("search")]
         public async Task<ActionResult<GeneralResponse<SearchGroupResponse>>> SearchGroups(
             [FromQuery] SearchGroupRequest request,
@@ -645,10 +648,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        // ──────────────────────────────────────────────
-        //  GET api/groups/me?filterByRole=admin&page=1&pageSize=20
-        //  Danh sách nhóm của tôi
-        // ──────────────────────────────────────────────
+        /// <summary>Lấy danh sách nhóm của tôi (phân trang, lọc theo vai trò).</summary>
         [HttpGet("me")]
         public async Task<ActionResult<GeneralResponse<MyGroupsResponse>>> GetMyGroups(
             [FromQuery] MyGroupsRequest request,

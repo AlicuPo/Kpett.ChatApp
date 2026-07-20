@@ -10,7 +10,7 @@ using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Extensions;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
@@ -18,7 +18,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
-namespace Kpett.ChatApp.Services.Impls
+namespace Kpett.ChatApp.Services.Implementations
 {
     /// <summary>Service quản lý hội thoại: CRUD, tin nhắn, thành viên, cài đặt (uỷ quyền message/member cho sub-services).</summary>
     public class ConversationService : IConversationService

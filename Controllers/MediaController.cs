@@ -8,7 +8,7 @@ namespace Kpett.ChatApp.Controllers
 {
     [Route("api/[controller]")]
     [Authorize]
-    public class MediaController : Controller
+    public class MediaController : ControllerBase
     {
         private readonly IMediaService _mediaService;
 

@@ -4,7 +4,7 @@ using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Services.Interfaces;
 
-namespace Kpett.ChatApp.Middlewares
+namespace Kpett.ChatApp.Middleware
 {
     /// <summary>
     /// Middleware to validate that access tokens have not been blacklisted.

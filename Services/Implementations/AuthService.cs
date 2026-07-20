@@ -5,7 +5,7 @@ using Kpett.ChatApp.DTOs.Response.Auth;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Options;
 using Kpett.ChatApp.Services.Interfaces;
@@ -15,7 +15,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using UUIDNext;
 
-namespace Kpett.ChatApp.Services.Impls;
+namespace Kpett.ChatApp.Services.Implementations;
 
 /// <summary>Service xác thực: đăng nhập, đăng ký, đăng xuất, refresh token, quên mật khẩu.</summary>
 public class AuthService : IAuthService

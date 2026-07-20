@@ -1,11 +1,12 @@
 using Hangfire;
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response.Shared;
+using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Options;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Services.Impls;
+using Kpett.ChatApp.Services.Implementations;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;

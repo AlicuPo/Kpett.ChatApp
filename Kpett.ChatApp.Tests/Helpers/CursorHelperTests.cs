@@ -1,4 +1,4 @@
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 
 namespace Kpett.ChatApp.Tests.Helpers;
 

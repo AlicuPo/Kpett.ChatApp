@@ -4,7 +4,7 @@ using Kpett.ChatApp.Options;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.Extensions.Options;
 
-namespace Kpett.ChatApp.Services.Impls
+namespace Kpett.ChatApp.Services.Implementations
 {
     /// <summary>Service gửi email SMTP.</summary>
     public class SmtpEmailService : IEmailService

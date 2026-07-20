@@ -4,7 +4,7 @@ using Kpett.ChatApp.DTOs.Request.Shared;
 using Kpett.ChatApp.DTOs.Response.Conversation;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,9 +20,9 @@ namespace Kpett.ChatApp.Controllers
         private readonly IConversationService _conversationService;
         private readonly IRelationshipService _relationshipService;
 
-        public ConversationsController(IConversationService conversation, IRelationshipService relationshipService)
+        public ConversationsController(IConversationService conversationService, IRelationshipService relationshipService)
         {
-            _conversationService = conversation;
+            _conversationService = conversationService;
             _relationshipService = relationshipService;
         }
 

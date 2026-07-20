@@ -1,4 +1,4 @@
-﻿namespace Kpett.ChatApp.Helper
+namespace Kpett.ChatApp.Exceptions
 {
     public class AppException : Exception
     {

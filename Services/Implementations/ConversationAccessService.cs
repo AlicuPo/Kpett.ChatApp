@@ -1,18 +1,18 @@
-﻿using Kpett.ChatApp.Constants;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
-namespace Kpett.ChatApp.Services.Impls
+namespace Kpett.ChatApp.Services.Implementations
 {
-    /// <summary>Service kiểm tra quyền truy cập hội thoại.</summary>
+    /// <summary>Service ki?m tra quy?n truy c?p h?i tho?i.</summary>
     public class ConversationAccessService : IConversationAccessService
     {
         private readonly AppDbContext _dbContext;
         private readonly ILogger<ConversationAccessService> _logger;
 
-        /// <summary>Khởi tạo service với các dependencies.</summary>
+        /// <summary>Kh?i t?o service v?i c�c dependencies.</summary>
         public ConversationAccessService(AppDbContext dbContext, ILogger<ConversationAccessService> logger)
         {
             _dbContext = dbContext;

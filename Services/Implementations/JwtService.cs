@@ -1,4 +1,4 @@
-﻿using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Options;
 using Kpett.ChatApp.Services.Interfaces;
@@ -10,9 +10,9 @@ using System.Security.Cryptography;
 using System.Text;
 
 
-namespace Kpett.ChatApp.Services.Impls
+namespace Kpett.ChatApp.Services.Implementations
 {
-    /// <summary>Service tạo và xác thực JWT token (access + refresh).</summary>
+    /// <summary>Service t?o v� x�c th?c JWT token (access + refresh).</summary>
     public class JwtService : IJwtService
     {
 
@@ -21,7 +21,7 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly IConfiguration _config;
         private readonly ILogger<JwtService> _logger;
 
-        /// <summary>Khởi tạo service với các dependencies.</summary>
+        /// <summary>Kh?i t?o service v?i c�c dependencies.</summary>
         public JwtService(IHttpContextAccessor contextAccessor, IOptions<JwtOptions> options, IConfiguration config, ILogger<JwtService> logger)
         {
             _contextAccessor = contextAccessor;

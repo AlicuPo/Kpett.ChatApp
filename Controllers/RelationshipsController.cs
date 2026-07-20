@@ -2,7 +2,7 @@ using Kpett.ChatApp.DTOs.Request.Friend;
 using Kpett.ChatApp.DTOs.Response.Friend;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,11 +14,11 @@ namespace Kpett.ChatApp.Controllers
     [Authorize]
     public class RelationshipsController : ControllerBase
     {
-        private readonly IRelationshipService _friendServices;
+        private readonly IRelationshipService _relationshipService;
 
-        public RelationshipsController(IRelationshipService friendshipsServices)
+        public RelationshipsController(IRelationshipService relationshipService)
         {
-            _friendServices = friendshipsServices;
+            _relationshipService = relationshipService;
         }
 
         // --- FRIEND REQUESTS ---
@@ -27,7 +27,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<ActionResult> SendFriendRequest([FromBody] SendFriendRequestRequest request)
         {
             var senderId = User.GetRequiredUserId();
-            var result = await _friendServices.SendFriendRequestAsync(senderId, request.ReceiverId);
+            var result = await _relationshipService.SendFriendRequestAsync(senderId, request.ReceiverId);
 
             return Ok(new GeneralResponse<FriendRequestResponse>
             {
@@ -43,7 +43,7 @@ namespace Kpett.ChatApp.Controllers
         {
             var currentUserId = User.GetRequiredUserId();
 
-            await _friendServices.AcceptFriendRequestAsync(currentUserId, requestId);
+            await _relationshipService.AcceptFriendRequestAsync(currentUserId, requestId);
 
             return Ok(new GeneralResponse
             {
@@ -57,7 +57,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<IActionResult> DeclineFriendRequest(string requestId)
         {
             var currentUserId = User.GetRequiredUserId();
-            await _friendServices.DeclineFriendRequestAsync(currentUserId, requestId);
+            await _relationshipService.DeclineFriendRequestAsync(currentUserId, requestId);
 
             return Ok(new GeneralResponse
             {
@@ -71,7 +71,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<IActionResult> CancelFriendRequest(string requestId)
         {
             var currentUserId = User.GetRequiredUserId();
-            await _friendServices.CancelFriendRequestAsync(currentUserId, requestId);
+            await _relationshipService.CancelFriendRequestAsync(currentUserId, requestId);
 
             return Ok(new GeneralResponse
             {
@@ -89,7 +89,7 @@ namespace Kpett.ChatApp.Controllers
             CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
-            var friends = await _friendServices.GetFriendsAsync(userId, request, cancel);
+            var friends = await _relationshipService.GetFriendsAsync(userId, request, cancel);
 
             return Ok(new GeneralResponse<PaginatedData<FriendListItemDTO>>
             {
@@ -104,7 +104,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<IActionResult> Unfriend(string targetUserId)
         {
             var currentUserId = User.GetRequiredUserId();
-            await _friendServices.UnfriendAsync(currentUserId, targetUserId);
+            await _relationshipService.UnfriendAsync(currentUserId, targetUserId);
 
             return Ok(new GeneralResponse
             {
@@ -118,7 +118,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<IActionResult> Follow(string followeeId)
         {
             var currentUserId = User.GetRequiredUserId();
-            await _friendServices.FollowAsync(currentUserId, followeeId);
+            await _relationshipService.FollowAsync(currentUserId, followeeId);
 
             return Ok(new GeneralResponse
             {
@@ -132,7 +132,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<IActionResult> Unfollow(string followeeId)
         {
             var currentUserId = User.GetRequiredUserId();
-            await _friendServices.UnfollowAsync(currentUserId, followeeId);
+            await _relationshipService.UnfollowAsync(currentUserId, followeeId);
 
             return Ok(new GeneralResponse
             {
@@ -146,7 +146,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<IActionResult> GetFriendSuggestions([FromQuery] int limit = 10, CancellationToken cancel = default)
         {
             var currentUserId = User.GetRequiredUserId();
-            var suggestions = await _friendServices.GetFriendSuggestionsAsync(currentUserId, limit, cancel);
+            var suggestions = await _relationshipService.GetFriendSuggestionsAsync(currentUserId, limit, cancel);
 
             return Ok(new GeneralResponse<List<UserResponse>>
             {

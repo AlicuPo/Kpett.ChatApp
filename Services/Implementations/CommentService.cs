@@ -1,4 +1,4 @@
-﻿using Azure.Core;
+using Azure.Core;
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Response.Post;
@@ -7,16 +7,16 @@ using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Events.Comment;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Extensions;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
 
-namespace Kpett.ChatApp.Services.Impls
+namespace Kpett.ChatApp.Services.Implementations
 {
-    /// <summary>Service quản lý bình luận: thêm, sửa, xoá, like/unlike, lấy danh sách.</summary>
+    /// <summary>Service qu?n l? b?nh lu?n: th�m, s?a, xo�, like/unlike, l?y danh s�ch.</summary>
     public class CommentService : ICommentService
     {
         private static readonly Regex MentionTokenRegex = new(
@@ -26,7 +26,7 @@ namespace Kpett.ChatApp.Services.Impls
         private readonly AppDbContext _dbContext;
         private readonly IMediator _mediator;
         private readonly ILogger<CommentService> _logger;
-        /// <summary>Khởi tạo service với các dependencies.</summary>
+        /// <summary>Kh?i t?o service v?i c�c dependencies.</summary>
         public CommentService(AppDbContext dbContext, IMediator mediator, ILogger<CommentService> logger)
         {
             _dbContext = dbContext;
@@ -97,7 +97,7 @@ namespace Kpett.ChatApp.Services.Impls
                 }
             }
 
-            // Khởi tạo Comment Entity
+            // Kh?i t?o Comment Entity
             var comment = new Comment
             {
                 Id = commentId,
@@ -141,7 +141,7 @@ namespace Kpett.ChatApp.Services.Impls
 
                 if (mentionIds.Any())
                 {
-                    // Trích xuất đoạn snippet (50 ký tự) từ Content để hiển thị tóm tắt trên UI Thông báo
+                    // Tr�ch xu?t �o?n snippet (50 k? t?) t? Content �? hi?n th? t�m t?t tr�n UI Th�ng b�o
                     string snippet = comment.Content.Length > 50
                         ? comment.Content.Substring(0, 50) + "..."
                         : comment.Content;
@@ -187,7 +187,7 @@ namespace Kpett.ChatApp.Services.Impls
                 throw new NotFoundException(ErrorCodes.POST.NOT_FOUND, "Post not found");
             }
 
-            // Giải mã Cursor
+            // Gi?i m? Cursor
             DateTime? cursorDate = null;
             string? cursorId = null;
 
@@ -207,7 +207,7 @@ namespace Kpett.ChatApp.Services.Impls
                 .AsNoTracking()
                 .Where(c => c.PostId == postId && c.DeletedAt == null && c.ParentCommentId == parentCommentId);
 
-            // Áp dụng điều kiện lọc Compound (Date + Id)
+            // �p d?ng �i?u ki?n l?c Compound (Date + Id)
             if (cursorDate.HasValue && !string.IsNullOrEmpty(cursorId))
             {
                 query = query.Where(c =>
@@ -251,7 +251,7 @@ namespace Kpett.ChatApp.Services.Impls
                 });
             }
 
-            // Các logic lookup giữ nguyên
+            // C�c logic lookup gi? nguy�n
             var mentionLookup = await GetCommentMentionsLookupAsync(
                 pagedCommentRows.Select(x => x.Comment.Id).ToList(),
                 cancel);

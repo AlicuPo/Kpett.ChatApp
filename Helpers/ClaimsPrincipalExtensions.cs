@@ -1,8 +1,8 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.Exceptions;
 
-namespace Kpett.ChatApp.Helper
+namespace Kpett.ChatApp.Helpers
 {
     public static class ClaimsPrincipalExtensions
     {

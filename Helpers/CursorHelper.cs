@@ -1,7 +1,7 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
 
-namespace Kpett.ChatApp.Helper
+namespace Kpett.ChatApp.Helpers
 {
     public class CursorHelper
     {

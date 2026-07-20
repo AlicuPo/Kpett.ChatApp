@@ -1,4 +1,4 @@
-﻿using Kpett.ChatApp.Constants;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Request.User;
@@ -7,14 +7,14 @@ using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Extensions;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
-namespace Kpett.ChatApp.Services.Impls
+namespace Kpett.ChatApp.Services.Implementations
 {
-    /// <summary>Service quản lý người dùng: thông tin cá nhân, media, tìm kiếm, thiết lập tài khoản.</summary>
+    /// <summary>Service qu?n l? ng�?i d�ng: th�ng tin c� nh�n, media, t?m ki?m, thi?t l?p t�i kho?n.</summary>
     public class UserService : IUserService
     {
         private readonly AppDbContext _dbcontext;
@@ -23,7 +23,7 @@ namespace Kpett.ChatApp.Services.Impls
 
         private readonly string AVATAR_TYPE = UserMediaType.Avatar.GetDescription();
         private readonly string COVER_TYPE = UserMediaType.Cover.GetDescription();
-        /// <summary>Khởi tạo service với các dependencies.</summary>
+        /// <summary>Kh?i t?o service v?i c�c dependencies.</summary>
         public UserService(AppDbContext dbContext, IRedisService redisService, ILogger<UserService> logger)
         {
             _dbcontext = dbContext;
@@ -488,10 +488,10 @@ namespace Kpett.ChatApp.Services.Impls
             limit = limit <= 0 ? 20 : Math.Min(limit, 50);
             var searchTerm = keyword?.Trim() ?? string.Empty;
 
-            // Khởi tạo Query cơ bản (Bỏ qua tracking để tối ưu tốc độ đọc)
+            // Kh?i t?o Query c� b?n (B? qua tracking �? t?i �u t?c �? �?c)
             var query = _dbcontext.Users.AsNoTracking().AsQueryable();
 
-            // Lọc theo từ khóa (Tìm trong DisplayName hoặc Username)
+            // L?c theo t? kh�a (T?m trong DisplayName ho?c Username)
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 query = query.Where(u =>
@@ -500,13 +500,13 @@ namespace Kpett.ChatApp.Services.Impls
                 );
             }
 
-            // Loại trừ người đang thực hiện tìm kiếm
+            // Lo?i tr? ng�?i �ang th?c hi?n t?m ki?m
             if (!string.IsNullOrWhiteSpace(currentUserId))
             {
                 query = query.Where(u => u.Id != currentUserId);
             }
 
-            // Giải mã Cursor
+            // Gi?i m? Cursor
             string? cursorId = null;
             if (!string.IsNullOrWhiteSpace(cursor))
             {
@@ -514,13 +514,13 @@ namespace Kpett.ChatApp.Services.Impls
                 if (decoded != null) cursorId = decoded.UserId;
             }
 
-            // Áp dụng Cursor Pagination (Sắp xếp tăng dần theo Id)
+            // �p d?ng Cursor Pagination (S?p x?p t�ng d?n theo Id)
             if (!string.IsNullOrWhiteSpace(cursorId))
             {
                 query = query.Where(u => string.Compare(u.Id, cursorId) > 0);
             }
 
-            // Truy vấn dữ liệu từ DB (Dư 1 record để check NextCursor)
+            // Truy v?n d? li?u t? DB (D� 1 record �? check NextCursor)
             var rawUsers = await query
                 .OrderBy(u => u.Id)
                 .Take(limit + 1)
@@ -529,7 +529,7 @@ namespace Kpett.ChatApp.Services.Impls
                     u.Id,
                     u.DisplayName,
                     u.Username,
-                    // Sub-query để lấy Avatar một cách tối ưu
+                    // Sub-query �? l?y Avatar m?t c�ch t?i �u
                     AvatarUrl = _dbcontext.UserMedias
                         .Where(um => um.UserId == u.Id && um.IsPrimary && um.MediaType == "Avatar")
                         .Select(um => um.MediaUrl)
@@ -537,7 +537,7 @@ namespace Kpett.ChatApp.Services.Impls
                 })
                 .ToListAsync(cancel);
 
-            // Xử lý phân trang
+            // X? l? ph�n trang
             string? nextCursor = null;
             if (rawUsers.Count > limit)
             {
@@ -546,7 +546,7 @@ namespace Kpett.ChatApp.Services.Impls
                 rawUsers.RemoveAt(limit);
             }
 
-            // Mapping sang DTO trả về
+            // Mapping sang DTO tr? v?
             var items = rawUsers.Select(u => new UserResponse
             {
                 Id = u.Id,
