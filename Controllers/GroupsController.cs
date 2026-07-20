@@ -21,6 +21,7 @@ namespace Kpett.ChatApp.Controllers
         private readonly IGroupsService _groupsService;
         private readonly IPostService _postService;
 
+        /// <summary>Khởi tạo controller với các dependencies.</summary>
         public GroupsController(IGroupsService groupsService, IPostService postService)
         {
             _groupsService = groupsService;
@@ -118,6 +119,18 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>
+        /// Mời danh sách bạn bè vào nhóm.
+        /// </summary>
+        /// <param name="groupId">ID của nhóm.</param>
+        /// <param name="request">Danh sách ID người dùng cần mời.</param>
+        /// <param name="cancel">Token hủy bỏ.</param>
+        /// <returns>Danh sách lời mời đã tạo và danh sách bỏ qua kèm lý do.</returns>
+        /// <response code="200">Xử lý lời mời thành công.</response>
+        /// <response code="400">Thiếu request body hoặc danh sách userIds rỗng.</response>
+        /// <response code="401">Token không hợp lệ hoặc hết hạn.</response>
+        /// <response code="403">Không phải active member hoặc không có quyền mời.</response>
+        /// <response code="404">Không tìm thấy nhóm.</response>
         [HttpPost("{groupId}/invitations")]
         public async Task<ActionResult<GeneralResponse<GroupInviteMembersResponse>>> InviteMembers(
             string groupId,
@@ -429,6 +442,13 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>
+        /// Lấy danh sách lời mời tham gia nhóm dành cho người dùng hiện tại.
+        /// </summary>
+        /// <param name="cancel">Token hủy bỏ.</param>
+        /// <returns>Danh sách lời mời đang chờ xử lý.</returns>
+        /// <response code="200">Lấy danh sách lời mời thành công.</response>
+        /// <response code="401">Token không hợp lệ hoặc hết hạn.</response>
         [HttpGet("invitations")]
         public async Task<ActionResult<GeneralResponse<List<GroupInvitationResponse>>>> GetMyInvitations(
             CancellationToken cancel)
@@ -445,6 +465,18 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>
+        /// Chấp nhận lời mời tham gia nhóm.
+        /// </summary>
+        /// <param name="invitationId">ID của lời mời.</param>
+        /// <param name="cancel">Token hủy bỏ.</param>
+        /// <returns>Thông tin tư cách thành viên sau khi chấp nhận.</returns>
+        /// <response code="200">Chấp nhận lời mời thành công.</response>
+        /// <response code="400">Lời mời không còn ở trạng thái chờ.</response>
+        /// <response code="401">Token không hợp lệ hoặc hết hạn.</response>
+        /// <response code="403">Lời mời không dành cho người dùng hiện tại hoặc đã bị chặn khỏi nhóm.</response>
+        /// <response code="404">Không tìm thấy lời mời hoặc nhóm.</response>
+        /// <response code="409">Người dùng đã là thành viên của nhóm.</response>
         [HttpPost("invitations/{invitationId}/accept")]
         public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> AcceptInvitation(
             string invitationId,
@@ -462,6 +494,17 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        /// <summary>
+        /// Từ chối lời mời tham gia nhóm.
+        /// </summary>
+        /// <param name="invitationId">ID của lời mời.</param>
+        /// <param name="cancel">Token hủy bỏ.</param>
+        /// <returns>Thông tin tư cách thành viên sau khi từ chối.</returns>
+        /// <response code="200">Từ chối lời mời thành công.</response>
+        /// <response code="400">Lời mời không còn ở trạng thái chờ.</response>
+        /// <response code="401">Token không hợp lệ hoặc hết hạn.</response>
+        /// <response code="403">Lời mời không dành cho người dùng hiện tại.</response>
+        /// <response code="404">Không tìm thấy lời mời.</response>
         [HttpPost("invitations/{invitationId}/decline")]
         public async Task<ActionResult<GeneralResponse<GroupMembershipActionResponse>>> DeclineInvitation(
             string invitationId,

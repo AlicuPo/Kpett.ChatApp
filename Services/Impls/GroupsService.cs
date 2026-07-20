@@ -55,7 +55,7 @@ namespace Kpett.ChatApp.Services.Impls
             if (string.IsNullOrWhiteSpace(request.Name))
                 throw new BadRequestException(ErrorCodes.GROUP.NAME_REQUIRED, "Group name is required.");
 
-            var privacy = NormalizePrivacyForWrite(request.type, allowMissing: true);
+            var privacy = NormalizePrivacyForWrite(request.Type, allowMissing: true);
             var now = DateTime.UtcNow;
 
             var newGroup = new Group

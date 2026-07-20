@@ -42,14 +42,31 @@ namespace Kpett.ChatApp.Services.Interfaces
 
         // ─── Member operations (delegated to IGroupMemberService) ───
 
-        /// <summary>Người dùng tham gia nhóm hoặc gửi yêu cầu nếu nhóm yêu cầu phê duyệt.</summary>
-        Task<GroupMembershipActionResponse> JoinGroupAsync(string userId, string groupId, CancellationToken cancel = default);
+		/// <summary>
+		/// Người dùng tham gia nhóm.
+		/// <list type="bullet">
+		///   <item>Nếu nhóm public và không yêu cầu phê duyệt: vào ngay, status = active.</item>
+		///   <item>Nếu nhóm private/hidden hoặc memberApproval = true: tạo yêu cầu, status = pending.</item>
+		///   <item>Nếu có invitation pending: tự động chấp nhận và vào nhóm.</item>
+		/// </list>
+		/// </summary>
+		Task<GroupMembershipActionResponse> JoinGroupAsync(string userId, string groupId, CancellationToken cancel = default);
 
-        /// <summary>Người dùng rời nhóm.</summary>
-        Task<GroupMembershipActionResponse> LeaveGroupAsync(string userId, string groupId, CancellationToken cancel = default);
+		/// <summary>
+		/// Người dùng rời nhóm. Owner không thể rời nhóm bằng endpoint này.
+		/// </summary>
+		Task<GroupMembershipActionResponse> LeaveGroupAsync(string userId, string groupId, CancellationToken cancel = default);
 
-        /// <summary>Mời danh sách người dùng vào nhóm.</summary>
-        Task<GroupInviteMembersResponse> InviteMembersAsync(string userId, string groupId, InviteGroupMembersRequest request, CancellationToken cancel = default);
+		/// <summary>
+		/// Mời danh sách bạn bè vào nhóm.
+		/// <list type="bullet">
+		///   <item>Chỉ mời được bạn bè đang active.</item>
+		///   <item>Kiểm tra quyền theo WhoCanInvite trong group settings (anyone / admin_mod / admin_only).</item>
+		///   <item>Các trường hợp không hợp lệ được liệt kê trong Skipped kèm lý do.</item>
+		///   <item>Tối đa 100 người một lần mời.</item>
+		/// </list>
+		/// </summary>
+		Task<GroupInviteMembersResponse> InviteMembersAsync(string userId, string groupId, InviteGroupMembersRequest request, CancellationToken cancel = default);
 
         /// <summary>Chấp nhận yêu cầu tham gia nhóm.</summary>
         Task<GroupMemberResponse> AcceptJoinRequestAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default);
@@ -87,14 +104,28 @@ namespace Kpett.ChatApp.Services.Interfaces
         /// <summary>Chuyển quyền sở hữu nhóm.</summary>
         Task<GroupMemberResponse> TransferOwnershipAsync(string userId, string groupId, string targetUserId, CancellationToken cancel = default);
 
-        /// <summary>Lấy danh sách lời mời của tôi.</summary>
-        Task<List<GroupInvitationResponse>> GetMyInvitationsAsync(string userId, CancellationToken cancel = default);
+		/// <summary>
+		/// Lấy danh sách lời mời tham gia nhóm dành cho người dùng hiện tại.
+		/// Chỉ trả về các lời mời đang ở trạng thái pending.
+		/// </summary>
+		Task<List<GroupInvitationResponse>> GetMyInvitationsAsync(string userId, CancellationToken cancel = default);
 
-        /// <summary>Chấp nhận lời mời vào nhóm.</summary>
-        Task<GroupMembershipActionResponse> AcceptInvitationAsync(string userId, string invitationId, CancellationToken cancel = default);
+		/// <summary>
+		/// Chấp nhận lời mời tham gia nhóm.
+		/// <list type="bullet">
+		///   <item>Chỉ người được mời mới có thể chấp nhận.</item>
+		///   <item>Nếu đã có GroupMember cũ (left/kicked): phục hồi với status = active.</item>
+		///   <item>Nếu chưa có: tạo mới GroupMember với status = active.</item>
+		///   <item>Invitation được đánh dấu accepted.</item>
+		/// </list>
+		/// </summary>
+		Task<GroupMembershipActionResponse> AcceptInvitationAsync(string userId, string invitationId, CancellationToken cancel = default);
 
-        /// <summary>Từ chối lời mời vào nhóm.</summary>
-        Task<GroupMembershipActionResponse> DeclineInvitationAsync(string userId, string invitationId, CancellationToken cancel = default);
+		/// <summary>
+		/// Từ chối lời mời tham gia nhóm.
+		/// Chỉ người được mời mới có thể từ chối. Invitation được đánh dấu declined.
+		/// </summary>
+		Task<GroupMembershipActionResponse> DeclineInvitationAsync(string userId, string invitationId, CancellationToken cancel = default);
 
         // ─── Internal CRUD ───
 
