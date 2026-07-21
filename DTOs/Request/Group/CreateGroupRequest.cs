@@ -5,34 +5,34 @@ using Kpett.ChatApp.Helpers;
 namespace Kpett.ChatApp.DTOs.Request.Group
 {
     /// <summary>
-    /// Yêu c?u t?o nhóm m?i.
+    /// YÃªu cáº§u táº¡o nhÃ³m má»›i.
     /// </summary>
     public class CreateGroupRequest
     {
-        /// <summary>Tên nhóm (b?t bu?c).</summary>
+        /// <summary>TÃªn nhÃ³m (báº¯t buá»™c).</summary>
         public string? Name { get; set; }
 
-        /// <summary>Mô t? nhóm (tùy ch?n).</summary>
+        /// <summary>MÃ´ táº£ nhÃ³m (tÃ¹y chá»n).</summary>
         public string? Description { get; set; }
 
-        /// <summary>Lo?i quy?n riêng tı: "public" | "private" | "hidden" (m?c ğ?nh: "public").</summary>
+        /// <summary>Loáº¡i quyá»n riÃªng tÆ°: "public" | "private" | "hidden" (máº·c Ä‘á»‹nh: "public").</summary>
         public string? Type { get; set; }
 
-        /// <summary>URL ?nh ğ?i di?n nhóm (tùy ch?n).</summary>
+        /// <summary>URL áº£nh Ä‘áº¡i diá»‡n nhÃ³m (tÃ¹y chá»n).</summary>
         public string? AvatarUrl { get; set; }
 
-        /// <summary>URL ?nh b?a nhóm (tùy ch?n).</summary>
+        /// <summary>URL áº£nh bÃ¬a nhÃ³m (tÃ¹y chá»n).</summary>
         public string? CoverImageUrl { get; set; }
 
-        /// <summary>Ngôn ng? nhóm (m?c ğ?nh: "vi").</summary>
+        /// <summary>NgÃ´n ngá»¯ nhÃ³m (máº·c Ä‘á»‹nh: "vi").</summary>
         public string? Language { get; set; } = "vi";
 
-        /// <summary>Danh sách n?i quy nhóm (m?ng chu?i, tùy ch?n).</summary>
+        /// <summary>Danh sÃ¡ch ná»™i quy nhÃ³m (máº£ng chuá»—i, tÃ¹y chá»n).</summary>
         public List<string> Rules { get; set; } = new();
 
         /// <summary>
-        /// Danh sách ID ngı?i dùng ğı?c m?i ngay khi t?o nhóm (tùy ch?n, t?i ğa 100).
-        /// Ngı?i dùng ph?i là b?n bè ğang active và chıa là thành viên nhóm.
+        /// Danh sÃ¡ch ID ngÆ°á»i dÃ¹ng Ä‘Æ°á»£c má»i ngay khi táº¡o nhÃ³m (tÃ¹y chá»n, tá»‘i Ä‘a 100).
+        /// NgÆ°á»i dÃ¹ng pháº£i lÃ  báº¡n bÃ¨ Ä‘ang active vÃ  chÆ°a lÃ  thÃ nh viÃªn nhÃ³m.
         /// </summary>
         public List<string> InviteeIds { get; set; } = new();
     }
