@@ -3,10 +3,12 @@ using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Request.Group;
 using Kpett.ChatApp.DTOs.Response.Group;
 using Kpett.ChatApp.Enums;
+using Kpett.ChatApp.Events.Group;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Abstractions;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using static Kpett.ChatApp.Constants.GroupConstants;
 
@@ -18,13 +20,15 @@ namespace Kpett.ChatApp.Services.Implementations
     public class GroupsService : GroupServiceBase, IGroupsService
     {
         private readonly IGroupMemberService _groupMemberService;
+        private readonly IMediator _mediator;
 
         /// <summary>
         /// Khởi tạo service với database context và service thành viên nhóm.
         /// </summary>
-        public GroupsService(AppDbContext dbContext, IGroupMemberService groupMemberService) : base(dbContext)
+        public GroupsService(AppDbContext dbContext, IGroupMemberService groupMemberService, IMediator mediator) : base(dbContext)
         {
             _groupMemberService = groupMemberService;
+            _mediator = mediator;
         }
 
         /// <inheritdoc />
@@ -77,6 +81,8 @@ namespace Kpett.ChatApp.Services.Implementations
             if (rules.Count > 0)
                 _dbContext.GroupRules.AddRange(rules);
 
+            var sentInvitations = new List<GroupInvitation>();
+
             if (request.InviteeIds.Count > 0)
             {
                 var validIds = request.InviteeIds
@@ -107,7 +113,7 @@ namespace Kpett.ChatApp.Services.Implementations
 
                     if (existingInvite != null) continue;
 
-                    _dbContext.GroupInvitations.Add(new GroupInvitation
+                    var invitation = new GroupInvitation
                     {
                         Id = Guid.NewGuid().ToString(),
                         GroupId = newGroup.Id,
@@ -115,11 +121,26 @@ namespace Kpett.ChatApp.Services.Implementations
                         InviteeUserId = inviteeId,
                         Status = PendingStatus,
                         CreatedAt = nowForInvite
-                    });
+                    };
+
+                    _dbContext.GroupInvitations.Add(invitation);
+                    sentInvitations.Add(invitation);
                 }
             }
 
             await _dbContext.SaveChangesAsync(cancel);
+
+            foreach (var inv in sentInvitations)
+            {
+                await _mediator.Publish(new GroupInvitationSentEvent
+                {
+                    InvitationId = inv.Id,
+                    GroupId = newGroup.Id,
+                    GroupName = newGroup.Name,
+                    InviterId = userId,
+                    InviteeId = inv.InviteeUserId
+                }, cancel);
+            }
 
             return new CreateGroupResponse
             {
@@ -525,16 +546,25 @@ namespace Kpett.ChatApp.Services.Implementations
             return await _dbContext.GroupInvitations
                 .AsNoTracking()
                 .Where(i => i.InviteeUserId == userId && i.Status == PendingStatus)
-                .OrderByDescending(i => i.CreatedAt)
-                .Select(i => new GroupInvitationResponse
-                {
-                    Id = i.Id,
-                    GroupId = i.GroupId,
-                    InvitedByUserId = i.InvitedByUserId,
-                    InviteeUserId = i.InviteeUserId,
-                    Status = i.Status ?? PendingStatus,
-                    CreatedAt = i.CreatedAt
-                })
+                .Join(_dbContext.Groups.AsNoTracking(),
+                    inv => inv.GroupId,
+                    g => g.Id,
+                    (inv, g) => new { inv, GroupName = g.Name })
+                .Join(_dbContext.Users.AsNoTracking(),
+                    x => x.inv.InvitedByUserId,
+                    u => u.Id,
+                    (x, u) => new GroupInvitationResponse
+                    {
+                        Id = x.inv.Id,
+                        GroupId = x.inv.GroupId,
+                        GroupName = x.GroupName,
+                        InvitedByUserId = x.inv.InvitedByUserId,
+                        InviterName = u.DisplayName ?? u.Username,
+                        InviteeUserId = x.inv.InviteeUserId,
+                        Status = x.inv.Status ?? PendingStatus,
+                        CreatedAt = x.inv.CreatedAt
+                    })
+                .OrderByDescending(x => x.CreatedAt)
                 .ToListAsync(cancel);
         }
 

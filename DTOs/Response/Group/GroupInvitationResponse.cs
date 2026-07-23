@@ -11,8 +11,14 @@ namespace Kpett.ChatApp.DTOs.Response.Group
         /// <summary>ID của nhóm được mời.</summary>
         public string GroupId { get; set; } = string.Empty;
 
+        /// <summary>Tên nhóm.</summary>
+        public string? GroupName { get; set; }
+
         /// <summary>ID của người gửi lời mời.</summary>
         public string InvitedByUserId { get; set; } = string.Empty;
+
+        /// <summary>Tên hiển thị của người gửi lời mời.</summary>
+        public string? InviterName { get; set; }
 
         /// <summary>ID của người được mời.</summary>
         public string InviteeUserId { get; set; } = string.Empty;
