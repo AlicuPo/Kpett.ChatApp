@@ -1,10 +1,12 @@
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Request.Group;
 using Kpett.ChatApp.DTOs.Response.Group;
+using Kpett.ChatApp.Events.Group;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Interfaces;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using static Kpett.ChatApp.Constants.GroupConstants;
 
@@ -15,11 +17,14 @@ namespace Kpett.ChatApp.Services.Implementations
     /// </summary>
     public class GroupMemberService : GroupServiceBase, IGroupMemberService
     {
+        private readonly IMediator _mediator;
+
         /// <summary>
         /// Khởi tạo service với database context.
         /// </summary>
-        public GroupMemberService(AppDbContext dbContext) : base(dbContext)
+        public GroupMemberService(AppDbContext dbContext, IMediator mediator) : base(dbContext)
         {
+            _mediator = mediator;
         }
 
         /// <inheritdoc />
@@ -136,6 +141,7 @@ namespace Kpett.ChatApp.Services.Implementations
 
             var response = new GroupInviteMembersResponse();
             var now = DateTime.UtcNow;
+            var sentInvitations = new List<GroupInvitation>();
             var users = await _dbContext.Users
                 .AsNoTracking()
                 .Where(u => inviteeIds.Contains(u.Id))
@@ -216,9 +222,23 @@ namespace Kpett.ChatApp.Services.Implementations
                     Status = invitation.Status ?? PendingStatus,
                     CreatedAt = invitation.CreatedAt
                 });
+
+                sentInvitations.Add(invitation);
             }
 
             await _dbContext.SaveChangesAsync(cancel);
+
+            foreach (var inv in sentInvitations)
+            {
+                await _mediator.Publish(new GroupInvitationSentEvent
+                {
+                    InvitationId = inv.Id,
+                    GroupId = group.Id,
+                    GroupName = group.Name,
+                    InviterId = userId,
+                    InviteeId = inv.InviteeUserId
+                }, cancel);
+            }
 
             return response;
         }

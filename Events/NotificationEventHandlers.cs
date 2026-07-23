@@ -1,6 +1,7 @@
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Events.Comment;
 using Kpett.ChatApp.Events.Friend;
+using Kpett.ChatApp.Events.Group;
 using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
@@ -15,7 +16,8 @@ namespace Kpett.ChatApp.Events
     public class NotificationEventHandlers :
         INotificationHandler<FriendRequestSentEvent>,
         INotificationHandler<FriendRequestAcceptedEvent>,
-        INotificationHandler<CommentMentionedEvent>
+        INotificationHandler<CommentMentionedEvent>,
+        INotificationHandler<GroupInvitationSentEvent>
     {
         private readonly AppDbContext _context;
         private readonly IHubContext<AppHub> _hubContext;
@@ -89,7 +91,33 @@ namespace Kpett.ChatApp.Events
             }
         }
 
-        // Hàm helper ð? map d? li?u Actor và push qua SignalR (DRY)
+        // X? l? L?i m?i vï¿½o nhï¿½m
+        public async Task Handle(GroupInvitationSentEvent evt, CancellationToken cancel)
+        {
+            var metadataJson = JsonSerializer.Serialize(new
+            {
+                GroupId = evt.GroupId,
+                GroupName = evt.GroupName,
+                InvitationId = evt.InvitationId
+            });
+
+            var notification = new Notification
+            {
+                Id = Guid.NewGuid().ToString(),
+                RecipientId = evt.InviteeId,
+                ActorId = evt.InviterId,
+                Type = NotificationType.GroupInvitationReceived.GetDescription(),
+                ReferenceId = evt.GroupId,
+                Metadata = metadataJson
+            };
+
+            _context.Notifications.Add(notification);
+            await _context.SaveChangesAsync(cancel);
+
+            await PushNotification(notification, cancel);
+        }
+
+        // Hï¿½m helper ï¿½? map d? li?u Actor vï¿½ push qua SignalR (DRY)
         private async Task PushNotification(Notification notif, CancellationToken cancel)
         {
             var actorInfo = await _context.Users.AsNoTracking()
@@ -118,7 +146,7 @@ namespace Kpett.ChatApp.Events
                 Actor = actorInfo
             };
 
-            // B?n ð?n chính xác User nh?n thông báo
+            // B?n ï¿½?n chï¿½nh xï¿½c User nh?n thï¿½ng bï¿½o
             await _hubContext.Clients.User(notif.RecipientId).SendAsync("ReceiveNotification", payload, cancel);
         }
     }
