@@ -190,29 +190,25 @@ namespace Kpett.ChatApp.Services.Implementations
                     continue;
                 }
 
-                var invitation = await _dbContext.GroupInvitations
-                    .FirstOrDefaultAsync(i => i.GroupId == group.Id && i.InviteeUserId == inviteeId, cancel);
+                var existingInvitation = await _dbContext.GroupInvitations
+                    .FirstOrDefaultAsync(i => i.GroupId == group.Id && i.InviteeUserId == inviteeId && i.Status == PendingStatus, cancel);
 
-                if (invitation?.Status == PendingStatus)
+                if (existingInvitation != null)
                 {
                     response.Skipped.Add(new GroupInviteSkippedResponse { UserId = inviteeId, Reason = "invitation_pending" });
                     continue;
                 }
 
-                if (invitation == null)
+                var invitation = new GroupInvitation
                 {
-                    invitation = new GroupInvitation
-                    {
-                        Id = Guid.NewGuid().ToString(),
-                        GroupId = group.Id,
-                        InviteeUserId = inviteeId
-                    };
-                    _dbContext.GroupInvitations.Add(invitation);
-                }
-
-                invitation.InvitedByUserId = userId;
-                invitation.Status = PendingStatus;
-                invitation.CreatedAt = now;
+                    Id = Guid.NewGuid().ToString(),
+                    GroupId = group.Id,
+                    InvitedByUserId = userId,
+                    InviteeUserId = inviteeId,
+                    Status = PendingStatus,
+                    CreatedAt = now
+                };
+                _dbContext.GroupInvitations.Add(invitation);
 
                 response.Invitations.Add(new GroupInvitationResponse
                 {
