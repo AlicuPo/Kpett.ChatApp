@@ -1,8 +1,8 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response.Shared;
-using Kpett.ChatApp.Services.Interfaces;
+using Kpett.ChatApp.Services.Abstractions;
 
 namespace Kpett.ChatApp.Middleware
 {

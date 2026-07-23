@@ -1,3 +1,4 @@
+using Kpett.ChatApp.Data;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Events.Comment;
 using Kpett.ChatApp.Events.Friend;

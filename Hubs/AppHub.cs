@@ -1,6 +1,6 @@
 using Kpett.ChatApp.DTOs.Response.Conversation;
 using Kpett.ChatApp.Helpers;
-using Kpett.ChatApp.Services.Interfaces;
+using Kpett.ChatApp.Services.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 

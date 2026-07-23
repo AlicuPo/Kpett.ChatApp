@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Mail;
 using Kpett.ChatApp.Options;
-using Kpett.ChatApp.Services.Interfaces;
+using Kpett.ChatApp.Services.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Kpett.ChatApp.Services.Implementations

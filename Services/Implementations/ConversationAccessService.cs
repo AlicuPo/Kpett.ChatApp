@@ -1,7 +1,8 @@
+using Kpett.ChatApp.Data;
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Services.Interfaces;
+using Kpett.ChatApp.Services.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Kpett.ChatApp.Services.Implementations

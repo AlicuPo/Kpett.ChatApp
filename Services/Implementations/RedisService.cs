@@ -2,7 +2,7 @@ using StackExchange.Redis;
 namespace Kpett.ChatApp.Services.Implementations
 {
     /// <summary>Service thao tác với Redis: token, OTP, online presence, typing tracking, conversation membership cache.</summary>
-    public class RedisService : Interfaces.IRedisService
+    public class RedisService : Abstractions.IRedisService
     {
         private readonly StackExchange.Redis.IDatabase _redis;
         private readonly IConnectionMultiplexer _multiplexer;

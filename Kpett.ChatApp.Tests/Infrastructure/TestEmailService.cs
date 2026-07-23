@@ -1,4 +1,4 @@
-using Kpett.ChatApp.Services.Interfaces;
+using Kpett.ChatApp.Services.Abstractions;
 
 namespace Kpett.ChatApp.Tests.Infrastructure;
 

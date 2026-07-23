@@ -1,10 +1,11 @@
+using Kpett.ChatApp.Data;
 using Kpett.ChatApp.DTOs.Response.Conversation;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Extensions;
 using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Services.Interfaces;
+using Kpett.ChatApp.Services.Abstractions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Concurrent;

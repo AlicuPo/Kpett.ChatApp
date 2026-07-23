@@ -1,3 +1,4 @@
+using Kpett.ChatApp.Data;
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Request.Group;
 using Kpett.ChatApp.DTOs.Response.Group;
@@ -5,7 +6,7 @@ using Kpett.ChatApp.Events.Group;
 using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Services.Interfaces;
+using Kpett.ChatApp.Services.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using static Kpett.ChatApp.Constants.GroupConstants;

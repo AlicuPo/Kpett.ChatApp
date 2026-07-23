@@ -1,4 +1,5 @@
 using Azure.Core;
+using Kpett.ChatApp.Data;
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Payload.Cursor;
 using Kpett.ChatApp.DTOs.Response.Post;
@@ -9,7 +10,7 @@ using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Extensions;
 using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Services.Interfaces;
+using Kpett.ChatApp.Services.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
