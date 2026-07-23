@@ -1,6 +1,6 @@
-Ôªøusing Kpett.ChatApp.DTOs.Response.Media;
+using Kpett.ChatApp.DTOs.Response.Media;
 using Kpett.ChatApp.DTOs.Response.Shared;
-using Kpett.ChatApp.Services.Interfaces;
+using Kpett.ChatApp.Services.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,7 +8,7 @@ namespace Kpett.ChatApp.Controllers
 {
     [Route("api/[controller]")]
     [Authorize]
-    public class MediaController : Controller
+    public class MediaController : ControllerBase
     {
         private readonly IMediaService _mediaService;
 
@@ -27,7 +27,7 @@ namespace Kpett.ChatApp.Controllers
             return Ok(new GeneralResponse<MediaUploadResponse>
             {
                 IsSuccess = true,
-                Message = "Upload th√†nh c√¥ng",
+                Message = "Upload th‡nh cÙng",
                 Data = result,
                 StatusCode = 200
             });
@@ -42,7 +42,7 @@ namespace Kpett.ChatApp.Controllers
             return Ok(new GeneralResponse<MediaUploadResponse>
             {
                 IsSuccess = true,
-                Message = "Upload image th√†nh c√¥ng",
+                Message = "Upload image th‡nh cÙng",
                 Data = result,
                 StatusCode = 200
             });
@@ -57,7 +57,7 @@ namespace Kpett.ChatApp.Controllers
             return Ok(new GeneralResponse<MediaUploadResponse>
             {
                 IsSuccess = true,
-                Message = "Upload video th√†nh c√¥ng",
+                Message = "Upload video th‡nh cÙng",
                 Data = result,
                 StatusCode = 200
             });

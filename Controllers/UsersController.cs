@@ -3,8 +3,8 @@ using Kpett.ChatApp.DTOs.Request.User;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.User;
 using Kpett.ChatApp.Filters;
-using Kpett.ChatApp.Helper;
-using Kpett.ChatApp.Services.Interfaces;
+using Kpett.ChatApp.Helpers;
+using Kpett.ChatApp.Services.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -17,9 +17,9 @@ namespace Kpett.ChatApp.Controllers
     {
         private readonly IUserService _userService;
 
-        public UsersController(IUserService usersService)
+        public UsersController(IUserService userService)
         {
-            _userService = usersService;
+            _userService = userService;
         }
 
         [HttpGet("me")]
@@ -39,7 +39,7 @@ namespace Kpett.ChatApp.Controllers
 
         [HttpPut("me")]
         [Authorize]
-        public async Task<ActionResult<UserGeneralInfoResponse>> UpdateUserGeneraInfo([FromBody] UpdateGeneralInfoUserRequest request, CancellationToken cancel = default)
+        public async Task<ActionResult<UserGeneralInfoResponse>> UpdateUserGeneralInfo([FromBody] UpdateGeneralInfoUserRequest request, CancellationToken cancel = default)
         {
             var currentUserId = User.GetRequiredUserId();
             var result = await _userService.UpdateUserGeneralInfoAsync(currentUserId, request, cancel);
@@ -82,7 +82,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        [HttpDelete("DeleteUser/{id}")]
+        [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUser(string id, CancellationToken cancel = default)
         {
             var currentUserId = User.GetRequiredUserId();
@@ -145,8 +145,8 @@ namespace Kpett.ChatApp.Controllers
         [OptionalAuthorize]
         public async Task<IActionResult> GetUserProfile(string username, CancellationToken cancel = default)
         {
-            var curentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var result = await _userService.GetUserProfileAsync(username, curentUserId, cancel);
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var result = await _userService.GetUserProfileAsync(username, currentUserId, cancel);
 
             return Ok(new GeneralResponse<UserProfileResponse>
             {

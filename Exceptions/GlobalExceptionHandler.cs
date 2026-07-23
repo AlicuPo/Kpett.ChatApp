@@ -1,4 +1,4 @@
-﻿using Kpett.ChatApp.Constants;
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Microsoft.AspNetCore.Diagnostics;
@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Text.Json;
 
-namespace Kpett.ChatApp.Helper
+namespace Kpett.ChatApp.Exceptions
 {
     public class GlobalExceptionHandler : IExceptionHandler
     {

@@ -1,12 +1,14 @@
 using Hangfire;
+using Kpett.ChatApp.Data;
 using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response.Shared;
+using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Options;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
-using Kpett.ChatApp.Services.Impls;
-using Kpett.ChatApp.Services.Interfaces;
+using Kpett.ChatApp.Services.Implementations;
+using Kpett.ChatApp.Services.Abstractions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -120,7 +122,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             OnTokenValidated = async context =>
             {
                 var redis = context.HttpContext.RequestServices
-                    .GetRequiredService<Kpett.ChatApp.Services.Interfaces.IRedisService>();
+                    .GetRequiredService<Kpett.ChatApp.Services.Abstractions.IRedisService>();
 
                 var jtiClaim = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti);
 

@@ -1,7 +1,9 @@
-﻿using Kpett.ChatApp.Enums;
+using Kpett.ChatApp.Data;
+using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Events.Comment;
 using Kpett.ChatApp.Events.Friend;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Events.Group;
+using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.DTOs.Response.Notification;
@@ -15,7 +17,8 @@ namespace Kpett.ChatApp.Events
     public class NotificationEventHandlers :
         INotificationHandler<FriendRequestSentEvent>,
         INotificationHandler<FriendRequestAcceptedEvent>,
-        INotificationHandler<CommentMentionedEvent>
+        INotificationHandler<CommentMentionedEvent>,
+        INotificationHandler<GroupInvitationSentEvent>
     {
         private readonly AppDbContext _context;
         private readonly IHubContext<AppHub> _hubContext;
@@ -26,7 +29,7 @@ namespace Kpett.ChatApp.Events
             _hubContext = hubContext;
         }
 
-        // Xử lý Gửi lời mời kết bạn
+        // X? l? G?i l?i m?i k?t b?n
         public async Task Handle(FriendRequestSentEvent evt, CancellationToken cancel)
         {
             var notification = new Notification
@@ -44,7 +47,7 @@ namespace Kpett.ChatApp.Events
             await PushNotification(notification, cancel);
         }
 
-        // Xử lý Chấp nhận lời mời kết bạn
+        // X? l? Ch?p nh?n l?i m?i k?t b?n
         public async Task Handle(FriendRequestAcceptedEvent evt, CancellationToken cancel)
         {
             var notification = new Notification
@@ -62,7 +65,7 @@ namespace Kpett.ChatApp.Events
             await PushNotification(notification, cancel);
         }
 
-        // Xử lý Tag/Mention trong Comment
+        // X? l? Tag/Mention trong Comment
         public async Task Handle(CommentMentionedEvent evt, CancellationToken cancel)
         {
             var validMentionIds = evt.MentionedUserIds.Where(id => id != evt.ActorId).Distinct().ToList();
@@ -89,7 +92,33 @@ namespace Kpett.ChatApp.Events
             }
         }
 
-        // Hàm helper để map dữ liệu Actor và push qua SignalR (DRY)
+        // X? l? L?i m?i v�o nh�m
+        public async Task Handle(GroupInvitationSentEvent evt, CancellationToken cancel)
+        {
+            var metadataJson = JsonSerializer.Serialize(new
+            {
+                GroupId = evt.GroupId,
+                GroupName = evt.GroupName,
+                InvitationId = evt.InvitationId
+            });
+
+            var notification = new Notification
+            {
+                Id = Guid.NewGuid().ToString(),
+                RecipientId = evt.InviteeId,
+                ActorId = evt.InviterId,
+                Type = NotificationType.GroupInvitationReceived.GetDescription(),
+                ReferenceId = evt.GroupId,
+                Metadata = metadataJson
+            };
+
+            _context.Notifications.Add(notification);
+            await _context.SaveChangesAsync(cancel);
+
+            await PushNotification(notification, cancel);
+        }
+
+        // H�m helper �? map d? li?u Actor v� push qua SignalR (DRY)
         private async Task PushNotification(Notification notif, CancellationToken cancel)
         {
             var actorInfo = await _context.Users.AsNoTracking()
@@ -118,7 +147,7 @@ namespace Kpett.ChatApp.Events
                 Actor = actorInfo
             };
 
-            // Bắn đến chính xác User nhận thông báo
+            // B?n �?n ch�nh x�c User nh?n th�ng b�o
             await _hubContext.Clients.User(notif.RecipientId).SendAsync("ReceiveNotification", payload, cancel);
         }
     }

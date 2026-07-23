@@ -1,8 +1,8 @@
 using Kpett.ChatApp.DTOs.Request.Sticker;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.DTOs.Response.Sticker;
-using Kpett.ChatApp.Helper;
-using Kpett.ChatApp.Services.Interfaces;
+using Kpett.ChatApp.Helpers;
+using Kpett.ChatApp.Services.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

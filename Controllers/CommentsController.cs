@@ -2,8 +2,8 @@ using Kpett.ChatApp.DTOs.Request.Post;
 using Kpett.ChatApp.DTOs.Response.Post;
 using Kpett.ChatApp.DTOs.Response.Shared;
 using Kpett.ChatApp.Filters;
-using Kpett.ChatApp.Helper;
-using Kpett.ChatApp.Services.Interfaces;
+using Kpett.ChatApp.Helpers;
+using Kpett.ChatApp.Services.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -61,7 +61,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        [HttpPut("posts/{commentId}")]
+        [HttpPut("{commentId}")]
         [Authorize]
         public async Task<ActionResult<CommentDTO>> UpdateComment(string commentId, [FromBody] UpdateCommentRequest request, CancellationToken cancel)
         {
@@ -76,7 +76,7 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
-        [HttpDelete("posts/{commentId}")]
+        [HttpDelete("{commentId}")]
         [Authorize]
         public async Task<IActionResult> DeleteComment(string commentId, CancellationToken cancel)
         {

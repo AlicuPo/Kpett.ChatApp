@@ -1,5 +1,5 @@
-﻿using Kpett.ChatApp.Enums;
-using Kpett.ChatApp.Helper;
+using Kpett.ChatApp.Enums;
+using Kpett.ChatApp.Helpers;
 
 namespace Kpett.ChatApp.DTOs.Request.Shared
 {
