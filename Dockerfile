@@ -23,7 +23,7 @@ ENV ASPNETCORE_URLS=http://+:8080 \
 EXPOSE 8080
 
 COPY --from=build /app/publish .
-RUN mkdir -p /app/Logs && chown -R "$APP_UID":0 /app
+RUN mkdir -p /app/Logs /app/wwwroot/uploads/images /app/wwwroot/uploads/videos /app/wwwroot/uploads/posts && chown -R "$APP_UID":0 /app && chmod g+w /app/wwwroot/uploads
 
 USER $APP_UID
 ENTRYPOINT ["dotnet", "Kpett.ChatApp.dll"]
