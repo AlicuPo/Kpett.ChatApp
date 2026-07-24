@@ -280,6 +280,66 @@ using (var scope = app.Services.CreateScope())
     {
         dbContext.Database.Migrate();
     }
+
+    // Ensure Roles and UserRoles tables exist
+    await dbContext.Database.ExecuteSqlRawAsync(
+        "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name='Roles') " +
+        "CREATE TABLE Roles (Id INT IDENTITY(1,1) PRIMARY KEY, Name NVARCHAR(256) NOT NULL, Description NVARCHAR(MAX) NULL, CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE())");
+    await dbContext.Database.ExecuteSqlRawAsync(
+        "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name='UserRoles') " +
+        "CREATE TABLE UserRoles (UserId NVARCHAR(450) NOT NULL, RoleId INT NOT NULL, CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE(), PRIMARY KEY (UserId, RoleId))");
+
+    // Seed SuperAdmin role and default super admin user (chỉ khi cấu hình qua env/appsettings)
+    var superAdminEmail = app.Configuration["SuperAdmin:Email"];
+    var superAdminPassword = app.Configuration["SuperAdmin:Password"];
+
+    if (!string.IsNullOrEmpty(superAdminEmail) && !string.IsNullOrEmpty(superAdminPassword))
+    {
+        var superAdminRoleName = "SuperAdmin";
+
+        var role = await dbContext.Set<Kpett.ChatApp.Models.Role>().FirstOrDefaultAsync(r => r.Name == superAdminRoleName);
+        if (role == null)
+        {
+            role = new Kpett.ChatApp.Models.Role
+            {
+                Name = superAdminRoleName,
+                Description = "Super Administrator with full system access",
+                CreatedAt = DateTime.UtcNow
+            };
+            dbContext.Set<Kpett.ChatApp.Models.Role>().Add(role);
+            await dbContext.SaveChangesAsync();
+        }
+
+        var adminUser = await dbContext.Users.FirstOrDefaultAsync(u => u.Email == superAdminEmail);
+        if (adminUser == null)
+        {
+            adminUser = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                Email = superAdminEmail,
+                Password = BCrypt.Net.BCrypt.HashPassword(superAdminPassword),
+                Username = "admin",
+                DisplayName = "Super Admin",
+                IsActive = true,
+                IsVerified = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            dbContext.Users.Add(adminUser);
+            await dbContext.SaveChangesAsync();
+        }
+
+        var userRoleExists = await dbContext.Set<Kpett.ChatApp.Models.UserRole>().AnyAsync(ur => ur.UserId == adminUser.Id && ur.RoleId == role.Id);
+        if (!userRoleExists)
+        {
+            dbContext.Set<Kpett.ChatApp.Models.UserRole>().Add(new Kpett.ChatApp.Models.UserRole
+            {
+                UserId = adminUser.Id,
+                RoleId = role.Id,
+                CreatedAt = DateTime.UtcNow
+            });
+            await dbContext.SaveChangesAsync();
+        }
+    }
 }
 
 app.MapControllers();

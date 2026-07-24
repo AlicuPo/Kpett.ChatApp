@@ -12,7 +12,7 @@ using System.Text;
 
 namespace Kpett.ChatApp.Services.Implementations
 {
-    /// <summary>Service t?o và xác th?c JWT token (access + refresh).</summary>
+    /// <summary>Service t?o vï¿½ xï¿½c th?c JWT token (access + refresh).</summary>
     public class JwtService : IJwtService
     {
 
@@ -21,7 +21,7 @@ namespace Kpett.ChatApp.Services.Implementations
         private readonly IConfiguration _config;
         private readonly ILogger<JwtService> _logger;
 
-        /// <summary>Kh?i t?o service v?i các dependencies.</summary>
+        /// <summary>Kh?i t?o service v?i cï¿½c dependencies.</summary>
         public JwtService(IHttpContextAccessor contextAccessor, IOptions<JwtOptions> options, IConfiguration config, ILogger<JwtService> logger)
         {
             _contextAccessor = contextAccessor;
@@ -31,7 +31,7 @@ namespace Kpett.ChatApp.Services.Implementations
         }
 
         /// <inheritdoc />
-        public string GenerateAccessToken(string userId, string email)
+        public string GenerateAccessToken(string userId, string email, List<string>? roles = null)
         {
             var jwtKey = _jwtOptions.KeyAccess;
             if (string.IsNullOrEmpty(jwtKey))
@@ -55,6 +55,14 @@ namespace Kpett.ChatApp.Services.Implementations
                 new Claim(ClaimTypes.NameIdentifier, userId),
                 new Claim(ClaimTypes.Email, email),
             };
+
+            if (roles != null)
+            {
+                foreach (var role in roles)
+                {
+                    claims.Add(new Claim(ClaimTypes.Role, role));
+                }
+            }
 
             var token = new JwtSecurityToken(
                 issuer: _jwtOptions.Issuer,

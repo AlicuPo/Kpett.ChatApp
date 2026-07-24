@@ -87,7 +87,13 @@ public class AuthService : IAuthService
             throw new ForbiddenException(ErrorCodes.USER.INACTIVE, "User inactive");
         }
 
-        var accessToken = _token.GenerateAccessToken(user.Id, user.Email);
+        var roles = await _dbContext.UserRoles
+            .Where(ur => ur.UserId == user.Id)
+            .Include(ur => ur.Role)
+            .Select(ur => ur.Role.Name)
+            .ToListAsync(cancel);
+
+        var accessToken = _token.GenerateAccessToken(user.Id, user.Email, roles);
         var refreshToken = _token.GenerateRefreshToken(user.Id, user.Email);
         await _redis.SaveRefreshTokenAsync(user.Id, refreshToken, GetTokenRemainingTtl(refreshToken, TimeSpan.FromDays(30)));
 
@@ -254,7 +260,13 @@ public class AuthService : IAuthService
             throw new UnauthorizedException(ErrorCodes.AUTH.REFRESH_TOKEN_INVALID, "Refresh token has been revoked or rotated");
         }
 
-        var newAccessToken = _token.GenerateAccessToken(userId, email);
+        var roles = await _dbContext.UserRoles
+            .Where(ur => ur.UserId == userId)
+            .Include(ur => ur.Role)
+            .Select(ur => ur.Role.Name)
+            .ToListAsync();
+
+        var newAccessToken = _token.GenerateAccessToken(userId, email, roles);
         var newRefreshToken = _token.GenerateRefreshToken(userId, email);
 
         await _redis.BlacklistRefreshTokenAsync(request.RefreshToken, GetTokenRemainingTtl(request.RefreshToken, TimeSpan.FromDays(30)));

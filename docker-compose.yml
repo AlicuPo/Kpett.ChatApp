@@ -53,6 +53,9 @@ services:
       MediaSettings__AllowedVideoExtensions__1: .mov
       MediaSettings__AllowedVideoExtensions__2: .webm
       MediaSettings__AllowedVideoExtensions__3: .avi
+
+      SuperAdmin__Email: "${SuperAdmin__Email:-}"
+      SuperAdmin__Password: "${SuperAdmin__Password:-}"
     volumes:
       - api_logs:/app/Logs
       - api_uploads:/app/wwwroot/uploads

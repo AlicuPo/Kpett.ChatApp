@@ -5,20 +5,20 @@ using System.Security.Claims;
 namespace Kpett.ChatApp.Services.Abstractions
 {
     /// <summary>
-    /// Service t?o và xác th?c JWT token (access + refresh).
+    /// Service t?o vï¿½ xï¿½c th?c JWT token (access + refresh).
     /// </summary>
     public interface IJwtService
     {
-        /// <summary>L?y thông tin claims t? HttpContext hi?n t?i.</summary>
+        /// <summary>L?y thï¿½ng tin claims t? HttpContext hi?n t?i.</summary>
         UserClaims? GetUserClaims();
 
         /// <summary>T?o access token m?i.</summary>
-        string GenerateAccessToken(string userId, string email);
+        string GenerateAccessToken(string userId, string email, List<string>? roles = null);
 
         /// <summary>T?o refresh token m?i.</summary>
         string GenerateRefreshToken(string userId, string email);
 
-        /// <summary>L?y ClaimsPrincipal t? token ð? h?t h?n (dùng cho refresh).</summary>
+        /// <summary>L?y ClaimsPrincipal t? token ï¿½? h?t h?n (dï¿½ng cho refresh).</summary>
         ClaimsPrincipal? GetPrincipalFromExpiredToken(string token, bool isRefresh = false);
     }
 }
