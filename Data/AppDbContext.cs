@@ -69,6 +69,10 @@ public AppDbContext(DbContextOptions<AppDbContext> options)
 
     public virtual DbSet<Sticker> Stickers { get; set; }
 
+    public virtual DbSet<Role> Roles { get; set; }
+
+    public virtual DbSet<UserRole> UserRoles { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -100,6 +104,8 @@ public AppDbContext(DbContextOptions<AppDbContext> options)
         modelBuilder.Entity<UserFeed>().HasKey(e => e.Id);
         modelBuilder.Entity<UserSetting>().HasKey(e => e.Id);
         modelBuilder.Entity<UserMedia>().HasKey(e => e.Id);
+        modelBuilder.Entity<Role>().HasKey(e => e.Id);
+        modelBuilder.Entity<UserRole>().HasKey(e => new { e.UserId, e.RoleId });
 
         // Các bảng dùng khóa đặc thù hoặc khóa phức hợp (Composite Key)
         modelBuilder.Entity<Friendship>().HasKey(e => new { e.UserLowId, e.UserHighId });
