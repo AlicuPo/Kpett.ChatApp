@@ -55,11 +55,13 @@ services:
       MediaSettings__AllowedVideoExtensions__3: .avi
     volumes:
       - api_logs:/app/Logs
+      - api_uploads:/app/wwwroot/uploads
     networks:
       - kpett
 
 volumes:
   api_logs:
+  api_uploads:
 
 networks:
   kpett:
