@@ -342,6 +342,15 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+// Ensure upload directories exist with write permissions for the container user
+var webRoot = app.Services.GetRequiredService<IWebHostEnvironment>().WebRootPath;
+foreach (var sub in new[] { "images", "videos", "posts" })
+{
+    var dir = Path.Combine(webRoot, "uploads", sub);
+    if (!Directory.Exists(dir))
+        Directory.CreateDirectory(dir);
+}
+
 app.MapControllers();
 app.MapHub<AppHub>("/hubs/app").RequireCors("ClientCors");
 
