@@ -1,0 +1,206 @@
+===============================================================================
+  STICKERS API — Tai lieu Request / Response / Error
+  Base URL : /api/stickers
+  Auth     : Bearer Token (JWT) — tat ca endpoint can [Authorize] tru GetPublicPacks
+===============================================================================
+
+Cau truc response chung (GeneralResponse<T>):
+{
+  "isSuccess"  : boolean,
+  "statusCode" : number,
+  "message"    : string,
+  "data"       : object | null
+}
+
+Cau truc error response:
+{
+  "isSuccess"  : false,
+  "statusCode" : number,
+  "message"    : string,
+  "errorCode"  : string,
+  "stackTrace" : string      // chi o Development
+}
+
+===============================================================================
+1. Tao bo sticker
+POST /api/stickers/packs
+===============================================================================
+
+Auth: Required
+
+REQUEST BODY (CreateStickerPackRequest):
+{
+  "name"        : string   [BAT BUOC]  — Ten bo sticker
+  "description" : string   [tu chon]   — Mo ta bo sticker
+  "isPublic"    : boolean  [tu chon]   — Co cong khai hay khong (mac dinh: false)
+}
+
+RESPONSE THANH CONG — 201 Created:
+{
+  "isSuccess"  : true,
+  "statusCode" : 201,
+  "message"    : "Sticker pack created successfully",
+  "data": {
+    "id"          : string,    // ID bo sticker
+    "name"        : string,
+    "description" : string | null,
+    "isPublic"    : boolean,
+    "ownerId"     : string,    // ID nguoi tao
+    "stickerCount": number,    // so luong sticker (0)
+    "createdAt"   : string     // ISO 8601 UTC
+  }
+}
+
+LOI CO THE GAP:
+  400 — VAL.REQUIRED: Thieu name
+  401 — Token khong hop le
+
+===============================================================================
+2. Them sticker vao bo
+POST /api/stickers/packs/{packId}/stickers
+===============================================================================
+
+Auth: Required
+
+PATH PARAMS:
+  packId : string — ID bo sticker
+
+REQUEST BODY (AddStickerRequest):
+{
+  "mediaUrl" : string   [BAT BUOC] — URL anh sticker
+  "publicId" : string   [tu chon]  — Public ID tren Cloudinary
+  "emoji"    : string   [tu chon]  — Emoji dai dien
+}
+
+RESPONSE THANH CONG — 200 OK:
+{
+  "isSuccess"  : true,
+  "statusCode" : 200,
+  "message"    : "Sticker added successfully",
+  "data": {
+    "id"      : string,   // ID sticker
+    "packId"  : string,
+    "mediaUrl": string,
+    "emoji"   : string | null,
+    "order"   : number
+  }
+}
+
+LOI CO THE GAP:
+  400 — VAL.REQUIRED: Thieu mediaUrl
+  401 — Token khong hop le
+  403 — Khong phai chu so huu bo sticker
+  404 — Khong tim thay bo sticker
+
+===============================================================================
+3. Danh sach bo sticker cua toi
+GET /api/stickers/packs/my
+===============================================================================
+
+Auth: Required
+
+REQUEST: Khong co body
+
+RESPONSE THANH CONG — 200 OK:
+{
+  "isSuccess"  : true,
+  "statusCode" : 200,
+  "message"    : "Get my sticker packs successfully",
+  "data": [
+    {
+      "id"          : string,
+      "name"        : string,
+      "description" : string | null,
+      "isPublic"    : boolean,
+      "ownerId"     : string,
+      "stickerCount": number,
+      "createdAt"   : string
+    }
+  ]
+}
+
+LOI CO THE GAP:
+  401 — Token khong hop le
+
+===============================================================================
+4. Danh sach bo sticker cong khai
+GET /api/stickers/packs/public
+===============================================================================
+
+Auth: Public (AllowAnonymous)
+
+REQUEST: Khong co body
+
+RESPONSE THANH CONG — 200 OK:
+{
+  "isSuccess"  : true,
+  "statusCode" : 200,
+  "message"    : "Get public sticker packs successfully",
+  "data": [
+    {
+      "id"          : string,
+      "name"        : string,
+      "description" : string | null,
+      "isPublic"    : true,
+      "ownerId"     : string,
+      "stickerCount": number,
+      "createdAt"   : string
+    }
+  ]
+}
+
+LOI CO THE GAP:
+  Khong co loi dac thu
+
+===============================================================================
+5. Xoa bo sticker
+DELETE /api/stickers/packs/{packId}
+===============================================================================
+
+Auth: Required
+
+PATH PARAMS:
+  packId : string — ID bo sticker can xoa
+
+RESPONSE THANH CONG — 200 OK:
+{
+  "isSuccess"  : true,
+  "statusCode" : 200,
+  "message"    : "Sticker pack deleted"
+}
+
+LOI CO THE GAP:
+  401 — Token khong hop le
+  403 — Khong phai chu so huu
+  404 — Khong tim thay bo sticker
+
+===============================================================================
+6. Xoa sticker
+DELETE /api/stickers/stickers/{stickerId}
+===============================================================================
+
+Auth: Required
+
+PATH PARAMS:
+  stickerId : string — ID sticker can xoa
+
+RESPONSE THANH CONG — 200 OK:
+{
+  "isSuccess"  : true,
+  "statusCode" : 200,
+  "message"    : "Sticker deleted"
+}
+
+LOI CO THE GAP:
+  401 — Token khong hop le
+  403 — Khong phai chu so huu bo sticker chua sticker do
+  404 — Khong tim thay sticker
+
+===============================================================================
+Ghi chu chung
+===============================================================================
+1. Chu so huu bo sticker (owner) moi co quen them/xoa sticker trong bo do.
+2. Xoa bo sticker se xoa tat ca sticker ben trong.
+3. Sticker khong co co che phe duyet — chu so huu tu quan ly.
+4. Tat ca datetime dinh dang ISO 8601 UTC.
+===============================================================================

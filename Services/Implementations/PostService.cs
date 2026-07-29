@@ -84,13 +84,15 @@ namespace Kpett.ChatApp.Services.Implementations
             if (user == null)
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
 
+            var postType = postRequest.Type ?? PostType.Post.GetDescription();
+
             var newPost = new Post
             {
                 Id = Guid.NewGuid().ToString(),
                 CreatedByUserId = userId,
                 Content = postRequest.Content,
                 Privacy = postRequest.Privacy ?? PostPrivacy.Public.GetDescription(),
-                Type = PostType.Post.GetDescription(),
+                Type = postType,
                 GroupId = null,
                 Status = ApprovedPostStatus,
                 IsNsfw = postRequest.IsNsfw,
@@ -162,13 +164,15 @@ namespace Kpett.ChatApp.Services.Implementations
                 ? PendingPostStatus
                 : ApprovedPostStatus;
 
+            var postType = postRequest.Type ?? PostType.Post.GetDescription();
+
             var newPost = new Post
             {
                 Id = Guid.NewGuid().ToString(),
                 CreatedByUserId = userId,
                 Content = postRequest.Content,
                 Privacy = postRequest.Privacy ?? PostPrivacy.Public.GetDescription(),
-                Type = PostType.Post.GetDescription(),
+                Type = postType,
                 GroupId = group.Id,
                 Status = status,
                 IsNsfw = postRequest.IsNsfw,
@@ -511,7 +515,7 @@ namespace Kpett.ChatApp.Services.Implementations
                             .Where(r => r.PostId == p.Id && r.UserId == currentUserId)
                             .Select(r => r.Type)
                             .FirstOrDefault(),
-                        IsSaved = false,
+                        IsSaved = currentUserId != null && _dbContext.SavedPosts.Any(s => s.UserId == currentUserId && s.PostId == p.Id),
                         IsPinned = false,
                         CanEdit = p.CreatedByUserId == currentUserId,
                         CanDelete = p.CreatedByUserId == currentUserId,
@@ -628,7 +632,7 @@ namespace Kpett.ChatApp.Services.Implementations
                             .Where(r => r.PostId == p.Id && r.UserId == currentUserId)
                             .Select(r => r.Type)
                             .FirstOrDefault(),
-                        IsSaved = false,
+                        IsSaved = currentUserId != null && _dbContext.SavedPosts.Any(s => s.UserId == currentUserId && s.PostId == p.Id),
                         IsPinned = false,
                         CanEdit = p.CreatedByUserId == currentUserId,
                         CanDelete = p.CreatedByUserId == currentUserId,
@@ -669,6 +673,135 @@ namespace Kpett.ChatApp.Services.Implementations
             }
 
             _logger.LogInformation("User {UserId} retrieved feed with {Count} posts", currentUserId ?? "Anonymous", fetchedPosts.Count);
+
+            return new PaginatedData<PostFeedResponse>
+            {
+                Items = fetchedPosts,
+                Pagination = new CursorPaginationMeta
+                {
+                    NextCursor = nextCursor,
+                    Limit = limit
+                }
+            };
+        }
+
+        /// <inheritdoc />
+        public async Task<PaginatedData<PostFeedResponse>> GetReelsFeedAsync(string? currentUserId, string? cursor = null, int limit = 10, CancellationToken cancel = default)
+        {
+            DateTime? cursorDate = null;
+            string? cursorId = null;
+
+            if (!string.IsNullOrWhiteSpace(cursor))
+            {
+                var decoded = CursorHelper.Decode<BaseCursorPayload>(cursor);
+                if (decoded != null)
+                {
+                    cursorDate = decoded.CreatedAt;
+                    cursorId = decoded.Id;
+                }
+            }
+
+            limit = NormalizeLimit(limit);
+
+            var query = _dbContext.Posts
+                .AsNoTracking()
+                .Where(p => !p.IsDeleted && p.Type == PostType.Reel.GetDescription()
+                    && _dbContext.PostMedia.Any(m => m.PostId == p.Id && m.MediaType == MediaType.Video.GetDescription()));
+
+            query = ApplyPostVisibilityFilter(query, currentUserId);
+
+            if (cursorDate.HasValue && !string.IsNullOrEmpty(cursorId))
+            {
+                query = query.Where(p =>
+                    p.CreatedAt < cursorDate.Value ||
+                    (p.CreatedAt == cursorDate.Value && p.Id.CompareTo(cursorId) < 0));
+            }
+
+            var fetchedPosts = await query
+                .OrderByDescending(p => p.CreatedAt)
+                .ThenByDescending(p => p.Id)
+                .Take(limit + 1)
+                .Select(p => new PostFeedResponse
+                {
+                    Id = p.Id,
+                    Content = p.Content,
+                    Privacy = p.Privacy,
+                    Type = p.Type,
+                    GroupId = p.GroupId,
+                    Status = p.Status ?? ApprovedPostStatus,
+                    CreatedAt = p.CreatedAt,
+                    UpdatedAt = p.UpdatedAt,
+                    Author = _dbContext.Users.Where(u => u.Id == p.CreatedByUserId)
+                                             .Select(u => new UserResponse
+                                             {
+                                                 Id = u.Id,
+                                                 Email = u.Email,
+                                                 Username = u.Username,
+                                                 DisplayName = u.DisplayName,
+                                                 AvatarUrl = _dbContext.UserMedias
+                                                            .Where(um => um.UserId == u.Id && um.MediaType == avatarType && um.IsPrimary)
+                                                            .Select(um => um.MediaUrl)
+                                                            .FirstOrDefault(),
+                                                 IsVerified = u.IsVerified,
+                                             })
+                                             .FirstOrDefault(),
+                    Media = _dbContext.PostMedia.Where(m => m.PostId == p.Id)
+                                         .OrderBy(m => m.CreatedAt)
+                                         .Select(m => new MediaPostResponse { PublicId = m.Id, Url = m.MediaUrl, Type = m.MediaType })
+                                         .ToList(),
+                    Metrics = new PostMetricsResponse
+                    {
+                        LikeCount = p.LikeCount,
+                        CommentCount = p.CommentCount
+                    },
+                    AllowComments = p.AllowComments,
+                    ViewerContext = new PostViewerContextResponse
+                    {
+                        IsOwner = p.CreatedByUserId == currentUserId,
+                        IsLiked = _dbContext.PostReactions.Any(r => r.PostId == p.Id && r.UserId == currentUserId),
+                        ReactionType = _dbContext.PostReactions
+                            .Where(r => r.PostId == p.Id && r.UserId == currentUserId)
+                            .Select(r => r.Type)
+                            .FirstOrDefault(),
+                        IsSaved = currentUserId != null && _dbContext.SavedPosts.Any(s => s.UserId == currentUserId && s.PostId == p.Id),
+                        IsPinned = false,
+                        CanEdit = p.CreatedByUserId == currentUserId,
+                        CanDelete = p.CreatedByUserId == currentUserId,
+                        CanLike = true,
+                        CanComment = p.AllowComments,
+                        CanPin = p.CreatedByUserId == currentUserId
+                    },
+                })
+                .AsSplitQuery()
+                .ToListAsync(cancel);
+
+            if (!fetchedPosts.Any())
+            {
+                return new PaginatedData<PostFeedResponse>
+                {
+                    Items = new List<PostFeedResponse>(),
+                    Pagination = new CursorPaginationMeta { Limit = limit }
+                };
+            }
+
+            string? nextCursor = null;
+
+            if (fetchedPosts.Count > limit)
+            {
+                var lastItemInPage = fetchedPosts[limit - 1];
+                nextCursor = CursorHelper.Encode(new BaseCursorPayload
+                {
+                    Id = lastItemInPage.Id,
+                    CreatedAt = lastItemInPage.CreatedAt
+                });
+                fetchedPosts = fetchedPosts.Take(limit).ToList();
+            }
+
+            foreach (var post in fetchedPosts)
+            {
+                post.CreatedAt = post.CreatedAt.ToUtc();
+                post.UpdatedAt = post.UpdatedAt?.ToUtc();
+            }
 
             return new PaginatedData<PostFeedResponse>
             {
@@ -807,7 +940,7 @@ namespace Kpett.ChatApp.Services.Implementations
                             .Where(r => r.PostId == p.Id && r.UserId == currentUserId)
                             .Select(r => r.Type)
                             .FirstOrDefault(),
-                        IsSaved = false,
+                        IsSaved = currentUserId != null && _dbContext.SavedPosts.Any(s => s.UserId == currentUserId && s.PostId == p.Id),
                         IsPinned = p.IsPinned,
                         CanEdit = p.CreatedByUserId == currentUserId,
                         CanDelete = p.CreatedByUserId == currentUserId || canModerate,
@@ -1074,7 +1207,7 @@ namespace Kpett.ChatApp.Services.Implementations
                     IsOwner = data.CreatedByUserId == currentUserId,
                     IsLiked = likedPostIds.Contains(data.Id),
                     ReactionType = reactionTypeMap.TryGetValue(data.Id, out var rType) ? rType : null,
-                    IsSaved = false,
+                    IsSaved = currentUserId != null && _dbContext.SavedPosts.Any(s => s.UserId == currentUserId && s.PostId == data.Id),
                     IsPinned = false,
                     CanEdit = data.CreatedByUserId == currentUserId,
                     CanDelete = data.CreatedByUserId == currentUserId,
@@ -1358,7 +1491,8 @@ namespace Kpett.ChatApp.Services.Implementations
             List<MediaPostResponse> mediaResponse,
             bool isLiked,
             byte? reactionType = null,
-            PostGroupSummaryResponse? group = null)
+            PostGroupSummaryResponse? group = null,
+            bool isSaved = false)
         {
             var isApproved = post.Status == null || post.Status == ApprovedPostStatus;
 
@@ -1389,7 +1523,7 @@ namespace Kpett.ChatApp.Services.Implementations
                     IsOwner = true,
                     IsLiked = isLiked,
                     ReactionType = reactionType,
-                    IsSaved = false,
+                    IsSaved = isSaved,
                     IsPinned = post.IsPinned,
                     CanEdit = true,
                     CanDelete = true,

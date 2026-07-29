@@ -72,6 +72,26 @@ namespace Kpett.ChatApp.Controllers
             });
         }
 
+        [HttpGet("reels")]
+        [OptionalAuthorize]
+        public async Task<ActionResult<GeneralResponse<PaginatedData<PostFeedResponse>>>> GetReelsFeed(
+            [FromQuery] string? cursor = null,
+            [FromQuery] int limit = 10,
+            CancellationToken cancel = default)
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var result = await _postService.GetReelsFeedAsync(currentUserId, cursor, limit, cancel);
+
+            return Ok(new GeneralResponse<PaginatedData<PostFeedResponse>>
+            {
+                IsSuccess = true,
+                Message = "Get reels feed successfully",
+                Data = result,
+                StatusCode = 200
+            });
+        }
+
         [HttpGet("users/{userId}")]
         [OptionalAuthorize]
         public async Task<ActionResult> GetUserPosts(
