@@ -232,6 +232,7 @@ builder.Services.AddScoped<IGroupsService, GroupsService>();
 builder.Services.AddScoped<IGroupMemberService, GroupMemberService>();
 builder.Services.AddScoped<IPostReactionService, PostReactionService>();
 builder.Services.AddScoped<IStickerService, StickerService>();
+builder.Services.AddScoped<ISavedPostService, SavedPostService>();
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();

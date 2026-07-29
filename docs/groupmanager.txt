@@ -547,6 +547,218 @@ Response 200:
 }
 
 ================================================================================
+13. Xem danh sach thanh vien bi chan
+GET /api/groups/{groupId}/blocked-members
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  groupId: string
+
+Query params:
+  keyword  : string [optional]
+  page     : number [optional] - default 1
+  pageSize : number [optional] - default 20, max 100
+
+Quyen:
+  - Chi moderator/admin moi xem duoc danh sach nay
+
+Response 200 - giong GetGroupMembers nhung status = "blocked"
+
+LOI CO THE GAP:
+  401 — Token khong hop le
+  403 — Khong phai moderator/admin
+  404 — GROUP_NOT_FOUND
+
+================================================================================
+14. Bo chan thanh vien
+POST /api/groups/{groupId}/members/{targetUserId}/unblock
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  groupId: string
+  targetUserId: string
+
+Request body:
+  Khong co
+
+Quyen:
+  - Chi moderator/admin moi duoc bo chan
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Member unblocked successfully.",
+  "data": {
+    "groupId": "group-id",
+    "userId": "target-user-id",
+    "status": "active",
+    "role": "member",
+    "requiresApproval": false,
+    "joinedAt": null
+  }
+}
+
+LOI CO THE GAP:
+  401 — Token khong hop le
+  403 — Khong du quyen
+  404 — GROUP_NOT_FOUND hoac user khong bi chan
+
+================================================================================
+15. Chuyen quyen so huu nhom
+POST /api/groups/{groupId}/transfer-ownership
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+  Content-Type: application/json
+
+Path params:
+  groupId: string
+
+Request body:
+{
+  "targetUserId": "new-owner-user-id"
+}
+
+Quyen:
+  - Chi owner hien tai moi duoc chuyen quyen
+
+Logic:
+  - Owner cu tro thanh admin
+  - Owner moi duoc set la nguoi so huu
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Group ownership transferred successfully.",
+  "data": {
+    "memberId": "member-row-id",
+    "groupId": "group-id",
+    "userId": "new-owner-user-id",
+    "username": "new_owner_username",
+    "role": "admin",
+    "status": "active"
+  }
+}
+
+LOI CO THE GAP:
+  400 — VAL.REQUIRED: Thieu targetUserId
+  401 — Token khong hop le
+  403 — NOT_OWNER: Chi owner moi chuyen duoc
+  404 — GROUP_NOT_FOUND hoac target user khong phai member
+
+================================================================================
+16. Danh sach loi moi tham gia nhom cua toi
+GET /api/groups/invitations
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Request body:
+  Khong co
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Get my invitations successfully.",
+  "data": [
+    {
+      "id": "invitation-id",
+      "groupId": "group-id",
+      "groupName": "Group Name",
+      "groupAvatarUrl": "https://...",
+      "invitedByUserId": "inviter-id",
+      "invitedByUsername": "inviter_username",
+      "invitedByDisplayName": "Inviter Name",
+      "status": "pending",
+      "createdAt": "2026-06-23T10:05:00Z"
+    }
+  ]
+}
+
+LOI CO THE GAP:
+  401 — Token khong hop le
+
+================================================================================
+17. Chap nhan loi moi tham gia nhom
+POST /api/groups/invitations/{invitationId}/accept
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  invitationId: string — ID loi moi
+
+Logic:
+  - Nguoi dung duoc them vao GroupMembers voi status = active
+  - Loi moi duoc danh dau da xu ly
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Invitation accepted successfully.",
+  "data": {
+    "groupId": "group-id",
+    "userId": "current-user-id",
+    "status": "active",
+    "role": "member",
+    "requiresApproval": false,
+    "joinedAt": "2026-06-23T10:10:00Z"
+  }
+}
+
+LOI CO THE GAP:
+  400 — Loi moi khong con o trang thai pending
+  401 — Token khong hop le
+  403 — Loi moi khong danh cho nguoi dung hien tai hoac da bi chan
+  404 — Khong tim thay loi moi hoac nhom
+  409 — Nguoi dung da la thanh vien
+
+================================================================================
+18. Tu choi loi moi tham gia nhom
+POST /api/groups/invitations/{invitationId}/decline
+================================================================================
+
+Headers:
+  Authorization: Bearer <access_token>
+
+Path params:
+  invitationId: string — ID loi moi
+
+Response 200:
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Invitation declined successfully.",
+  "data": {
+    "groupId": "group-id",
+    "userId": "current-user-id",
+    "status": "declined",
+    "role": "member",
+    "requiresApproval": false,
+    "joinedAt": null
+  }
+}
+
+LOI CO THE GAP:
+  400 — Loi moi khong con o trang thai pending
+  401 — Token khong hop le
+  403 — Loi moi khong danh cho nguoi dung hien tai
+  404 — Khong tim thay loi moi
+
+================================================================================
 Error codes co the gap
 ================================================================================
 
@@ -578,3 +790,7 @@ Ghi chu
 5. Role rank:
    owner > admin > moderator > member
 6. Moderator/Admin chi thao tac duoc thanh vien co role thap hon.
+7. Invitation endpoints (GET/POST /api/groups/invitations) khong co groupId trong URL
+   vi chi hien thi loi moi danh cho user hien tai.
+8. Transfer-ownership: owner cu tro thanh admin sau chuyen.
+9. Unblock: tra member ve trang thai active, role duoc khoi phuc la "member".

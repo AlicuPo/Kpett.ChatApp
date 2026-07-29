@@ -1399,19 +1399,26 @@ Errors
 10. Media APIs
 ========================================================================
 
-GET /api/media/generate-signature?folder=posts
+POST /api/media/upload?folder=posts
 Auth
 - Required
 
 Request
+- Content-Type: multipart/form-data
+- Form-data
+  - file: binary file
 - Query
-  - folder = posts
+  - folder = posts (tu dong detect neu khong gui: video->"videos", con lai->"images")
+- Gioi han: 200MB
 
 Response
 - HTTP 200
-- Body: GeneralResponse<CloudinarySignatureResponse>
+- Body: GeneralResponse<MediaUploadResponse>
 
 Errors
+- 400 MEDIA.FILE_EMPTY
+- 400 MEDIA.FILE_SIZE_EXCEEDS_LIMIT
+- 400 MEDIA.INVALID_FILE_EXTENSION
 - 401 AUTH.ACCESS_TOKEN_INVALID
 - 500 SERVER.SYSTEM_ERROR
 

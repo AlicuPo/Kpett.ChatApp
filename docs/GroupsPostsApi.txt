@@ -1,0 +1,219 @@
+===============================================================================
+  GROUP POSTS API — Tai lieu Request / Response / Error
+  Base URL : /api/groups
+  Auth     : Bearer Token (JWT) — xem chi tiet tung endpoint
+===============================================================================
+
+Cau truc response chung (GeneralResponse<T>):
+{
+  "isSuccess"  : boolean,
+  "statusCode" : number,
+  "message"    : string,
+  "data"       : object
+}
+
+Cau truc error response:
+{
+  "isSuccess"  : false,
+  "statusCode" : number,
+  "message"    : string,
+  "errorCode"  : string,
+  "stackTrace" : string      // chi o Development
+}
+
+PaginatedData<T>:
+{
+  "items": [ ... ],
+  "pagination": {
+    "nextCursor": "base64-or-null",
+    "hasMore": true,
+    "totalCount": 123,
+    "limit": 10
+  }
+}
+
+Gia tri status cua bai viet trong nhom:
+  - approved  : da duoc duyet
+  - pending   : dang cho duyet
+  - rejected  : bi tu choi
+
+===============================================================================
+1. Danh sach bai viet trong nhom
+GET /api/groups/{groupId}/posts
+===============================================================================
+
+Auth: Optional
+  - Public group: anonymous/user co the xem bai approved
+  - Private/hidden group: chi active member moi xem duoc
+  - Pending posts: chi tac gia va group admin/moderator thay duoc
+
+PATH PARAMS:
+  groupId : string — ID nhom
+
+QUERY PARAMS:
+  cursor?  : string  — cursor de phan trang
+  limit    : number  — so luong item (mac dinh: 10)
+  status?  : string  — loc theo status: "approved" | "pending" | "rejected"
+
+RESPONSE THANH CONG — 200 OK:
+{
+  "isSuccess"  : true,
+  "statusCode" : 200,
+  "message"    : "Get group posts successfully.",
+  "data": {
+    "items": [
+      {
+        "id"          : string,
+        "author"      : { "id": string, "username": string, "displayName": string, "avatarUrl": string | null },
+        "content"     : string,
+        "privacy"     : string,
+        "groupId"     : string | null,
+        "group"       : {
+          "id"        : string,
+          "name"      : string | null,
+          "avatarUrl" : string | null,
+          "privacy"   : string | null
+        } | null,
+        "status"      : "approved" | "pending" | "rejected",
+        "hashtags"    : string[],
+        "media"       : [],
+        "metrics"     : {},
+        "viewerContext": {},
+        "createdAt"   : "2026-06-23T10:00:00Z",
+        "updatedAt"   : "2026-06-23T10:00:00Z"
+      }
+    ],
+    "pagination": {
+      "nextCursor": "base64-or-null",
+      "hasMore": false,
+      "totalCount": 5,
+      "limit": 10
+    }
+  }
+}
+
+LOI CO THE GAP:
+  401 — AUTH.ACCESS_TOKEN_INVALID neu gui token sai/het han
+  403 — Khong phai active member (neu nhom private/hidden)
+  404 — GROUP_NOT_FOUND
+
+===============================================================================
+2. Tao bai viet trong nhom
+POST /api/groups/{groupId}/posts
+===============================================================================
+
+Auth: Required — phai la active member cua nhom
+
+PATH PARAMS:
+  groupId : string — ID nhom
+
+REQUEST BODY (PostRequest):
+{
+  "content" : string [BAT BUOC] — Noi dung bai viet,
+  "privacy" : string [tu chon]  — "Public" | "Friends" | "Private",
+  "media"   : [                  — Danh sach media dinh kem
+    {
+      "publicId": "cloudinary-public-id",
+      "url"     : "https://...",
+      "format"  : "jpg",
+      "type"    : "Image" | "Video" | "GIF"
+    }
+  ]
+}
+- Khong gui groupId tu FE — backend lay tu URL.
+
+RESPONSE THANH CONG — 201 Created:
+{
+  "isSuccess"  : true,
+  "statusCode" : 201,
+  "message"    : "Group post created successfully."
+                 || "Group post submitted for approval.",
+  "data": {
+    "id"      : string,
+    "content" : string,
+    "groupId" : string,
+    "group"   : { "id": string, "name": string | null, "avatarUrl": string | null, "privacy": string | null },
+    "status"  : "approved" | "pending",
+    ...
+  }
+}
+
+LOGIC:
+  - Neu nhom bat postApproval = true: status = pending, can duyet
+  - Neu nhom tat postApproval: status = approved, dang ngay
+
+LOI CO THE GAP:
+  400 — VAL.REQUIRED: Thieu content
+  401 — Token khong hop le
+  403 — Khong phai active member hoac bi chan
+  404 — GROUP_NOT_FOUND
+
+===============================================================================
+3. Duyet/tu choi bai viet trong nhom
+PUT /api/groups/{groupId}/posts/{postId}/status
+===============================================================================
+
+Auth: Required — chi group admin/moderator
+
+PATH PARAMS:
+  groupId : string — ID nhom
+  postId  : string — ID bai viet
+
+REQUEST BODY (UpdateGroupPostStatusRequest):
+{
+  "status": "approved"    // "approved" | "rejected"
+}
+
+RESPONSE THANH CONG — 200 OK:
+{
+  "isSuccess"  : true,
+  "statusCode" : 200,
+  "message"    : "Group post status updated successfully.",
+  "data": { ... PostFeedResponse }
+}
+
+LOI CO THE GAP:
+  400 — VAL.REQUIRED: Thieu status
+  401 — Token khong hop le
+  403 — Khong phai admin/moderator
+  404 — GROUP_NOT_FOUND hoac POST.NOT_FOUND
+
+===============================================================================
+4. Ghim/bo ghim bai viet trong nhom
+POST /api/groups/{groupId}/posts/{postId}/pin
+===============================================================================
+
+Auth: Required — chi group admin/moderator
+
+PATH PARAMS:
+  groupId : string — ID nhom
+  postId  : string — ID bai viet
+
+REQUEST BODY: Khong co
+
+RESPONSE THANH CONG — 200 OK:
+{
+  "isSuccess"  : true,
+  "statusCode" : 200,
+  "message"    : "Post pin status toggled successfully.",
+  "data": { ... PostFeedResponse }
+}
+
+LOGIC:
+  - Day la toggle: neu dang ghim thi bo ghim, neu chua ghim thi ghim
+  - Chi ghim duoc 1 bai viet trong nhom
+
+LOI CO THE GAP:
+  401 — Token khong hop le
+  403 — Khong phai admin/moderator
+  404 — GROUP_NOT_FOUND hoac POST.NOT_FOUND
+
+===============================================================================
+Ghi chu chung
+===============================================================================
+1. Bai viet ca nhan va bai viet nhom dung chung bang Posts (phan biet bang groupId).
+2. Main feed (GET /api/posts) co the bao gom ca bai viet nhom da duyet.
+3. User profile posts (GET /api/posts/users/{userId}) chi tra bai viet ca nhan.
+4. Bai viet pending an like/comment cho den khi duoc duyet.
+5. Tat ca datetime dinh dang ISO 8601 UTC.
+===============================================================================

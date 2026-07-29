@@ -6,49 +6,52 @@ using Kpett.ChatApp.DTOs.Response.Shared;
 namespace Kpett.ChatApp.Services.Abstractions
 {
     /// <summary>
-    /// Service qu?n l? bài vi?t: CRUD bài vi?t, feed, nhóm bài vi?t, reaction (u? quy?n cho <see cref="IPostReactionService"/>).
+    /// Service qu?n l? bï¿½i vi?t: CRUD bï¿½i vi?t, feed, nhï¿½m bï¿½i vi?t, reaction (u? quy?n cho <see cref="IPostReactionService"/>).
     /// </summary>
     public interface IPostService
     {
-        /// <summary>T?o bài vi?t m?i.</summary>
+        /// <summary>T?o bï¿½i vi?t m?i.</summary>
         Task<PostFeedResponse> CreatePostAsync(string userId, PostRequest postRequest, CancellationToken cancel);
 
-        /// <summary>T?o bài vi?t trong nhóm.</summary>
+        /// <summary>T?o bï¿½i vi?t trong nhï¿½m.</summary>
         Task<PostFeedResponse> CreateGroupPostAsync(string userId, string groupId, PostRequest postRequest, CancellationToken cancel);
 
-        /// <summary>C?p nh?t tr?ng thái bài vi?t nhóm (duy?t/t? ch?i).</summary>
+        /// <summary>C?p nh?t tr?ng thï¿½i bï¿½i vi?t nhï¿½m (duy?t/t? ch?i).</summary>
         Task<PostFeedResponse> UpdateGroupPostStatusAsync(string userId, string groupId, string postId, UpdateGroupPostStatusRequest request, CancellationToken cancel);
 
-        /// <summary>Ghim/b? ghim bài vi?t trong nhóm.</summary>
+        /// <summary>Ghim/b? ghim bï¿½i vi?t trong nhï¿½m.</summary>
         Task<PostFeedResponse> TogglePinPostAsync(string userId, string groupId, string postId, CancellationToken cancel);
 
-        /// <summary>C?p nh?t n?i dung bài vi?t.</summary>
+        /// <summary>C?p nh?t n?i dung bï¿½i vi?t.</summary>
         Task<PostFeedResponse> UpdatePostAsync(string postId, string userId, PostRequest postRequest, CancellationToken cancel);
 
-        /// <summary>L?y bài vi?t theo ID.</summary>
+        /// <summary>L?y bï¿½i vi?t theo ID.</summary>
         Task<PostFeedResponse> GetPostByIdAsync(string postId, string? currentUserId, CancellationToken cancel);
 
-        /// <summary>L?y feed bài vi?t v?i cursor-based pagination.</summary>
+        /// <summary>L?y feed bï¿½i vi?t v?i cursor-based pagination.</summary>
         Task<PaginatedData<PostFeedResponse>> GetFeedAsync(string? currentUserId, string? cursor = null, int limit = 10, CancellationToken cancel = default);
 
-        /// <summary>L?y bài vi?t trong nhóm.</summary>
+        /// <summary>L?y feed reel (video ng?n) v?i cursor-based pagination.</summary>
+        Task<PaginatedData<PostFeedResponse>> GetReelsFeedAsync(string? currentUserId, string? cursor = null, int limit = 10, CancellationToken cancel = default);
+
+        /// <summary>L?y bï¿½i vi?t trong nhï¿½m.</summary>
         Task<PaginatedData<PostFeedResponse>> GetGroupPostsAsync(string? currentUserId, string groupId, CursorPaginationRequest request, string? status = null, CancellationToken cancel = default);
 
-        /// <summary>L?y bài vi?t c?a ngý?i dùng c? th?.</summary>
+        /// <summary>L?y bï¿½i vi?t c?a ngï¿½?i dï¿½ng c? th?.</summary>
         Task<PaginatedData<PostThumbnailResponse>> GetPostsByUserIdAsync(string userId, string? currentUserId, SearchRequest request, CursorPaginationRequest cursorPagination, CancellationToken cancel = default);
 
-        /// <summary>Xoá bài vi?t (soft delete).</summary>
+        /// <summary>Xoï¿½ bï¿½i vi?t (soft delete).</summary>
         Task DeletePostAsync(string postId, string userId, CancellationToken cancel);
 
         // ??? Reaction operations (delegated to IPostReactionService) ???
 
-        /// <summary>Thêm reaction vào bài vi?t.</summary>
+        /// <summary>Thï¿½m reaction vï¿½o bï¿½i vi?t.</summary>
         Task<PostReactionDTO> AddReactionAsync(string postId, string userId, byte reactionType, CancellationToken cancel);
 
-        /// <summary>Xoá reaction kh?i bài vi?t.</summary>
+        /// <summary>Xoï¿½ reaction kh?i bï¿½i vi?t.</summary>
         Task RemoveReactionAsync(string postId, string userId, CancellationToken cancel);
 
-        /// <summary>L?y danh sách reaction c?a bài vi?t.</summary>
+        /// <summary>L?y danh sï¿½ch reaction c?a bï¿½i vi?t.</summary>
         Task<List<PostReactionDTO>> GetPostReactionsAsync(string postId, CancellationToken cancel);
     }
 }

@@ -1,0 +1,81 @@
+===============================================================================
+  ADMIN API — Tai lieu Request / Response / Error
+  Base URL : /api/admin
+  Auth     : Bearer Token (JWT) — Yeu cau role "SuperAdmin"
+===============================================================================
+
+Cau truc response chung (GeneralResponse):
+{
+  "isSuccess"  : true,
+  "statusCode" : number,
+  "message"    : string
+}
+
+Cau truc error response:
+{
+  "isSuccess"  : false,
+  "statusCode" : number,
+  "message"    : string,
+  "errorCode"  : string,
+  "stackTrace" : string      // chi o Development
+}
+
+===============================================================================
+1. Xoa bai viet (SuperAdmin)
+DELETE /api/admin/posts/{postId}
+===============================================================================
+
+Auth: Required (Roles = "SuperAdmin")
+
+PATH PARAMS:
+  postId : string — ID bai viet can xoa
+
+RESPONSE THANH CONG — 200 OK:
+{
+  "isSuccess"  : true,
+  "statusCode" : 200,
+  "message"    : "Post deleted successfully."
+}
+
+LOGIC:
+  - Hard delete: danh dau IsDeleted = true (soft delete)
+  - Khong gioi han quyen so huu — SuperAdmin co the xoa bat ky bai viet nao
+
+LOI CO THE GAP:
+  401 — Token khong hop le
+  403 — Khong co role SuperAdmin
+  404 — POST.NOT_FOUND: Khong tim thay bai viet
+
+===============================================================================
+2. Vo hieu hoa nguoi dung (SuperAdmin)
+DELETE /api/admin/users/{userId}
+===============================================================================
+
+Auth: Required (Roles = "SuperAdmin")
+
+PATH PARAMS:
+  userId : string — ID nguoi dung can vo hieu hoa
+
+RESPONSE THANH CONG — 200 OK:
+{
+  "isSuccess"  : true,
+  "statusCode" : 200,
+  "message"    : "User deactivated successfully."
+}
+
+LOGIC:
+  - Dat IsActive = false, khong xoa khoi DB
+  - Nguoi dung bi vo hieu hoa se khong the dang nhap
+
+LOI CO THE GAP:
+  401 — Token khong hop le
+  403 — Khong co role SuperAdmin
+  404 — USER.NOT_FOUND: Khong tim thay nguoi dung
+
+===============================================================================
+Ghi chu chung
+===============================================================================
+1. Tat ca endpoint yeu cau role "SuperAdmin" trong JWT.
+2. Day la cac endpoint quan tri manh — can han che va kiem soat truy cap chat che.
+3. SuperAdmin khong bi gioi han quyen so huu (co the thao tac tren bat ky user/post).
+===============================================================================

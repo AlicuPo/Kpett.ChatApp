@@ -309,6 +309,40 @@
 
 
 ================================================================================
+  8. GHIM/BỎ GHIM BÀI VIẾT TRONG NHÓM — POST /api/groups/{groupId}/posts/{postId}/pin
+================================================================================
+
+  Headers:
+    Authorization : Bearer <access_token>
+
+  PATH PARAMS:
+    groupId : string [BẮT BUỘC] — ID của nhóm
+    postId  : string [BẮT BUỘC] — ID của bài viết
+
+  REQUEST BODY: không có
+
+  RESPONSE THÀNH CÔNG — 200 OK:
+  {
+    "isSuccess"  : true,
+    "statusCode" : 200,
+    "message"    : "Post pin status toggled successfully.",
+    "data": { ... PostFeedResponse }
+  }
+
+  LOGIC:
+    • Toggle: nếu đang ghim thì bỏ ghim, nếu chưa ghim thì ghim
+    • Chỉ ghim được 1 bài viết trong nhóm
+
+  QUYỀN:
+    • Chỉ admin/moderator mới được ghim/bỏ ghim
+
+  LỖI CÓ THỂ GẶP:
+    401 — Token không hợp lệ
+    403 — Không phải admin/moderator
+    404 — GROUP_NOT_FOUND hoặc POST.NOT_FOUND
+
+
+================================================================================
   GHI CHÚ CHUNG
 ================================================================================
   1. Tất cả datetime đều ở UTC, định dạng ISO 8601.

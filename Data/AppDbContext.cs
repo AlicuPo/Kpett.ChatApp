@@ -69,6 +69,8 @@ public AppDbContext(DbContextOptions<AppDbContext> options)
 
     public virtual DbSet<Sticker> Stickers { get; set; }
 
+    public virtual DbSet<SavedPost> SavedPosts { get; set; }
+
     public virtual DbSet<Role> Roles { get; set; }
 
     public virtual DbSet<UserRole> UserRoles { get; set; }
@@ -104,6 +106,7 @@ public AppDbContext(DbContextOptions<AppDbContext> options)
         modelBuilder.Entity<UserFeed>().HasKey(e => e.Id);
         modelBuilder.Entity<UserSetting>().HasKey(e => e.Id);
         modelBuilder.Entity<UserMedia>().HasKey(e => e.Id);
+        modelBuilder.Entity<SavedPost>().HasKey(e => e.Id);
         modelBuilder.Entity<Role>().HasKey(e => e.Id);
         modelBuilder.Entity<UserRole>().HasKey(e => new { e.UserId, e.RoleId });
 
@@ -167,6 +170,15 @@ public AppDbContext(DbContextOptions<AppDbContext> options)
         modelBuilder.Entity<PostReaction>()
             .HasIndex(e => new { e.PostId, e.UserId })
             .HasDatabaseName("IX_PostReactions_PostId_UserId");
+
+        modelBuilder.Entity<SavedPost>()
+            .HasIndex(e => new { e.UserId, e.PostId })
+            .IsUnique()
+            .HasDatabaseName("IX_SavedPosts_UserId_PostId");
+
+        modelBuilder.Entity<SavedPost>()
+            .HasIndex(e => new { e.UserId, e.CreatedAt })
+            .HasDatabaseName("IX_SavedPosts_UserId_CreatedAt");
 
         modelBuilder.Entity<FriendRequest>()
             .HasIndex(e => new { e.UserLowId, e.UserHighId })
