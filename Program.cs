@@ -282,14 +282,6 @@ using (var scope = app.Services.CreateScope())
         dbContext.Database.Migrate();
     }
 
-    // Ensure Roles and UserRoles tables exist
-    await dbContext.Database.ExecuteSqlRawAsync(
-        "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name='Roles') " +
-        "CREATE TABLE Roles (Id INT IDENTITY(1,1) PRIMARY KEY, Name NVARCHAR(256) NOT NULL, Description NVARCHAR(MAX) NULL, CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE())");
-    await dbContext.Database.ExecuteSqlRawAsync(
-        "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name='UserRoles') " +
-        "CREATE TABLE UserRoles (UserId NVARCHAR(450) NOT NULL, RoleId INT NOT NULL, CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE(), PRIMARY KEY (UserId, RoleId))");
-
     // Seed SuperAdmin role and default super admin user (chỉ khi cấu hình qua env/appsettings)
     var superAdminEmail = app.Configuration["SuperAdmin:Email"];
     var superAdminPassword = app.Configuration["SuperAdmin:Password"];
