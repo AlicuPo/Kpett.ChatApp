@@ -35,9 +35,9 @@ namespace Kpett.ChatApp.Services.Implementations
         }
 
         /// <inheritdoc />
-        public async Task<PostReactionDTO> AddReactionAsync(string postId, string userId, byte reactionType, CancellationToken cancel)
+        public async Task<PostReactionDTO> AddReactionAsync(string postId, string userId, byte? reactionType, CancellationToken cancel)
         {
-            if (reactionType == 0)
+            if (reactionType == null)
             {
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Reaction type is required");
             }

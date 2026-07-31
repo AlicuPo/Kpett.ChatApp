@@ -31,6 +31,7 @@ namespace Kpett.ChatApp.Services.Abstractions
 
         /// <summary>Lưu connectionId của user (online presence).</summary>
         Task AddConnectionAsync(string userId, string connectionId);
+        Task RefreshConnectionAsync(string userId, string connectionId);
         /// <summary>Xoá connectionId của user.</summary>
         Task RemoveConnectionAsync(string userId, string connectionId);
         /// <summary>Lấy danh sách connectionId của user.</summary>
@@ -75,6 +76,7 @@ namespace Kpett.ChatApp.Services.Abstractions
         Task<List<(string UserId, string ConnectionId)>> GetTypingUsersInConversationAsync(string conversationId);
         /// <summary>Xoá tất cả typing state của 1 connectionId khi disconnect.</summary>
         Task<List<(string ConversationId, string UserId)>> RemoveAllTypingForConnectionAsync(string connectionId);
+        Task<List<(string ConversationId, string UserId, string ConnectionId)>> RemoveExpiredTypingAsync(int maxEntries = 200);
     }
 }
 

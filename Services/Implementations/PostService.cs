@@ -1257,7 +1257,7 @@ namespace Kpett.ChatApp.Services.Implementations
         }
 
         /// <inheritdoc />
-        public Task<PostReactionDTO> AddReactionAsync(string postId, string userId, byte reactionType, CancellationToken cancel)
+        public Task<PostReactionDTO> AddReactionAsync(string postId, string userId, byte? reactionType, CancellationToken cancel)
             => _postReactionService.AddReactionAsync(postId, userId, reactionType, cancel);
 
         /// <inheritdoc />

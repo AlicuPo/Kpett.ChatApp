@@ -990,20 +990,6 @@ namespace Kpett.ChatApp.Services.Implementations
             };
         }
 
-        private static string NormalizePrivacyOrDefault(string? privacy)
-        {
-            if (string.IsNullOrWhiteSpace(privacy))
-                return PublicPrivacy;
-
-            return privacy.Trim().ToLower() switch
-            {
-                "0" or PublicPrivacy => PublicPrivacy,
-                "1" or PrivatePrivacy => PrivatePrivacy,
-                "2" or HiddenPrivacy => HiddenPrivacy,
-                _ => PublicPrivacy
-            };
-        }
-
         private static string NormalizePermissionForWrite(string permission)
         {
             if (string.IsNullOrWhiteSpace(permission))

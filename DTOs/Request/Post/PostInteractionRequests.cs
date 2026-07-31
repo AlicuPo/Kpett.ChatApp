@@ -2,7 +2,7 @@ namespace Kpett.ChatApp.DTOs.Request.Post
 {
     public class UpsertReactionRequest
     {
-        public byte ReactionType { get; set; }
+        public byte? ReactionType { get; set; }
     }
 
     public class CreateCommentRequest

@@ -64,7 +64,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 {
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
 
-    var configuration = ConfigurationOptions.Parse(redisConnectionString);
+    var configuration = ConfigurationOptions.Parse(redisConnectionString!);
     configuration.AbortOnConnectFail = false;
     configuration.ConnectRetry = 3;
     configuration.ConnectTimeout = 5000;
@@ -124,14 +124,22 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var redis = context.HttpContext.RequestServices
                     .GetRequiredService<Kpett.ChatApp.Services.Abstractions.IRedisService>();
 
-                var jtiClaim = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti);
-
-                if (jtiClaim != null && !string.IsNullOrEmpty(jtiClaim.Value))
+                try
                 {
-                    if (await redis.IsAccessTokenBlacklistedAsync(jtiClaim.Value))
+                    var jtiClaim = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti);
+
+                    if (jtiClaim != null && !string.IsNullOrEmpty(jtiClaim.Value))
                     {
-                        context.Fail("Token đã bị thu hồi.");
+                        if (await redis.IsAccessTokenBlacklistedAsync(jtiClaim.Value))
+                        {
+                            context.Fail("Token đã bị thu hồi.");
+                        }
                     }
+                }
+                catch (Exception ex) when (ex is RedisTimeoutException or StackExchange.Redis.RedisConnectionException)
+                {
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                    logger.LogWarning(ex, "Redis unavailable during token validation, allowing request through");
                 }
             },
 
@@ -226,6 +234,7 @@ builder.Services.AddScoped<IRelationshipService, RelationshipService>();
 builder.Services.AddScoped<IPostService, PostService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddScoped<IConversationTypingService, ConversationTypingService>();
+builder.Services.AddHostedService<TypingExpirationWorker>();
 builder.Services.AddScoped<IConversationMessageService, ConversationMessageService>();
 builder.Services.AddScoped<IConversationMemberService, ConversationMemberService>();
 builder.Services.AddScoped<IGroupsService, GroupsService>();
@@ -244,9 +253,13 @@ JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
 app.UseSerilogRequestLogging();
 
 app.UseExceptionHandler();
-app.UseHttpsRedirection();
 app.UseRouting();
 app.UseCors("ClientCors");
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseStaticFiles();

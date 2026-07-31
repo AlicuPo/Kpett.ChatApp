@@ -1,7 +1,10 @@
 using Kpett.ChatApp.DTOs.Response.Conversation;
+using Kpett.ChatApp.Data;
+using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Services.Abstractions;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Kpett.ChatApp.Hubs
@@ -12,15 +15,18 @@ namespace Kpett.ChatApp.Hubs
         private readonly IRedisService _redisService;
         private readonly IConversationTypingService _typingService;
         private readonly IConversationAccessService _conversationAccessService;
+        private readonly AppDbContext _dbContext;
 
         public AppHub(
             IRedisService redisService,
             IConversationTypingService typingService,
-            IConversationAccessService conversationAccessService)
+            IConversationAccessService conversationAccessService,
+            AppDbContext dbContext)
         {
             _redisService = redisService;
             _typingService = typingService;
             _conversationAccessService = conversationAccessService;
+            _dbContext = dbContext;
         }
 
         // LIFECYCLE
@@ -105,16 +111,102 @@ namespace Kpett.ChatApp.Hubs
         // PRESENCE (Friend status)
         // =====================================================================
 
-        public async Task SubscribeToPresence(List<string> targetUserIds)
+        public async Task Heartbeat()
         {
-            foreach (var targetId in targetUserIds)
-                await Groups.AddToGroupAsync(Context.ConnectionId, $"presence_watcher_{targetId}");
+            var userId = Context.UserIdentifier;
+            if (string.IsNullOrEmpty(userId))
+            {
+                await Clients.Caller.SendAsync("Error", "Unauthorized.");
+                return;
+            }
+
+            await _redisService.RefreshConnectionAsync(userId, Context.ConnectionId);
         }
 
-        public async Task UnsubscribeFromPresence(List<string> targetUserIds)
+        public async Task SubscribeToPresence(List<string>? targetUserIds)
         {
-            foreach (var targetId in targetUserIds)
-                await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"presence_watcher_{targetId}");
+            var userId = Context.UserIdentifier;
+            if (string.IsNullOrEmpty(userId))
+            {
+                await Clients.Caller.SendAsync("Error", "Unauthorized.");
+                return;
+            }
+
+            var allowedTargetIds = await GetAuthorizedPresenceTargetIdsAsync(userId, targetUserIds);
+            foreach (var targetId in allowedTargetIds)
+            {
+                await Groups.AddToGroupAsync(
+                    Context.ConnectionId,
+                    $"presence_watcher_{targetId}",
+                    Context.ConnectionAborted);
+            }
+
+            if (allowedTargetIds.Count == 0)
+            {
+                return;
+            }
+
+            var statuses = await _redisService.GetUsersOnlineStatusAsync(allowedTargetIds);
+            foreach (var status in statuses)
+            {
+                await Clients.Caller.SendAsync("UserStatusChanged", new
+                {
+                    userId = status.Key,
+                    isOnline = status.Value
+                }, Context.ConnectionAborted);
+            }
+        }
+
+        public async Task UnsubscribeFromPresence(List<string>? targetUserIds)
+        {
+            foreach (var targetId in NormalizePresenceTargetIds(targetUserIds))
+            {
+                await Groups.RemoveFromGroupAsync(
+                    Context.ConnectionId,
+                    $"presence_watcher_{targetId}",
+                    Context.ConnectionAborted);
+            }
+        }
+
+        private async Task<List<string>> GetAuthorizedPresenceTargetIdsAsync(string userId, List<string>? targetUserIds)
+        {
+            var targetIds = NormalizePresenceTargetIds(targetUserIds);
+            if (targetIds.Count == 0)
+            {
+                return targetIds;
+            }
+
+            var authorizedIds = new HashSet<string>(targetIds.Where(id => id == userId));
+            var friendTargetIds = targetIds.Where(id => id != userId).ToList();
+            if (friendTargetIds.Count == 0)
+            {
+                return authorizedIds.ToList();
+            }
+
+            var acceptedStatus = FriendRequestStatus.Accepted.GetDescription();
+            var friendIds = await _dbContext.Friendships.AsNoTracking()
+                .Where(f => f.Status == acceptedStatus &&
+                    ((f.UserLowId == userId && friendTargetIds.Contains(f.UserHighId)) ||
+                     (f.UserHighId == userId && friendTargetIds.Contains(f.UserLowId))))
+                .Select(f => f.UserLowId == userId ? f.UserHighId : f.UserLowId)
+                .ToListAsync(Context.ConnectionAborted);
+
+            foreach (var friendId in friendIds)
+            {
+                authorizedIds.Add(friendId);
+            }
+
+            return authorizedIds.ToList();
+        }
+
+        private static List<string> NormalizePresenceTargetIds(List<string>? targetUserIds)
+        {
+            return (targetUserIds ?? new List<string>())
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.Trim())
+                .Distinct()
+                .Take(200)
+                .ToList();
         }
 
         // CONVERSATION (Join / Leave)
