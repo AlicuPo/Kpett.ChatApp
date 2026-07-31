@@ -46,7 +46,7 @@ namespace Kpett.ChatApp.Services.Abstractions
         // ??? Reaction operations (delegated to IPostReactionService) ???
 
         /// <summary>Th�m reaction v�o b�i vi?t.</summary>
-        Task<PostReactionDTO> AddReactionAsync(string postId, string userId, byte reactionType, CancellationToken cancel);
+        Task<PostReactionDTO> AddReactionAsync(string postId, string userId, byte? reactionType, CancellationToken cancel);
 
         /// <summary>Xo� reaction kh?i b�i vi?t.</summary>
         Task RemoveReactionAsync(string postId, string userId, CancellationToken cancel);

@@ -14,6 +14,9 @@ namespace Kpett.ChatApp.Enums
         CommentMention = 2,
 
         [Description("GroupInvitationReceived")]
-        GroupInvitationReceived = 3
+        GroupInvitationReceived = 3,
+
+        [Description("NewCommentOnPost")]
+        NewCommentOnPost = 4
     }
 }

@@ -601,17 +601,19 @@ namespace Kpett.ChatApp.Services.Implementations
             await _context.SaveChangesAsync(cancel);
             _logger.LogInformation("User {UserId} marked conversation {ConversationId} as read up to message {MessageId}", currentUserId, conversationId, latestMessageId);
 
-            var otherUserIds = await _context.ConversationParticipants.AsNoTracking()
-                .Where(p => p.ConversationId == conversationId && p.UserId != currentUserId && !p.IsKicked).Select(p => p.UserId).ToListAsync(cancel);
+            var participantUserIds = await _context.ConversationParticipants.AsNoTracking()
+                .Where(p => p.ConversationId == conversationId && !p.IsKicked)
+                .Select(p => p.UserId)
+                .ToListAsync(cancel);
 
-            if (!otherUserIds.Any())
+            if (!participantUserIds.Any())
             {
                 return;
             }
 
             try
             {
-                await _chatHubContext.Clients.Users(otherUserIds).SendAsync("UserReadMessage", conversationId, currentUserId, latestMessageId, cancel);
+                await _chatHubContext.Clients.Users(participantUserIds).SendAsync("UserReadMessage", conversationId, currentUserId, latestMessageId, cancel);
             }
             catch (Exception ex)
             {

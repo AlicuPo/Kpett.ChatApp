@@ -147,7 +147,7 @@ namespace Kpett.ChatApp.Controllers
         public async Task<ActionResult<GeneralResponse<PostReactionDTO>>> UpsertReaction(string postId, [FromBody] UpsertReactionRequest request, CancellationToken cancel)
         {
             var userId = User.GetRequiredUserId();
-            var result = await _postService.AddReactionAsync(postId, userId, request?.ReactionType ?? 0, cancel);
+            var result = await _postService.AddReactionAsync(postId, userId, request?.ReactionType, cancel);
             return Ok(new GeneralResponse<PostReactionDTO>
             {
                 IsSuccess = true,

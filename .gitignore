@@ -374,3 +374,6 @@ FodyWeavers.xsd
 /Kpett.ChatApp.slnx
 .dotnet/
 .nuget/
+
+# Local uploads
+wwwroot/uploads/

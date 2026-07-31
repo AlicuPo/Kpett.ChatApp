@@ -17,7 +17,7 @@ using System.Text.RegularExpressions;
 
 namespace Kpett.ChatApp.Services.Implementations
 {
-    /// <summary>Service qu?n l? b?nh lu?n: thêm, s?a, xoá, like/unlike, l?y danh sách.</summary>
+    /// <summary>Service qu?n l? b?nh lu?n: thï¿½m, s?a, xoï¿½, like/unlike, l?y danh sï¿½ch.</summary>
     public class CommentService : ICommentService
     {
         private static readonly Regex MentionTokenRegex = new(
@@ -27,7 +27,7 @@ namespace Kpett.ChatApp.Services.Implementations
         private readonly AppDbContext _dbContext;
         private readonly IMediator _mediator;
         private readonly ILogger<CommentService> _logger;
-        /// <summary>Kh?i t?o service v?i các dependencies.</summary>
+        /// <summary>Kh?i t?o service v?i cï¿½c dependencies.</summary>
         public CommentService(AppDbContext dbContext, IMediator mediator, ILogger<CommentService> logger)
         {
             _dbContext = dbContext;
@@ -68,7 +68,7 @@ namespace Kpett.ChatApp.Services.Implementations
             var post = await _dbContext.Posts
                 .AsNoTracking()
                 .Where(p => p.Id == postId && !p.IsDeleted)
-                .Select(p => new { p.AllowComments })
+                .Select(p => new { p.AllowComments, p.CreatedByUserId })
                 .FirstOrDefaultAsync(cancel);
 
             if (post == null)
@@ -140,19 +140,30 @@ namespace Kpett.ChatApp.Services.Implementations
                     .AsNoTracking()
                     .FirstOrDefault(um => um.UserId == userId && um.MediaType == UserMediaType.Avatar.GetDescription() && um.IsPrimary);
 
+                string snippet = comment.Content.Length > 50
+                    ? comment.Content.Substring(0, 50) + "..."
+                    : comment.Content;
+
                 if (mentionIds.Any())
                 {
-                    // Trích xu?t ðo?n snippet (50 k? t?) t? Content ð? hi?n th? tóm t?t trên UI Thông báo
-                    string snippet = comment.Content.Length > 50
-                        ? comment.Content.Substring(0, 50) + "..."
-                        : comment.Content;
-
                     await _mediator.Publish(new CommentMentionedEvent
                     {
                         PostId = comment.PostId,
                         CommentId = comment.Id,
                         ActorId = userId,
                         MentionedUserIds = mentionIds,
+                        CommentSnippet = snippet
+                    }, cancel);
+                }
+
+                if (post.CreatedByUserId != userId)
+                {
+                    await _mediator.Publish(new CommentCreatedEvent
+                    {
+                        PostId = comment.PostId,
+                        CommentId = comment.Id,
+                        PostOwnerId = post.CreatedByUserId,
+                        ActorId = userId,
                         CommentSnippet = snippet
                     }, cancel);
                 }
@@ -172,7 +183,7 @@ namespace Kpett.ChatApp.Services.Implementations
         public async Task<PaginatedData<CommentListItemDTO>> GetCommentsAsync(
             string postId,
             string parentCommentId,
-            string currentUserId,
+            string? currentUserId,
             string? cursor,
             int limit,
             CancellationToken cancel)
@@ -208,7 +219,7 @@ namespace Kpett.ChatApp.Services.Implementations
                 .AsNoTracking()
                 .Where(c => c.PostId == postId && c.DeletedAt == null && c.ParentCommentId == parentCommentId);
 
-            // Áp d?ng ði?u ki?n l?c Compound (Date + Id)
+            // ï¿½p d?ng ï¿½i?u ki?n l?c Compound (Date + Id)
             if (cursorDate.HasValue && !string.IsNullOrEmpty(cursorId))
             {
                 query = query.Where(c =>
@@ -252,7 +263,7 @@ namespace Kpett.ChatApp.Services.Implementations
                 });
             }
 
-            // Các logic lookup gi? nguyên
+            // Cï¿½c logic lookup gi? nguyï¿½n
             var mentionLookup = await GetCommentMentionsLookupAsync(
                 pagedCommentRows.Select(x => x.Comment.Id).ToList(),
                 cancel);
@@ -524,7 +535,7 @@ namespace Kpett.ChatApp.Services.Implementations
 
         private async Task<CommentListItemDTO> MapCommentListItemByIdAsync(
             string commentId,
-            string currentUserId,
+            string? currentUserId,
             bool isLiked,
             CancellationToken cancel)
         {
@@ -592,7 +603,7 @@ namespace Kpett.ChatApp.Services.Implementations
 
         private async Task<HashSet<string>> GetLikedCommentIdsAsync(
             IReadOnlyCollection<string> commentIds,
-            string currentUserId,
+            string? currentUserId,
             CancellationToken cancel)
         {
             if (commentIds.Count == 0 || string.IsNullOrWhiteSpace(currentUserId))
@@ -634,7 +645,7 @@ namespace Kpett.ChatApp.Services.Implementations
             UserMedia? userMedia,
             List<CommentMentionSummaryDTO> mentions,
             bool isLiked,
-            string currentUserId)
+            string? currentUserId)
         {
             var isDeleted = comment.DeletedAt != null;
             var isOwner = string.Equals(comment.UserId, currentUserId, StringComparison.Ordinal);

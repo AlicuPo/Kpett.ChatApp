@@ -20,12 +20,16 @@ namespace Kpett.ChatApp.Services.Implementations
         private static string RefreshBlacklistKey(string token) => $"blacklist:refresh:{token}";
         private static string PasswordResetOtpKey(string email) => $"password-reset-otp:{email.Trim().ToLowerInvariant()}";
         private static string UserConnectionsKey(string userId) => $"user:{userId}:connections";
+        private static string ConnectionUserKey(string connectionId) => $"connection:{connectionId}:user";
         private static string ConversationUsersKey(string conversationId) => $"conversation:{conversationId}:users";
         private static string ConnectionConversationsKey(string connectionId) => $"connection:{connectionId}:conversations";
+        private static readonly TimeSpan PresenceConnectionTtl = TimeSpan.FromMinutes(2);
+        private static readonly TimeSpan UserConnectionsSetTtl = TimeSpan.FromDays(1);
 
         // ===== Typing tracking keys =====
         // SortedSet per conversation: member = "userId:connectionId", score = Unix expiry timestamp
         private static string ConvTypingSetKey(string conversationId) => $"typing:conv:{conversationId}";
+        private static string TypingConversationsKey() => "typing:conversations";
         // Reverse index: connection -> set of "conversationId|userId|connectionId"
         private static string ConnTypingSetKey(string connectionId) => $"typing:conn:{connectionId}";
         private static string TypingMember(string userId, string connectionId) => $"{userId}:{connectionId}";
@@ -115,25 +119,39 @@ namespace Kpett.ChatApp.Services.Implementations
         public async Task AddConnectionAsync(string userId, string connectionId)
         {
             var key = UserConnectionsKey(userId);
-            await _redis.ListRightPushAsync(key, connectionId);
-            await _redis.KeyExpireAsync(key, TimeSpan.FromHours(24));
+            await _redis.SetAddAsync(key, connectionId);
+            await _redis.KeyExpireAsync(key, UserConnectionsSetTtl);
+            await _redis.StringSetAsync(ConnectionUserKey(connectionId), userId, PresenceConnectionTtl);
             _logger.LogDebug("Added SignalR connection {ConnectionId} for user {UserId}", connectionId, userId);
+        }
+
+        /// <inheritdoc />
+        public async Task RefreshConnectionAsync(string userId, string connectionId)
+        {
+            var key = UserConnectionsKey(userId);
+            await _redis.SetAddAsync(key, connectionId);
+            await _redis.KeyExpireAsync(key, UserConnectionsSetTtl);
+            await _redis.StringSetAsync(ConnectionUserKey(connectionId), userId, PresenceConnectionTtl);
+            _logger.LogDebug("Refreshed SignalR connection {ConnectionId} for user {UserId}", connectionId, userId);
         }
 
         /// <inheritdoc />
         public async Task RemoveConnectionAsync(string userId, string connectionId)
         {
             var key = UserConnectionsKey(userId);
-            await _redis.ListRemoveAsync(key, connectionId);
+            await _redis.SetRemoveAsync(key, connectionId);
+            await _redis.KeyDeleteAsync(ConnectionUserKey(connectionId));
+            if (await _redis.SetLengthAsync(key) == 0)
+            {
+                await _redis.KeyDeleteAsync(key);
+            }
             _logger.LogDebug("Removed SignalR connection {ConnectionId} for user {UserId}", connectionId, userId);
         }
 
         /// <inheritdoc />
         public async Task<string[]> GetConnectionsAsync(string userId)
         {
-            var key = UserConnectionsKey(userId);
-            var values = await _redis.ListRangeAsync(key);
-            var connections = values.Where(v => v.HasValue).Select(v => v.ToString()!).ToArray();
+            var connections = await PruneAndCountActiveConnectionsAsync(userId);
             _logger.LogDebug("Read {ConnectionCount} SignalR connections for user {UserId}", connections.Length, userId);
             return connections;
         }
@@ -141,8 +159,7 @@ namespace Kpett.ChatApp.Services.Implementations
         /// <inheritdoc />
         public async Task<bool> IsUserOnlineAsync(string userId)
         {
-            var key = UserConnectionsKey(userId);
-            var count = await _redis.ListLengthAsync(key);
+            var count = (await PruneAndCountActiveConnectionsAsync(userId)).Length;
             _logger.LogDebug("Checked online status for user {UserId}. IsOnline: {IsOnline}", userId, count > 0);
             return count > 0;
         }
@@ -152,25 +169,49 @@ namespace Kpett.ChatApp.Services.Implementations
         {
             var result = new Dictionary<string, bool>();
 
-
-            var batch = _redis.CreateBatch();
-            var tasks = new Dictionary<string, Task<long>>();
-
-            foreach (var userId in userIds)
+            foreach (var userId in userIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct())
             {
-                var key = UserConnectionsKey(userId);
-                tasks[userId] = batch.ListLengthAsync(key);
-            }
-
-            batch.Execute();
-
-            foreach (var task in tasks)
-            {
-                result[task.Key] = (await task.Value) > 0;
+                result[userId] = (await PruneAndCountActiveConnectionsAsync(userId)).Length > 0;
             }
 
             _logger.LogDebug("Checked online status for {UserCount} users", result.Count);
             return result;
+        }
+
+        private async Task<string[]> PruneAndCountActiveConnectionsAsync(string userId)
+        {
+            var key = UserConnectionsKey(userId);
+            var values = await _redis.SetMembersAsync(key);
+            if (values.Length == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            var activeConnections = new List<string>(values.Length);
+            foreach (var value in values)
+            {
+                if (!value.HasValue)
+                {
+                    continue;
+                }
+
+                var connectionId = value.ToString();
+                var connectionUserId = await _redis.StringGetAsync(ConnectionUserKey(connectionId));
+                if (connectionUserId.HasValue && connectionUserId.ToString() == userId)
+                {
+                    activeConnections.Add(connectionId);
+                    continue;
+                }
+
+                await _redis.SetRemoveAsync(key, value);
+            }
+
+            if (activeConnections.Count == 0)
+            {
+                await _redis.KeyDeleteAsync(key);
+            }
+
+            return activeConnections.ToArray();
         }
 
         // Conversation membership helpers
@@ -272,6 +313,8 @@ namespace Kpett.ChatApp.Services.Implementations
             // 1. Thêm/cập nhật vào SortedSet của conversation (score = Unix expiry)
             var convKey = ConvTypingSetKey(conversationId);
             await _redis.SortedSetAddAsync(convKey, member, expiryUnix);
+            await _redis.SetAddAsync(TypingConversationsKey(), conversationId);
+            await _redis.KeyExpireAsync(TypingConversationsKey(), TimeSpan.FromDays(1));
             // Đặt TTL cho SortedSet = max TTL + buffer (tự dọn khi conversation không còn ai typing)
             await _redis.KeyExpireAsync(convKey, ttl + TimeSpan.FromSeconds(30));
 
@@ -303,6 +346,7 @@ namespace Kpett.ChatApp.Services.Implementations
 
             var entry = $"{conversationId}{TypingEntrySeparator}{userId}{TypingEntrySeparator}{connectionId}";
             await _redis.SetRemoveAsync(ConnTypingSetKey(connectionId), entry);
+            await RemoveTypingConversationIfEmptyAsync(conversationId);
             _logger.LogDebug("Removed typing state for user {UserId}, connection {ConnectionId}, conversation {ConversationId}", userId, connectionId, conversationId);
         }
 
@@ -330,10 +374,6 @@ namespace Kpett.ChatApp.Services.Implementations
         public async Task<List<(string UserId, string ConnectionId)>> GetTypingUsersInConversationAsync(string conversationId)
         {
             var nowUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-            // Dọn dẹp expired entries trước
-            await _redis.SortedSetRemoveRangeByScoreAsync(ConvTypingSetKey(conversationId),
-                double.NegativeInfinity, nowUnix - 1);
 
             var members = await _redis.SortedSetRangeByScoreAsync(
                 ConvTypingSetKey(conversationId),
@@ -364,12 +404,87 @@ namespace Kpett.ChatApp.Services.Implementations
 
                 var (convId, userId, connId) = (parts[0], parts[1], parts[2]);
                 await _redis.SortedSetRemoveAsync(ConvTypingSetKey(convId), TypingMember(userId, connId));
+                await RemoveTypingConversationIfEmptyAsync(convId);
                 removed.Add((convId, userId));
             }
 
             await _redis.KeyDeleteAsync(connKey);
             _logger.LogDebug("Removed {TypingEntryCount} typing entries for connection {ConnectionId}", removed.Count, connectionId);
             return removed;
+        }
+
+        /// <inheritdoc />
+        public async Task<List<(string ConversationId, string UserId, string ConnectionId)>> RemoveExpiredTypingAsync(int maxEntries = 200)
+        {
+            var nowUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var conversationIds = await _redis.SetMembersAsync(TypingConversationsKey());
+            var removed = new List<(string ConversationId, string UserId, string ConnectionId)>();
+
+            foreach (var conversationValue in conversationIds)
+            {
+                if (removed.Count >= maxEntries)
+                {
+                    break;
+                }
+
+                if (!conversationValue.HasValue)
+                {
+                    continue;
+                }
+
+                var conversationId = conversationValue.ToString();
+                var convKey = ConvTypingSetKey(conversationId);
+                var expiredMembers = await _redis.SortedSetRangeByScoreAsync(
+                    convKey,
+                    double.NegativeInfinity,
+                    nowUnix);
+
+                foreach (var member in expiredMembers)
+                {
+                    if (!member.HasValue || removed.Count >= maxEntries)
+                    {
+                        break;
+                    }
+
+                    var parts = member.ToString().Split(':', 2);
+                    if (parts.Length != 2)
+                    {
+                        await _redis.SortedSetRemoveAsync(convKey, member);
+                        continue;
+                    }
+
+                    var wasRemoved = await _redis.SortedSetRemoveAsync(convKey, member);
+                    if (!wasRemoved)
+                    {
+                        continue;
+                    }
+
+                    var userId = parts[0];
+                    var connectionId = parts[1];
+                    var entry = $"{conversationId}{TypingEntrySeparator}{userId}{TypingEntrySeparator}{connectionId}";
+                    await _redis.SetRemoveAsync(ConnTypingSetKey(connectionId), entry);
+                    removed.Add((conversationId, userId, connectionId));
+                }
+
+                await RemoveTypingConversationIfEmptyAsync(conversationId);
+            }
+
+            if (removed.Count > 0)
+            {
+                _logger.LogDebug("Removed {TypingEntryCount} expired typing entries", removed.Count);
+            }
+
+            return removed;
+        }
+
+        private async Task RemoveTypingConversationIfEmptyAsync(string conversationId)
+        {
+            var convKey = ConvTypingSetKey(conversationId);
+            if (await _redis.SortedSetLengthAsync(convKey) == 0)
+            {
+                await _redis.KeyDeleteAsync(convKey);
+                await _redis.SetRemoveAsync(TypingConversationsKey(), conversationId);
+            }
         }
 
     }

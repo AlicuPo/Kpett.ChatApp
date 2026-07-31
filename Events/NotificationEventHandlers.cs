@@ -18,6 +18,7 @@ namespace Kpett.ChatApp.Events
         INotificationHandler<FriendRequestSentEvent>,
         INotificationHandler<FriendRequestAcceptedEvent>,
         INotificationHandler<CommentMentionedEvent>,
+        INotificationHandler<CommentCreatedEvent>,
         INotificationHandler<GroupInvitationSentEvent>
     {
         private readonly AppDbContext _context;
@@ -93,6 +94,33 @@ namespace Kpett.ChatApp.Events
         }
 
         // X? l? L?i m?i v�o nh�m
+        // Handle new comment on post notification
+        public async Task Handle(CommentCreatedEvent evt, CancellationToken cancel)
+        {
+            if (evt.PostOwnerId == evt.ActorId) return;
+
+            var metadataJson = JsonSerializer.Serialize(new
+            {
+                CommentId = evt.CommentId,
+                TextSnippet = evt.CommentSnippet
+            });
+
+            var notification = new Notification
+            {
+                Id = Guid.NewGuid().ToString(),
+                RecipientId = evt.PostOwnerId,
+                ActorId = evt.ActorId,
+                Type = NotificationType.NewCommentOnPost.GetDescription(),
+                ReferenceId = evt.PostId,
+                Metadata = metadataJson
+            };
+
+            _context.Notifications.Add(notification);
+            await _context.SaveChangesAsync(cancel);
+
+            await PushNotification(notification, cancel);
+        }
+
         public async Task Handle(GroupInvitationSentEvent evt, CancellationToken cancel)
         {
             var metadataJson = JsonSerializer.Serialize(new

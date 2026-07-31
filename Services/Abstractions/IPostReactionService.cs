@@ -8,7 +8,7 @@ namespace Kpett.ChatApp.Services.Abstractions
     public interface IPostReactionService
     {
         /// <summary>Thêm reaction vào bài viết (hoặc cập nhật nếu đã có).</summary>
-        Task<PostReactionDTO> AddReactionAsync(string postId, string userId, byte reactionType, CancellationToken cancel);
+        Task<PostReactionDTO> AddReactionAsync(string postId, string userId, byte? reactionType, CancellationToken cancel);
 
         /// <summary>Xoá reaction khỏi bài viết.</summary>
         Task RemoveReactionAsync(string postId, string userId, CancellationToken cancel);
