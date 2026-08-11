@@ -65,6 +65,8 @@ public AppDbContext(DbContextOptions<AppDbContext> options)
 
     public virtual DbSet<MessageAttachment> MessageAttachments { get; set; }
 
+    public virtual DbSet<MessageMention> MessageMentions { get; set; }
+
     public virtual DbSet<StickerPack> StickerPacks { get; set; }
 
     public virtual DbSet<Sticker> Stickers { get; set; }
@@ -149,6 +151,20 @@ public AppDbContext(DbContextOptions<AppDbContext> options)
 
         modelBuilder.Entity<CommentLike>()
             .HasIndex(e => new { e.CommentId, e.UserId })
+            .IsUnique();
+
+        modelBuilder.Entity<MessageMention>()
+            .Property(e => e.IsNotified)
+            .HasDefaultValue(false);
+
+        modelBuilder.Entity<MessageMention>()
+            .HasIndex(e => e.MessageId);
+
+        modelBuilder.Entity<MessageMention>()
+            .HasIndex(e => e.UserId);
+
+        modelBuilder.Entity<MessageMention>()
+            .HasIndex(e => new { e.MessageId, e.UserId })
             .IsUnique();
 
         modelBuilder.Entity<Post>()

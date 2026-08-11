@@ -1,6 +1,7 @@
 using Kpett.ChatApp.Data;
 using Kpett.ChatApp.Enums;
 using Kpett.ChatApp.Events.Comment;
+using Kpett.ChatApp.Events.Conversation;
 using Kpett.ChatApp.Events.Friend;
 using Kpett.ChatApp.Events.Group;
 using Kpett.ChatApp.Helpers;
@@ -19,7 +20,8 @@ namespace Kpett.ChatApp.Events
         INotificationHandler<FriendRequestAcceptedEvent>,
         INotificationHandler<CommentMentionedEvent>,
         INotificationHandler<CommentCreatedEvent>,
-        INotificationHandler<GroupInvitationSentEvent>
+        INotificationHandler<GroupInvitationSentEvent>,
+        INotificationHandler<MessageMentionedEvent>
     {
         private readonly AppDbContext _context;
         private readonly IHubContext<AppHub> _hubContext;
@@ -85,6 +87,33 @@ namespace Kpett.ChatApp.Events
             }).ToList();
 
             await _context.Notifications.AddRangeAsync(notifications, cancel);
+            await _context.SaveChangesAsync(cancel);
+
+            foreach (var notif in notifications)
+            {
+                await PushNotification(notif, cancel);
+            }
+        }
+
+        // Xử lý Tag/Mention trong tin nhắn nhóm chat
+        public async Task Handle(MessageMentionedEvent evt, CancellationToken cancel)
+        {
+            var validMentionIds = evt.MentionedUserIds.Where(id => id != evt.ActorId).Distinct().ToList();
+            if (!validMentionIds.Any()) return;
+
+            var metadataJson = JsonSerializer.Serialize(new { MessageId = evt.MessageId, TextSnippet = evt.TextSnippet });
+
+            var notifications = validMentionIds.Select(userId => new Notification
+            {
+                Id = Guid.NewGuid().ToString(),
+                RecipientId = userId,
+                ActorId = evt.ActorId,
+                Type = NotificationType.MessageMention.GetDescription(),
+                ReferenceId = evt.ConversationId,
+                Metadata = metadataJson
+            }).ToList();
+
+            _context.Notifications.AddRange(notifications);
             await _context.SaveChangesAsync(cancel);
 
             foreach (var notif in notifications)

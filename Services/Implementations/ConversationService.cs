@@ -18,12 +18,17 @@ using Kpett.ChatApp.Services.Abstractions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Kpett.ChatApp.Services.Implementations
 {
     /// <summary>Service quản lý hội thoại: CRUD, tin nhắn, thành viên, cài đặt (uỷ quyền message/member cho sub-services).</summary>
     public class ConversationService : IConversationService
     {
+        private static readonly Regex MentionTokenRegex = new(
+            "<@(?<userId>[^<>\\s]+)>",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
         private readonly AppDbContext _context;
         private readonly IRedisService _redisService;
         private readonly IHubContext<AppHub> _chatHubContext;
@@ -419,6 +424,9 @@ namespace Kpett.ChatApp.Services.Implementations
                 ? await BaseUserProjectionQuery().Where(u => userIdsToFetch.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u, cancel)
                 : new Dictionary<string, UserResponse>();
 
+            var lastMessageIds = rawConversations.Where(c => c.LastMessage != null).Select(c => c.LastMessage!.Id).ToList();
+            var snippetMentionNames = await LoadSnippetMentionNamesAsync(lastMessageIds, cancel);
+
             var onlineStatuses = await _redisService.GetUsersOnlineStatusAsync(userIdsToFetch);
 
             var isFriendDictionary = await GetFriendshipStatusesAsync(currentUserId, userIdsToFetch);
@@ -469,7 +477,7 @@ namespace Kpett.ChatApp.Services.Implementations
                         SenderId = c.LastMessage.SenderId,
                         SenderName = usersDict.GetValueOrDefault(c.LastMessage.SenderId)?.DisplayName ?? "Unknown User",
                         Type = c.LastMessage.Type,
-                        Content = c.LastMessage.Content,
+                        Content = BuildSnippetContent(c.LastMessage.Content, snippetMentionNames.GetValueOrDefault(c.LastMessage.Id)),
                         CreatedAt = c.LastMessage.CreatedAt,
                         ActionMetadata = ParseSystemMetadata(c.LastMessage.Type, c.LastMessage.Metadata)
                     };
@@ -774,13 +782,15 @@ namespace Kpett.ChatApp.Services.Implementations
             MessageSnippetResponse? lastMessageResponse = null;
             if (rawData.LastMessage != null)
             {
+                var snippetMentionNames = await LoadSnippetMentionNamesAsync(new List<string> { rawData.LastMessage.Id }, cancel);
+
                 lastMessageResponse = new MessageSnippetResponse
                 {
                     Id = rawData.LastMessage.Id,
                     SenderId = rawData.LastMessage.SenderId,
                     SenderName = usersDict.GetValueOrDefault(rawData.LastMessage.SenderId)?.DisplayName ?? "Unknown User",
                     Type = rawData.LastMessage.Type,
-                    Content = rawData.LastMessage.Content,
+                    Content = BuildSnippetContent(rawData.LastMessage.Content, snippetMentionNames.GetValueOrDefault(rawData.LastMessage.Id)),
                     CreatedAt = rawData.LastMessage.CreatedAt,
                     ActionMetadata = ParseSystemMetadata(rawData.LastMessage.Type, rawData.LastMessage.Metadata)
                 };
@@ -983,6 +993,42 @@ namespace Kpett.ChatApp.Services.Implementations
                 }
             }
             return null;
+        }
+
+        // Helper DRY: Lấy tên người được tag trong tin nhắn để hiển thị gọn trong snippet.
+        private async Task<Dictionary<string, Dictionary<string, string>>> LoadSnippetMentionNamesAsync(List<string> messageIds, CancellationToken cancel)
+        {
+            if (messageIds.Count == 0)
+            {
+                return new Dictionary<string, Dictionary<string, string>>();
+            }
+
+            var mentionRows = await _context.MessageMentions
+                .AsNoTracking()
+                .Where(m => messageIds.Contains(m.MessageId))
+                .Select(m => new { m.MessageId, m.UserId, m.Username, m.DisplayName })
+                .ToListAsync(cancel);
+
+            return mentionRows
+                .GroupBy(m => m.MessageId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.ToDictionary(x => x.UserId, x => x.DisplayName ?? x.Username, StringComparer.Ordinal),
+                    StringComparer.Ordinal);
+        }
+
+        private static string? BuildSnippetContent(string? content, Dictionary<string, string>? mentionNames)
+        {
+            if (string.IsNullOrWhiteSpace(content) || mentionNames == null || mentionNames.Count == 0)
+            {
+                return content;
+            }
+
+            return MentionTokenRegex.Replace(content, match =>
+            {
+                var userId = match.Groups["userId"].Value;
+                return mentionNames.TryGetValue(userId, out var name) ? $"@{name}" : match.Value;
+            });
         }
 
         /// <summary>

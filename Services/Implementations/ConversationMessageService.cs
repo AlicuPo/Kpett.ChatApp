@@ -13,29 +13,38 @@ using Kpett.ChatApp.Helpers;
 using Kpett.ChatApp.Hubs;
 using Kpett.ChatApp.Models;
 using Kpett.ChatApp.Services.Abstractions;
+using Kpett.ChatApp.Events.Conversation;
+using MediatR;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Kpett.ChatApp.Services.Implementations
 {
     /// <summary>Service quản lý tin nhắn trong hội thoại: lấy, gửi, cập nhật, xoá.</summary>
     public class ConversationMessageService : IConversationMessageService
     {
+        private static readonly Regex MentionTokenRegex = new(
+            "<@(?<userId>[^<>\\s]+)>",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
         private readonly AppDbContext _context;
         private readonly IRedisService _redisService;
         private readonly IHubContext<AppHub> _chatHubContext;
+        private readonly IMediator _mediator;
         private readonly ILogger<ConversationMessageService> _logger;
 
         private static readonly JsonSerializerOptions _jsonCamelCase = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
         private static readonly JsonSerializerOptions _jsonCaseInsensitive = new() { PropertyNameCaseInsensitive = true };
 
         /// <summary>Khởi tạo service với các dependencies.</summary>
-        public ConversationMessageService(AppDbContext dbContext, IRedisService redisService, IHubContext<AppHub> chatHubContext, ILogger<ConversationMessageService> logger)
+        public ConversationMessageService(AppDbContext dbContext, IRedisService redisService, IHubContext<AppHub> chatHubContext, IMediator mediator, ILogger<ConversationMessageService> logger)
         {
             _context = dbContext;
             _redisService = redisService;
             _chatHubContext = chatHubContext;
+            _mediator = mediator;
             _logger = logger;
         }
 
@@ -120,7 +129,7 @@ namespace Kpett.ChatApp.Services.Implementations
                 .Select(a => new { a.Id, a.MessageId, a.Type, a.Url, a.PublicId, a.Filename, a.FileSize, a.Width, a.Height })
                 .ToListAsync(cancel);
 
-            var attachmentsByMessage = attachmentEntities
+var attachmentsByMessage = attachmentEntities
                 .GroupBy(a => a.MessageId)
                 .ToDictionary(g => g.Key, g => g.Select(a => new MessageAttachmentResponse
                 {
@@ -133,6 +142,21 @@ namespace Kpett.ChatApp.Services.Implementations
                     FileSize = a.FileSize,
                     Width = a.Width,
                     Height = a.Height
+                }).ToList());
+
+            var mentionEntities = await _context.MessageMentions
+                .AsNoTracking()
+                .Where(m => messageIds.Contains(m.MessageId))
+                .Select(m => new { m.MessageId, m.UserId, m.Username, m.DisplayName })
+                .ToListAsync(cancel);
+
+            var mentionsByMessage = mentionEntities
+                .GroupBy(m => m.MessageId)
+                .ToDictionary(g => g.Key, g => g.Select(m => new MessageMentionResponse
+                {
+                    UserId = m.UserId,
+                    Username = m.Username,
+                    DisplayName = m.DisplayName
                 }).ToList());
 
             var messageResponses = rawMessages.Select(m =>
@@ -157,6 +181,11 @@ namespace Kpett.ChatApp.Services.Implementations
                 if (attachmentsByMessage.TryGetValue(m.Id, out var attachments))
                 {
                     response.Attachments = attachments;
+                }
+
+                if (mentionsByMessage.TryGetValue(m.Id, out var mentions))
+                {
+                    response.Mentions = mentions;
                 }
 
                 return response;
@@ -194,11 +223,17 @@ namespace Kpett.ChatApp.Services.Implementations
                 throw new NotFoundException(ErrorCodes.CONVERSATION.NOT_FOUND, "Conversation not found.");
             }
 
-            var currentUserParticipant = await _context.ConversationParticipants.FirstOrDefaultAsync(p => p.ConversationId == conversationId && p.UserId == currentUserId && !p.IsKicked, cancel);
+var currentUserParticipant = await _context.ConversationParticipants.FirstOrDefaultAsync(p => p.ConversationId == conversationId && p.UserId == currentUserId && !p.IsKicked, cancel);
             if (currentUserParticipant == null)
             {
                 _logger.LogWarning("User {UserId} attempted to send message to conversation {ConversationId} without active membership", currentUserId, conversationId);
                 throw new ForbiddenException(ErrorCodes.AUTH.FORBIDDEN, "You are not a participant of this conversation.");
+            }
+
+            var mentionIds = conversation.Type == "Group" ? ExtractMentionUserIds(request.Content) : new List<string>();
+            if (mentionIds.Count > 0)
+            {
+                await EnsureMentionTargetsAreParticipantsAsync(conversationId, mentionIds, cancel);
             }
 
             var existingMessageId = await _context.Messages.Where(m => m.ConversationId == conversationId && m.ClientMessageId == request.ClientMessageId).Select(m => m.Id).FirstOrDefaultAsync(cancel);
@@ -250,7 +285,25 @@ namespace Kpett.ChatApp.Services.Implementations
                 _context.MessageAttachments.AddRange(attachments);
             }
 
-            await _context.SaveChangesAsync(cancel);
+await _context.SaveChangesAsync(cancel);
+
+            if (mentionIds.Count > 0)
+            {
+                await SyncMessageMentionsAsync(messageId, mentionIds, now, cancel);
+
+                var snippet = (request.Content ?? string.Empty).Length > 50
+                    ? request.Content!.Substring(0, 50) + "..."
+                    : request.Content;
+
+                await _mediator.Publish(new MessageMentionedEvent
+                {
+                    ConversationId = conversationId,
+                    MessageId = messageId,
+                    ActorId = currentUserId,
+                    MentionedUserIds = mentionIds,
+                    TextSnippet = snippet ?? string.Empty
+                }, cancel);
+            }
 
             var responseDto = await MapToMessageResponseAsync(messageId, currentUserId, cancel);
             var participantIds = await _context.ConversationParticipants.AsNoTracking().Where(p => p.ConversationId == conversationId && !p.IsKicked).Select(p => p.UserId).ToListAsync(cancel);
@@ -321,10 +374,28 @@ namespace Kpett.ChatApp.Services.Implementations
                 throw new BadRequestException(ErrorCodes.CONVERSATION.INVALID_MESSAGE, "This message cannot be updated.");
             }
 
-            message.Content = request.Content.Trim();
+message.Content = request.Content.Trim();
             message.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync(cancel);
+
+            var conversationType = await _context.Conversations.AsNoTracking().Where(c => c.Id == conversationId).Select(c => c.Type).FirstOrDefaultAsync(cancel);
+            var mentionIds = conversationType == "Group" ? ExtractMentionUserIds(message.Content) : new List<string>();
+            if (mentionIds.Count > 0)
+            {
+                await EnsureMentionTargetsAreParticipantsAsync(conversationId, mentionIds, cancel);
+                await SyncMessageMentionsAsync(message.Id, mentionIds, message.UpdatedAt.Value, cancel);
+                await _context.SaveChangesAsync(cancel);
+            }
+            else
+            {
+                var existingMentions = await _context.MessageMentions.Where(m => m.MessageId == message.Id).ToListAsync(cancel);
+                if (existingMentions.Count > 0)
+                {
+                    _context.MessageMentions.RemoveRange(existingMentions);
+                    await _context.SaveChangesAsync(cancel);
+                }
+            }
 
             var response = await MapToMessageResponseAsync(message.Id, currentUserId, cancel);
             var participantIds = await _context.ConversationParticipants.AsNoTracking()
@@ -438,7 +509,7 @@ namespace Kpett.ChatApp.Services.Implementations
                     SenderAvatarUrl = _context.UserMedias.Where(um => um.UserId == m.SenderId && um.IsPrimary && um.MediaType == "Avatar").Select(um => um.MediaUrl).FirstOrDefault()
                 }).FirstOrDefaultAsync(cancel);
 
-            var attachments = await _context.MessageAttachments
+var attachments = await _context.MessageAttachments
                 .AsNoTracking()
                 .Where(a => a.MessageId == messageId)
                 .OrderBy(a => a.CreatedAt)
@@ -453,6 +524,16 @@ namespace Kpett.ChatApp.Services.Implementations
                     FileSize = a.FileSize,
                     Width = a.Width,
                     Height = a.Height
+                }).ToListAsync(cancel);
+
+            var mentions = await _context.MessageMentions
+                .AsNoTracking()
+                .Where(m => m.MessageId == messageId)
+                .Select(m => new MessageMentionResponse
+                {
+                    UserId = m.UserId,
+                    Username = m.Username,
+                    DisplayName = m.DisplayName
                 }).ToListAsync(cancel);
 
             return new MessageResponse
@@ -470,9 +551,103 @@ namespace Kpett.ChatApp.Services.Implementations
                 IsDeleted = messageData.IsDeleted,
                 ReplyToMessageId = messageData.ReplyToMessageId,
                 ActionMetadata = ParseSystemMetadata(messageData.Type, messageData.Metadata),
-                Attachments = attachments
+                Attachments = attachments,
+Mentions = mentions.Count > 0 ? mentions : null
             };
         }
+
+        private async Task EnsureMentionTargetsAreParticipantsAsync(
+            string conversationId,
+            IReadOnlyCollection<string> mentionUserIds,
+            CancellationToken cancel)
+        {
+            if (mentionUserIds.Count == 0)
+            {
+                return;
+            }
+
+            var activeParticipantIds = await _context.ConversationParticipants
+                .AsNoTracking()
+                .Where(p => p.ConversationId == conversationId && !p.IsKicked && mentionUserIds.Contains(p.UserId))
+                .Select(p => p.UserId)
+                .ToListAsync(cancel);
+
+            var activeSet = activeParticipantIds.ToHashSet(StringComparer.Ordinal);
+            var invalidIds = mentionUserIds.Where(id => !activeSet.Contains(id)).Distinct().ToList();
+
+            if (invalidIds.Count > 0)
+            {
+                _logger.LogWarning("Message mention rejected in conversation {ConversationId} because targets are not active members: {TargetIds}", conversationId, string.Join(", ", invalidIds));
+                throw new BadRequestException(
+                    ErrorCodes.MENTION.NOT_IN_CONVERSATION,
+                    $"You can only mention users who are in this group: {string.Join(", ", invalidIds)}");
+            }
+        }
+
+        private async Task SyncMessageMentionsAsync(string messageId, IReadOnlyCollection<string> mentionUserIds, DateTime utcNow, CancellationToken cancel)
+        {
+            var mentionSnapshots = await _context.Users
+                .AsNoTracking()
+                .Where(u => mentionUserIds.Contains(u.Id))
+                .Select(u => new MessageMentionSnapshot(u.Id, u.Username ?? u.DisplayName ?? u.Id, u.DisplayName))
+                .ToListAsync(cancel);
+
+            var snapshotByUserId = mentionSnapshots.ToDictionary(s => s.UserId, StringComparer.Ordinal);
+            var orderedIds = mentionUserIds.Distinct().ToList();
+
+            await _context.MessageMentions
+                .Where(m => m.MessageId == messageId)
+                .ExecuteDeleteAsync(cancel);
+
+            var mentionEntities = orderedIds.Select(userId =>
+            {
+                var snapshot = snapshotByUserId[userId];
+
+                return new MessageMention
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    MessageId = messageId,
+                    UserId = userId,
+                    Username = snapshot.Username,
+                    DisplayName = snapshot.DisplayName,
+                    IsNotified = false,
+                    CreatedAt = utcNow,
+                    UpdatedAt = utcNow
+                };
+            }).ToList();
+
+            _context.MessageMentions.AddRange(mentionEntities);
+            await _context.SaveChangesAsync(cancel);
+        }
+
+        private static List<string> ExtractMentionUserIds(string? content)
+        {
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                return new List<string>();
+            }
+
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (Match match in MentionTokenRegex.Matches(content))
+            {
+                var mentionUserId = match.Groups["userId"].Value.Trim();
+                if (string.IsNullOrWhiteSpace(mentionUserId))
+                {
+                    continue;
+                }
+
+                if (seen.Add(mentionUserId))
+                {
+                    result.Add(mentionUserId);
+                }
+            }
+
+            return result;
+        }
+
+        private sealed record MessageMentionSnapshot(string UserId, string Username, string? DisplayName);
 
         private SystemMessageMetadata? ParseSystemMetadata(string type, string? metadata)
         {
