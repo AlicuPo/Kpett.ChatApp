@@ -76,11 +76,18 @@
             public const string DELETE_FAILED = "MEDIA.DELETE_FAILED";
         }
 
-        public static class COMMENT
+public static class COMMENT
         {
             public const string NOT_FOUND = "COMMENT.NOT_FOUND";
             public const string USER_NOT_AUTHORIZED = "COMMENT.USER_NOT_AUTHORIZED";
             public const string PARENT_COMMENT_NOT_FOUND = "COMMENT.PARENT_COMMENT_NOT_FOUND";
+        }
+
+        public static class MENTION
+        {
+            public const string ONLY_FRIENDS = "MENTION.ONLY_FRIENDS";
+            public const string NOT_IN_CONVERSATION = "MENTION.NOT_IN_CONVERSATION";
+            public const string ONLY_IN_GROUP = "MENTION.ONLY_IN_GROUP";
         }
 
         public static class GROUP

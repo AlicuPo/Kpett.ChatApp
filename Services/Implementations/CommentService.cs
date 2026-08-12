@@ -65,6 +65,8 @@ namespace Kpett.ChatApp.Services.Implementations
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
+            await EnsureMentionTargetsAreFriendsAsync(userId, mentionIds, cancel);
+
             var post = await _dbContext.Posts
                 .AsNoTracking()
                 .Where(p => p.Id == postId && !p.IsDeleted)
@@ -328,11 +330,15 @@ namespace Kpett.ChatApp.Services.Implementations
             }
 
             var utcNow = DateTime.UtcNow;
+            var mentionIds = ExtractMentionUserIds(content);
+
+            await EnsureMentionTargetsAreFriendsAsync(userId, mentionIds, cancel);
+
             comment.Content = content;
             comment.IsEdited = true;
             comment.UpdatedAt = utcNow;
 
-            var mentions = await SyncCommentMentionsAsync(comment.Id, ExtractMentionUserIds(content), utcNow, cancel);
+            var mentions = await SyncCommentMentionsAsync(comment.Id, mentionIds, utcNow, cancel);
             await _dbContext.SaveChangesAsync(cancel);
 
             var user = await _dbContext.Users
@@ -813,6 +819,38 @@ namespace Kpett.ChatApp.Services.Implementations
             }
 
             return value.Trim();
+        }
+
+        private async Task EnsureMentionTargetsAreFriendsAsync(
+            string actorUserId,
+            IReadOnlyCollection<string> mentionUserIds,
+            CancellationToken cancel)
+        {
+            var targets = mentionUserIds.Where(id => id != actorUserId).Distinct().ToList();
+            if (targets.Count == 0)
+            {
+                return;
+            }
+
+            var activeStatus = FriendshipStatus.Active.GetDescription();
+            var friendIds = await _dbContext.Friendships
+                .AsNoTracking()
+                .Where(f => f.Status == activeStatus &&
+                    ((f.UserLowId == actorUserId && targets.Contains(f.UserHighId)) ||
+                     (f.UserHighId == actorUserId && targets.Contains(f.UserLowId))))
+                .Select(f => f.UserLowId == actorUserId ? f.UserHighId : f.UserLowId)
+                .ToListAsync(cancel);
+
+            var friendIdSet = friendIds.ToHashSet(StringComparer.Ordinal);
+            var nonFriendIds = targets.Where(id => !friendIdSet.Contains(id)).ToList();
+
+            if (nonFriendIds.Count > 0)
+            {
+                _logger.LogWarning("Comment mention rejected by user {UserId} because targets are not friends: {TargetIds}", actorUserId, string.Join(", ", nonFriendIds));
+                throw new BadRequestException(
+                    ErrorCodes.MENTION.ONLY_FRIENDS,
+                    $"You can only mention users who are your friends: {string.Join(", ", nonFriendIds)}");
+            }
         }
 
         private static List<CommentMentionDTO> GetMentions(

@@ -37,6 +37,7 @@
                     "FriendRequestReceived" => "friend_request",
                     "FriendRequestAccepted" => "friend_accept",
                     "CommentMention" => "comment_mention",
+                    "MessageMention" => "comment_mention",
                     "NewCommentOnPost" => "new_comment",
                     "GroupInvitationReceived" => "group_invitation",
                     _ => DefaultSoundKey

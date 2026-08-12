@@ -18,6 +18,7 @@ namespace Kpett.ChatApp.DTOs.Response.Conversation
         public SystemMessageMetadata? ActionMetadata { get; set; }
         public string? ReplyToMessageId { get; set; }
         public List<MessageAttachmentResponse>? Attachments { get; set; }
+        public List<MessageMentionResponse>? Mentions { get; set; }
 
     }
 }
