@@ -65,8 +65,6 @@ namespace Kpett.ChatApp.Services.Implementations
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
-            await EnsureMentionTargetsAreFriendsAsync(userId, mentionIds, cancel);
-
             var post = await _dbContext.Posts
                 .AsNoTracking()
                 .Where(p => p.Id == postId && !p.IsDeleted)
@@ -86,19 +84,27 @@ namespace Kpett.ChatApp.Services.Implementations
             }
 
             string? parentPath = null;
+            string? parentCommentAuthorId = null;
             if (!string.IsNullOrEmpty(normalizedParentCommentId))
             {
-                parentPath = await _dbContext.Comments
+                var parentInfo = await _dbContext.Comments
                     .Where(c => c.Id == normalizedParentCommentId && c.PostId == postId && c.DeletedAt == null)
-                    .Select(c => c.Path)
+                    .Select(c => new { c.Path, c.UserId })
                     .FirstOrDefaultAsync(cancel);
 
-                if (parentPath == null)
+                if (parentInfo == null)
                 {
                     _logger.LogWarning("Add comment rejected because parent comment {ParentCommentId} was not found on post {PostId}", normalizedParentCommentId, postId);
                     throw new NotFoundException(ErrorCodes.COMMENT.PARENT_COMMENT_NOT_FOUND, "Parent comment not found");
                 }
+
+                parentPath = parentInfo.Path;
+                parentCommentAuthorId = parentInfo.UserId;
             }
+
+            // Tác giả của comment cha (người đang được trả lời) được phép mention
+            // kể cả khi không phải bạn bè để không chặn việc trả lời bình luận.
+            await EnsureMentionTargetsAreFriendsAsync(userId, mentionIds, parentCommentAuthorId, cancel);
 
             // Kh?i t?o Comment Entity
             var comment = new Comment
@@ -332,7 +338,16 @@ namespace Kpett.ChatApp.Services.Implementations
             var utcNow = DateTime.UtcNow;
             var mentionIds = ExtractMentionUserIds(content);
 
-            await EnsureMentionTargetsAreFriendsAsync(userId, mentionIds, cancel);
+            string? parentCommentAuthorId = null;
+            if (!string.IsNullOrEmpty(comment.ParentCommentId))
+            {
+                parentCommentAuthorId = await _dbContext.Comments
+                    .Where(c => c.Id == comment.ParentCommentId)
+                    .Select(c => c.UserId)
+                    .FirstOrDefaultAsync(cancel);
+            }
+
+            await EnsureMentionTargetsAreFriendsAsync(userId, mentionIds, parentCommentAuthorId, cancel);
 
             comment.Content = content;
             comment.IsEdited = true;
@@ -824,9 +839,14 @@ namespace Kpett.ChatApp.Services.Implementations
         private async Task EnsureMentionTargetsAreFriendsAsync(
             string actorUserId,
             IReadOnlyCollection<string> mentionUserIds,
+            string? exemptedUserId,
             CancellationToken cancel)
         {
-            var targets = mentionUserIds.Where(id => id != actorUserId).Distinct().ToList();
+            var targets = mentionUserIds
+                .Where(id => id != actorUserId &&
+                    !string.Equals(id, exemptedUserId, StringComparison.Ordinal))
+                .Distinct()
+                .ToList();
             if (targets.Count == 0)
             {
                 return;
