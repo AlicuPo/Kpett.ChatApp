@@ -9,38 +9,30 @@ namespace Kpett.ChatApp.Data.Migrations
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "Roles",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    Name = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Roles", x => x.Id);
-                });
+            migrationBuilder.Sql(@"
+IF OBJECT_ID(N'dbo.Roles', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[Roles] (
+        [Id] INT IDENTITY(1,1) NOT NULL,
+        [Name] NVARCHAR(MAX) NOT NULL,
+        [Description] NVARCHAR(MAX) NULL,
+        [CreatedAt] DATETIME2 NOT NULL,
+        CONSTRAINT [PK_Roles] PRIMARY KEY ([Id])
+    );
+END
 
-            migrationBuilder.CreateTable(
-                name: "UserRoles",
-                columns: table => new
-                {
-                    UserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
-                    RoleId = table.Column<int>(type: "int", maxLength: 450, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_UserRoles", x => new { x.UserId, x.RoleId });
-                });
+IF OBJECT_ID(N'dbo.UserRoles', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[UserRoles] (
+        [UserId] NVARCHAR(450) NOT NULL,
+        [RoleId] INT NOT NULL,
+        [CreatedAt] DATETIME2 NOT NULL,
+        CONSTRAINT [PK_UserRoles] PRIMARY KEY ([UserId], [RoleId])
+    );
+END
 
-            migrationBuilder.CreateIndex(
-                name: "IX_UserRoles_RoleId",
-                table: "UserRoles",
-                column: "RoleId");
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_UserRoles_RoleId' AND object_id = OBJECT_ID(N'dbo.UserRoles'))
+    CREATE INDEX [IX_UserRoles_RoleId] ON [dbo].[UserRoles] ([RoleId]);");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
