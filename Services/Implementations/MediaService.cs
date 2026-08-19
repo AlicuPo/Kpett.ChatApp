@@ -26,7 +26,22 @@ namespace Kpett.ChatApp.Services.Implementations
         public async Task<MediaUploadResponse> UploadAsync(IFormFile file, string folder)
         {
             var isVideo = file.ContentType.StartsWith("video/");
-            var maxSize = isVideo ? _mediaSettings.MaxVideoSizeBytes : _mediaSettings.MaxImageSizeBytes;
+            var isReel = isVideo && (folder.Contains("reel", StringComparison.OrdinalIgnoreCase));
+
+            long maxSize;
+            if (isReel)
+            {
+                maxSize = _mediaSettings.MaxReelSizeBytes > 0 ? _mediaSettings.MaxReelSizeBytes : 100 * 1024 * 1024;
+            }
+            else if (isVideo)
+            {
+                maxSize = _mediaSettings.MaxVideoSizeBytes > 0 ? _mediaSettings.MaxVideoSizeBytes : 250 * 1024 * 1024;
+            }
+            else
+            {
+                maxSize = _mediaSettings.MaxImageSizeBytes;
+            }
+
             var allowedExtensions = isVideo ? _mediaSettings.AllowedVideoExtensions : _mediaSettings.AllowedImageExtensions;
 
             ValidateFile(file, maxSize, allowedExtensions);
