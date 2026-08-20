@@ -1,5 +1,7 @@
+using Kpett.ChatApp.Constants;
 using Kpett.ChatApp.DTOs.Response.Media;
 using Kpett.ChatApp.DTOs.Response.Shared;
+using Kpett.ChatApp.Exceptions;
 using Kpett.ChatApp.Services.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,16 +20,18 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpPost("upload")]
-        [RequestSizeLimit(200 * 1024 * 1024)]
+        [RequestSizeLimit(500 * 1024 * 1024)]
         public async Task<IActionResult> Upload(IFormFile file, [FromQuery] string? folder = null)
         {
+            EnsureFileProvided(file);
+
             var subDir = folder ?? (file.ContentType.StartsWith("video/") ? "videos" : "images");
             var result = await _mediaService.UploadAsync(file, subDir);
             result.SecureUrl = BuildAbsoluteUrl(result.SecureUrl);
             return Ok(new GeneralResponse<MediaUploadResponse>
             {
                 IsSuccess = true,
-                Message = "Upload th‡nh cÙng",
+                Message = "Upload th√†nh c√¥ng",
                 Data = result,
                 StatusCode = 200
             });
@@ -37,27 +41,31 @@ namespace Kpett.ChatApp.Controllers
         [RequestSizeLimit(10 * 1024 * 1024)]
         public async Task<IActionResult> UploadImage(IFormFile file, [FromQuery] string folder = "images")
         {
+            EnsureFileProvided(file);
+
             var result = await _mediaService.UploadAsync(file, folder);
             result.SecureUrl = BuildAbsoluteUrl(result.SecureUrl);
             return Ok(new GeneralResponse<MediaUploadResponse>
             {
                 IsSuccess = true,
-                Message = "Upload image th‡nh cÙng",
+                Message = "Upload image th√†nh c√¥ng",
                 Data = result,
                 StatusCode = 200
             });
         }
 
         [HttpPost("upload-video")]
-        [RequestSizeLimit(200 * 1024 * 1024)]
+        [RequestSizeLimit(500 * 1024 * 1024)]
         public async Task<IActionResult> UploadVideo(IFormFile file, [FromQuery] string folder = "videos")
         {
+            EnsureFileProvided(file);
+
             var result = await _mediaService.UploadAsync(file, folder);
             result.SecureUrl = BuildAbsoluteUrl(result.SecureUrl);
             return Ok(new GeneralResponse<MediaUploadResponse>
             {
                 IsSuccess = true,
-                Message = "Upload video th‡nh cÙng",
+                Message = "Upload video th√†nh c√¥ng",
                 Data = result,
                 StatusCode = 200
             });
@@ -79,6 +87,12 @@ namespace Kpett.ChatApp.Controllers
         {
             var request = HttpContext.Request;
             return $"{request.Scheme}://{request.Host}{relativeUrl}";
+        }
+
+        private static void EnsureFileProvided(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                throw new BadRequestException(ErrorCodes.MEDIA.FILE_EMPTY, "No file was uploaded. Please attach a file.");
         }
     }
 }
