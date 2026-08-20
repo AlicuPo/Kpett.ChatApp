@@ -43,7 +43,8 @@ services:
       EmailSettings__PasswordResetOtpLength: "${EmailSettings__PasswordResetOtpLength:-6}"
 
       MediaSettings__MaxImageSizeBytes: "${MediaSettings__MaxImageSizeBytes:-5242880}"
-      MediaSettings__MaxVideoSizeBytes: "${MediaSettings__MaxVideoSizeBytes:-157286400}"
+      MediaSettings__MaxVideoSizeBytes: "${MediaSettings__MaxVideoSizeBytes:-524288000}"
+      MediaSettings__MaxReelSizeBytes: "${MediaSettings__MaxReelSizeBytes:-262144000}"
       MediaSettings__AllowedImageExtensions__0: .jpg
       MediaSettings__AllowedImageExtensions__1: .jpeg
       MediaSettings__AllowedImageExtensions__2: .png

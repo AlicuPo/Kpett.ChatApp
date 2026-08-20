@@ -213,12 +213,12 @@ builder.Services.AddAuthorization();
 
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 300 * 1024 * 1024;
+    options.MultipartBodyLengthLimit = 600 * 1024 * 1024;
 });
 
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.Limits.MaxRequestBodySize = 300 * 1024 * 1024;
+    options.Limits.MaxRequestBodySize = 600 * 1024 * 1024;
 });
 
 // Options pattern
