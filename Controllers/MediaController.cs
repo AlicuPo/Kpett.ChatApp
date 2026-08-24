@@ -20,7 +20,7 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpPost("upload")]
-        [RequestSizeLimit(500 * 1024 * 1024)]
+        [DisableRequestSizeLimit]
         public async Task<IActionResult> Upload(IFormFile file, [FromQuery] string? folder = null)
         {
             EnsureFileProvided(file);
@@ -55,7 +55,7 @@ namespace Kpett.ChatApp.Controllers
         }
 
         [HttpPost("upload-video")]
-        [RequestSizeLimit(500 * 1024 * 1024)]
+        [DisableRequestSizeLimit]
         public async Task<IActionResult> UploadVideo(IFormFile file, [FromQuery] string folder = "videos")
         {
             EnsureFileProvided(file);
