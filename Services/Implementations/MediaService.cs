@@ -31,11 +31,12 @@ namespace Kpett.ChatApp.Services.Implementations
             long maxSize;
             if (isReel)
             {
-                maxSize = _mediaSettings.MaxReelSizeBytes > 0 ? _mediaSettings.MaxReelSizeBytes : 100 * 1024 * 1024;
+                maxSize = _mediaSettings.MaxReelSizeBytes > 0 ? _mediaSettings.MaxReelSizeBytes : 250 * 1024 * 1024;
             }
             else if (isVideo)
             {
-                maxSize = _mediaSettings.MaxVideoSizeBytes > 0 ? _mediaSettings.MaxVideoSizeBytes : 250 * 1024 * 1024;
+                // MaxVideoSizeBytes <= 0 nghĩa là không giới hạn dung lượng video
+                maxSize = _mediaSettings.MaxVideoSizeBytes > 0 ? _mediaSettings.MaxVideoSizeBytes : 0;
             }
             else
             {
@@ -102,7 +103,7 @@ namespace Kpett.ChatApp.Services.Implementations
             if (file == null || file.Length == 0)
                 throw new BadRequestException(ErrorCodes.MEDIA.FILE_EMPTY, "File is empty");
 
-            if (file.Length > maxSize)
+            if (maxSize > 0 && file.Length > maxSize)
                 throw new BadRequestException(ErrorCodes.MEDIA.FILE_SIZE_EXCEEDS_LIMIT, "File size exceeds limit");
 
             var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
