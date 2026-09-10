@@ -192,15 +192,16 @@ namespace Kpett.ChatApp.Services.Implementations
         private static List<MediaRequest>? BuildMedia(RssItem item)
         {
             if (string.IsNullOrWhiteSpace(item.ImageUrl)) return null;
+            var decodedUrl = System.Net.WebUtility.HtmlDecode(item.ImageUrl.Trim());
             // Chỉ nhận ảnh http/https
-            if (!item.ImageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return null;
+            if (!decodedUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return null;
 
             return new List<MediaRequest>
             {
                 new MediaRequest
                 {
                     PublicId = Guid.NewGuid().ToString(),
-                    Url = item.ImageUrl,
+                    Url = decodedUrl,
                     Type = MediaType.Image.GetDescription()
                 }
             };
