@@ -24,6 +24,8 @@ services:
       JwtSection__RefreshTokenExpireDays: "${JwtSection__RefreshTokenExpireDays:-365}"
 
       Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       AllowedHosts: "*"
 
       CloudinarySettings__CloudName: "${CloudinarySettings__CloudName}"
@@ -56,6 +58,14 @@ services:
 
       SuperAdmin__Email: "${SuperAdmin__Email:-}"
       SuperAdmin__Password: "${SuperAdmin__Password:-}"
+
+      AutoPost__Enabled: "${AutoPost__Enabled:-false}"
+      AutoPost__BotUserId: "${AutoPost__BotUserId:-}"
+      AutoPost__BotUsername: "${AutoPost__BotUsername:-kpett_official}"
+      AutoPost__BotEmail: "${AutoPost__BotEmail:-bot@kpett.local}"
+      AutoPost__Cron: "${AutoPost__Cron:-0 * * * *}"
+      AutoPost__MaxPostsPerRun: "${AutoPost__MaxPostsPerRun:-2}"
+      # Lưu ý: RssFeeds là array, đổi qua env cần bind dạng AutoPost__RssFeeds__0, __1 ... hoặc sửa appsettings
     volumes:
       - api_logs:/app/Logs
       - api_uploads:/app/wwwroot/uploads
