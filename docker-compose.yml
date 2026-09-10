@@ -1,5 +1,6 @@
 services:
   api:
+    image: kpett-chatapp-api:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
