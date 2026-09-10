@@ -225,6 +225,13 @@ builder.WebHost.ConfigureKestrel(options =>
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("JwtSection"));
 builder.Services.Configure<MediaOptions>(builder.Configuration.GetSection("MediaSettings"));
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("EmailSettings"));
+builder.Services.Configure<AutoPostOptions>(builder.Configuration.GetSection("AutoPost"));
+
+builder.Services.AddHttpClient("AutoPost", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.Add("User-Agent", "Kpett-AutoPost/1.0");
+});
 
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -247,6 +254,7 @@ builder.Services.AddScoped<IGroupMemberService, GroupMemberService>();
 builder.Services.AddScoped<IPostReactionService, PostReactionService>();
 builder.Services.AddScoped<IStickerService, StickerService>();
 builder.Services.AddScoped<ISavedPostService, SavedPostService>();
+builder.Services.AddScoped<IAutoPostService, AutoPostService>();
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
@@ -269,19 +277,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseStaticFiles();
 
-// Schedule a recurring job to clean up orphaned images daily at 2 AM
-// Tạo một Service Scope để lấy các service từ DI Container
-//using (var scope = app.Services.CreateScope())
-//{
-//    var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
-
-//    recurringJobManager.AddOrUpdate<IMediaService>(
-//        "cleanup-temp-images",
-//        service => service.CleanUpOrphanedImagesAsync(),
-//        Cron.Daily(2)
-//    );
-//}
-
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -298,6 +293,35 @@ using (var scope = app.Services.CreateScope())
     if (dbContext.Database.GetPendingMigrations().Any())
     {
         dbContext.Database.Migrate();
+    }
+
+    // Seed Bot user cho AutoPost (nếu chưa có) - đổi BotUserId/BotUsername là đổi người đăng
+    var autoPostSection = app.Configuration.GetSection("AutoPost");
+    var botUsername = autoPostSection["BotUsername"] ?? "kpett_official";
+    var botEmail = autoPostSection["BotEmail"] ?? "bot@kpett.local";
+    var botUserId = autoPostSection["BotUserId"];
+    // Chỉ seed khi Enabled=true hoặc đã cấu hình BotUserId để tránh tạo rác
+    var autoPostEnabled = autoPostSection.GetValue<bool>("Enabled");
+    if ((autoPostEnabled || !string.IsNullOrWhiteSpace(botUserId)) && !string.IsNullOrWhiteSpace(botEmail))
+    {
+        var botExists = await dbContext.Users.AnyAsync(u => u.Email == botEmail || u.Username == botUsername || (botUserId != null && u.Id == botUserId));
+        if (!botExists)
+        {
+            var botUser = new User
+            {
+                Id = !string.IsNullOrWhiteSpace(botUserId) ? botUserId! : Guid.NewGuid().ToString(),
+                Email = botEmail,
+                Username = botUsername,
+                DisplayName = "Kpett Official 🐾",
+                Biography = "Tài khoản tự động chia sẻ tin tức & kiến thức thú cưng",
+                Password = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString()),
+                IsActive = true,
+                IsVerified = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            dbContext.Users.Add(botUser);
+            await dbContext.SaveChangesAsync();
+        }
     }
 
     // Seed SuperAdmin role and default super admin user (chỉ khi cấu hình qua env/appsettings)
@@ -360,6 +384,26 @@ foreach (var sub in new[] { "images", "videos", "posts" })
     var dir = Path.Combine(webRoot, "uploads", sub);
     if (!Directory.Exists(dir))
         Directory.CreateDirectory(dir);
+}
+
+// Schedule recurring jobs AFTER DB migration/seed to ensure Bot user & Hangfire tables exist
+using (var scope = app.Services.CreateScope())
+{
+    var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+    var autoPostOpts = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AutoPostOptions>>().Value;
+
+    // Auto-post: đổi người đăng chỉ cần đổi AutoPost:BotUserId / BotUsername trong appsettings/env
+    if (autoPostOpts.Enabled)
+    {
+        recurringJobManager.AddOrUpdate<IAutoPostService>(
+            "autopost-rss-feed",
+            service => service.FetchAndPostAsync(default),
+            autoPostOpts.Cron);
+    }
+    else
+    {
+        recurringJobManager.RemoveIfExists("autopost-rss-feed");
+    }
 }
 
 app.MapControllers();
