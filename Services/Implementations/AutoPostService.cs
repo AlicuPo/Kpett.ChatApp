@@ -150,8 +150,9 @@ namespace Kpett.ChatApp.Services.Implementations
             // 2. Fallback username
             if (!string.IsNullOrWhiteSpace(opts.BotUsername))
             {
+                var normalized = opts.BotUsername.Trim().ToLower();
                 var byUsername = await _db.Users.AsNoTracking()
-                    .Where(u => u.Username == opts.BotUsername)
+                    .Where(u => u.Username != null && u.Username.ToLower() == normalized)
                     .Select(u => u.Id)
                     .FirstOrDefaultAsync(cancel);
                 if (!string.IsNullOrWhiteSpace(byUsername)) return byUsername;
