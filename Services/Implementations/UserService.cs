@@ -15,7 +15,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Kpett.ChatApp.Services.Implementations
 {
-    /// <summary>Service qu?n l? ngý?i dùng: thông tin cá nhân, media, t?m ki?m, thi?t l?p tài kho?n.</summary>
+    /// <summary>Service qu?n l? ngï¿½?i dï¿½ng: thï¿½ng tin cï¿½ nhï¿½n, media, t?m ki?m, thi?t l?p tï¿½i kho?n.</summary>
     public class UserService : IUserService
     {
         private readonly AppDbContext _dbcontext;
@@ -24,7 +24,7 @@ namespace Kpett.ChatApp.Services.Implementations
 
         private readonly string AVATAR_TYPE = UserMediaType.Avatar.GetDescription();
         private readonly string COVER_TYPE = UserMediaType.Cover.GetDescription();
-        /// <summary>Kh?i t?o service v?i các dependencies.</summary>
+        /// <summary>Kh?i t?o service v?i cï¿½c dependencies.</summary>
         public UserService(AppDbContext dbContext, IRedisService redisService, ILogger<UserService> logger)
         {
             _dbcontext = dbContext;
@@ -130,13 +130,14 @@ namespace Kpett.ChatApp.Services.Implementations
                 throw new NotFoundException(ErrorCodes.USER.NOT_FOUND, "User not found");
             }
 
-            if (request.Username != user.Username)
+            if (!string.Equals(request.Username, user.Username, StringComparison.Ordinal))
             {
-                if (await _dbcontext.Users.AnyAsync(u => u.Username == request.Username && u.Id != currentUserId, cancel))
+                var normalized = request.Username.Trim().ToLower();
+                if (await _dbcontext.Users.AnyAsync(u => u.Username != null && u.Username.ToLower() == normalized && u.Id != currentUserId, cancel))
                 {
                     throw new BadRequestException(ErrorCodes.USER.USERNAME_TAKEN, "Username is already taken");
                 }
-                user.Username = request.Username;
+                user.Username = request.Username.Trim();
             }
 
             user.DisplayName = request.DisplayName;
@@ -297,12 +298,13 @@ namespace Kpett.ChatApp.Services.Implementations
                 throw new BadRequestException(ErrorCodes.VALIDATION.REQUIRED, "Username and DisplayName are required");
             }
 
-            if (await _dbcontext.Users.AnyAsync(u => u.Username == accountSetupRequest.Username && u.Id != userId, cancel))
+            var normalizedSetup = accountSetupRequest.Username.Trim().ToLower();
+            if (await _dbcontext.Users.AnyAsync(u => u.Username != null && u.Username.ToLower() == normalizedSetup && u.Id != userId, cancel))
             {
                 throw new BadRequestException(ErrorCodes.USER.USERNAME_TAKEN, "Username is already taken");
             }
 
-            user.Username = accountSetupRequest.Username;
+            user.Username = accountSetupRequest.Username.Trim();
             user.DisplayName = accountSetupRequest.DisplayName;
             user.Biography = accountSetupRequest.Biography;
             user.Interests = string.Join(",", accountSetupRequest.Interests);
@@ -372,9 +374,10 @@ namespace Kpett.ChatApp.Services.Implementations
 
             string pendingStatus = FriendRequestStatus.Pending.ToString();
 
+            var normalizedTarget = targetUsername.Trim().ToLower();
             var query = _dbcontext.Users
                 .AsNoTracking()
-                .Where(u => u.Username == targetUsername && u.Email != null)
+                .Where(u => u.Username != null && u.Username.ToLower() == normalizedTarget && u.Email != null)
                 .Select(u => new
                 {
                     User = new
@@ -489,10 +492,10 @@ namespace Kpett.ChatApp.Services.Implementations
             limit = limit <= 0 ? 20 : Math.Min(limit, 50);
             var searchTerm = keyword?.Trim() ?? string.Empty;
 
-            // Kh?i t?o Query cõ b?n (B? qua tracking ð? t?i ýu t?c ð? ð?c)
+            // Kh?i t?o Query cï¿½ b?n (B? qua tracking ï¿½? t?i ï¿½u t?c ï¿½? ï¿½?c)
             var query = _dbcontext.Users.AsNoTracking().AsQueryable();
 
-            // L?c theo t? khóa (T?m trong DisplayName ho?c Username)
+            // L?c theo t? khï¿½a (T?m trong DisplayName ho?c Username)
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 query = query.Where(u =>
@@ -501,7 +504,7 @@ namespace Kpett.ChatApp.Services.Implementations
                 );
             }
 
-            // Lo?i tr? ngý?i ðang th?c hi?n t?m ki?m
+            // Lo?i tr? ngï¿½?i ï¿½ang th?c hi?n t?m ki?m
             if (!string.IsNullOrWhiteSpace(currentUserId))
             {
                 query = query.Where(u => u.Id != currentUserId);
@@ -515,13 +518,13 @@ namespace Kpett.ChatApp.Services.Implementations
                 if (decoded != null) cursorId = decoded.UserId;
             }
 
-            // Áp d?ng Cursor Pagination (S?p x?p tãng d?n theo Id)
+            // ï¿½p d?ng Cursor Pagination (S?p x?p tï¿½ng d?n theo Id)
             if (!string.IsNullOrWhiteSpace(cursorId))
             {
                 query = query.Where(u => string.Compare(u.Id, cursorId) > 0);
             }
 
-            // Truy v?n d? li?u t? DB (Dý 1 record ð? check NextCursor)
+            // Truy v?n d? li?u t? DB (Dï¿½ 1 record ï¿½? check NextCursor)
             var rawUsers = await query
                 .OrderBy(u => u.Id)
                 .Take(limit + 1)
@@ -530,7 +533,7 @@ namespace Kpett.ChatApp.Services.Implementations
                     u.Id,
                     u.DisplayName,
                     u.Username,
-                    // Sub-query ð? l?y Avatar m?t cách t?i ýu
+                    // Sub-query ï¿½? l?y Avatar m?t cï¿½ch t?i ï¿½u
                     AvatarUrl = _dbcontext.UserMedias
                         .Where(um => um.UserId == u.Id && um.IsPrimary && um.MediaType == "Avatar")
                         .Select(um => um.MediaUrl)
@@ -538,7 +541,7 @@ namespace Kpett.ChatApp.Services.Implementations
                 })
                 .ToListAsync(cancel);
 
-            // X? l? phân trang
+            // X? l? phï¿½n trang
             string? nextCursor = null;
             if (rawUsers.Count > limit)
             {

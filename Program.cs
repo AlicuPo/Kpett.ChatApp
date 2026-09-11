@@ -304,7 +304,8 @@ using (var scope = app.Services.CreateScope())
     var autoPostEnabled = autoPostSection.GetValue<bool>("Enabled");
     if ((autoPostEnabled || !string.IsNullOrWhiteSpace(botUserId)) && !string.IsNullOrWhiteSpace(botEmail))
     {
-        var botExists = await dbContext.Users.AnyAsync(u => u.Email == botEmail || u.Username == botUsername || (botUserId != null && u.Id == botUserId));
+        var normalizedBotUsername = botUsername.Trim().ToLower();
+        var botExists = await dbContext.Users.AnyAsync(u => u.Email == botEmail || (u.Username != null && u.Username.ToLower() == normalizedBotUsername) || (botUserId != null && u.Id == botUserId));
         if (!botExists)
         {
             var botUser = new User
