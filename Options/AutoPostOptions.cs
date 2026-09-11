@@ -35,11 +35,15 @@ namespace Kpett.ChatApp.Options
 
         /// <summary>
         /// Danh sách RSS feed để crawl. Đổi list này không cần sửa code.
+        /// Giữ 2 feed gốc + thêm thoi-su (tin tỉnh/thời sự), kinh-doanh (mua sắm/giá xăng), gia-dinh (đời sống/đồ ăn).
         /// </summary>
         public List<string> RssFeeds { get; set; } = new()
         {
             "https://vnexpress.net/rss/tin-moi-nhat.rss",
-            "https://vnexpress.net/rss/the-gioi.rss"
+            "https://vnexpress.net/rss/the-gioi.rss",
+            "https://vnexpress.net/rss/thoi-su.rss",
+            "https://vnexpress.net/rss/kinh-doanh.rss",
+            "https://vnexpress.net/rss/gia-dinh.rss"
         };
     }
 
