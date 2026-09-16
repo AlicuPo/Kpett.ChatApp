@@ -83,11 +83,12 @@ namespace Kpett.ChatApp.Services.Implementations
                 return 0;
             }
 
-            // Mới nhất trước, deduplicate theo Link
+            // Mới nhất trước, deduplicate theo Link + loại tin chính trị/thời sự
             var distinct = allItems
                 .Where(x => !string.IsNullOrWhiteSpace(x.Link))
                 .GroupBy(x => x.Link!, StringComparer.OrdinalIgnoreCase)
                 .Select(g => g.OrderByDescending(x => x.PubDate).First())
+                .Where(x => !IsBlocked(x, opts.BlockedKeywords))
                 .OrderByDescending(x => x.PubDate)
                 .Take(opts.MaxPostsPerRun * 3) // lấy dư để trừ trùng
                 .ToList();
@@ -290,6 +291,23 @@ namespace Kpett.ChatApp.Services.Implementations
         {
             var lower = url.ToLowerInvariant();
             return lower.EndsWith(".jpg") || lower.EndsWith(".jpeg") || lower.EndsWith(".png") || lower.EndsWith(".webp") || lower.EndsWith(".gif") || lower.Contains("image");
+        }
+
+        private static bool IsBlocked(RssItem item, List<string>? blockedKeywords)
+        {
+            if (blockedKeywords == null || blockedKeywords.Count == 0) return false;
+            var text = RemoveDiacritics($"{item.Title} {item.Description}".ToLowerInvariant());
+            return blockedKeywords.Any(k => !string.IsNullOrWhiteSpace(k) && text.Contains(RemoveDiacritics(k.ToLowerInvariant())));
+        }
+
+        private static string RemoveDiacritics(string s)
+        {
+            var normalized = s.Normalize(System.Text.NormalizationForm.FormD);
+            var sb = new System.Text.StringBuilder(normalized.Length);
+            foreach (var c in normalized)
+                if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
+                    sb.Append(c);
+            return sb.ToString().Normalize(System.Text.NormalizationForm.FormC).Replace('đ', 'd').Replace('Đ', 'd');
         }
 
         private static string? CleanHtml(string? input)
